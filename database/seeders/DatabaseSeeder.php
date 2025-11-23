@@ -21,5 +21,10 @@ class DatabaseSeeder extends Seeder
             'name' => 'Test User',
             'email' => 'test@example.com',
         ]);
+
+        // Seed dictionary words (built-in English words)
+        $this->call([
+            DictionaryWordSeeder::class,
+        ]);
     }
 }
