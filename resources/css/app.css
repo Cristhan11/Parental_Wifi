@@ -6,6 +6,35 @@
 @source '../**/*.js';
 
 @theme {
-    --font-sans: 'Instrument Sans', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+    /* Montserrat Font Family */
+    --font-sans: 'Montserrat', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
         'Segoe UI Symbol', 'Noto Color Emoji';
+
+    /* Custom Color Palette */
+    --color-black: #000000;
+    --color-white: #FFFFFF;
+    --color-cream: #FFFFCC;
+    --color-yellow: #FFDE15;
+    --color-green: #08E60F;
+    --color-red: #C9282D;
+    
+    /* Black with opacity variants */
+    --color-black-50: rgb(0 0 0 / 0.5);
+    --color-black-25: rgb(0 0 0 / 0.25);
+    
+    /* Custom color aliases for easier use */
+    --color-primary: var(--color-yellow);
+    --color-success: var(--color-green);
+    --color-danger: var(--color-red);
+    --color-background: var(--color-cream);
+}
+
+/* Custom focus styles for inputs */
+input:focus,
+select:focus,
+textarea:focus {
+    border-color: #FFDE15 !important;
+    ring-color: #FFDE15 !important;
+    outline: none;
+    box-shadow: 0 0 0 1px #FFDE15;
 }

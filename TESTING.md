@@ -130,6 +130,7 @@ sudo nginx -t
 #### 1.4 Basic Routing
 - [ ] Homepage route is accessible
 - [ ] Login page route is accessible
+- [ ] Registration route is disabled (returns 404) - Security feature
 - [ ] Routes respond correctly (not 404 or 500 errors)
 
 **Test Procedure**:
@@ -138,12 +139,16 @@ sudo nginx -t
 curl http://localhost/
 curl http://localhost/login
 
+# Verify registration is disabled (should return 404)
+curl -I http://localhost/register  # Should return 404 Not Found
+
 # Or access from browser
 # http://raspberry-pi-ip/
 # http://raspberry-pi-ip/login
+# http://raspberry-pi-ip/register (should show 404)
 ```
 
-**Expected Result**: Pages load without errors, login page displays correctly.
+**Expected Result**: Pages load without errors, login page displays correctly, registration route returns 404 (security feature - public registration is disabled).
 
 #### 1.5 Blade Template Rendering
 - [ ] Blade templates compile without errors
@@ -218,35 +223,64 @@ php artisan migrate:status
 ```bash
 php artisan tinker
 
-# Test User model
->>> $user = App\Models\User::create(['name' => 'Test User', 'email' => 'test@example.com', 'password' => bcrypt('password'), 'role' => 'parent']);
->>> $user->id;  // Should return user ID
->>> $user->isParent();  // Should return true
+# Test User model - Use default admin from seeder
+>>> $admin = App\Models\User::where('email', 'admin@parentalwifi.local')->first();
+>>> $admin->id;  // Should return user ID
+>>> $admin->isAdmin();  // Should return true
+>>> $admin->name;  // Should return 'System Administrator'
 
-# Test Device model
->>> $device = $user->devices()->create(['name' => 'Test Device', 'mac_address' => 'AA:BB:CC:DD:EE:FF', 'status' => 'active', 'remaining_time_minutes' => 30]);
->>> $device->user->name;  // Should return 'Test User'
+# Test Device model - Create device for admin
+>>> $device = $admin->devices()->create(['name' => 'Test Device', 'mac_address' => 'AA:BB:CC:DD:EE:FF', 'status' => 'active', 'remaining_time_minutes' => 30]);
+>>> $device->user->name;  // Should return 'System Administrator'
 >>> $device->hasRemainingTime();  // Should return true
 
 # Test relationships
->>> $user->devices()->count();  // Should return 1
->>> $device->user->email;  // Should return 'test@example.com'
+>>> $admin->devices()->count();  // Should return 1
+>>> $device->user->email;  // Should return 'admin@parentalwifi.local'
+
+# Test CRUD operations
+>>> $device->update(['remaining_time_minutes' => 45]);
+>>> $device->refresh()->remaining_time_minutes;  // Should return 45
+>>> $device->delete();  // Clean up test device
 ```
 
-**Expected Result**: All CRUD operations work, relationships function correctly.
+**Expected Result**: All CRUD operations work, relationships function correctly, default admin account is accessible.
 
 #### 2.5 Database Seeders
+- [ ] DefaultUserSeeder runs successfully (creates default admin account)
 - [ ] DictionaryWordSeeder runs successfully
 - [ ] Seeded data is in database
+- [ ] Default admin account exists with correct credentials
 
 **Test Procedure**:
 ```bash
+# Run all seeders (or run individually)
+php artisan db:seed
+
+# Or run seeders individually
+php artisan db:seed --class=DefaultUserSeeder
 php artisan db:seed --class=DictionaryWordSeeder
+
+# Verify default admin account
 php artisan tinker
->>> App\Models\DictionaryWord::count();  // Should return number of seeded words
+>>> $admin = App\Models\User::where('email', 'admin@parentalwifi.local')->first();
+>>> $admin->name;  // Should return 'System Administrator'
+>>> $admin->role;  // Should return 'admin'
+>>> $admin->isAdmin();  // Should return true
+
+# Verify dictionary words
+>>> App\Models\DictionaryWord::count();  // Should return number of seeded words (500+)
+>>> App\Models\DictionaryWord::where('is_built_in', true)->count();  // Should match total count
 ```
 
-**Expected Result**: Seeder runs without errors, words are in database.
+**Expected Result**: Both seeders run without errors, default admin account exists, dictionary words are in database.
+
+**Default Admin Credentials** (created by DefaultUserSeeder):
+- **Email:** `admin@parentalwifi.local`
+- **Password:** `admin123`
+- **Role:** `admin`
+
+**Security Note:** Change the default password after first login in production!
 
 #### 2.6 Query Performance
 - [ ] Simple queries complete quickly (< 1 second)
@@ -262,6 +296,44 @@ php artisan tinker
 ```
 
 **Expected Result**: Queries complete in < 1 second.
+
+#### 2.7 Authentication Testing
+- [ ] Default admin account can log in
+- [ ] Login form works correctly
+- [ ] Authentication middleware works
+- [ ] Role-based access control works
+
+**Test Procedure**:
+```bash
+# Test login with default admin credentials
+# Access login page in browser: http://raspberry-pi-ip/login
+
+# Login credentials:
+# Email: admin@parentalwifi.local
+# Password: admin123
+
+# After login, verify:
+# 1. Redirects to dashboard
+# 2. User is authenticated
+# 3. Can access protected routes
+
+# Test via tinker (verify authentication works)
+php artisan tinker
+>>> $admin = App\Models\User::where('email', 'admin@parentalwifi.local')->first();
+>>> Auth::login($admin);
+>>> Auth::check();  // Should return true
+>>> Auth::user()->isAdmin();  // Should return true
+>>> Auth::logout();
+>>> Auth::check();  // Should return false
+```
+
+**Expected Result**: Default admin can log in successfully, authentication works, role checking functions correctly.
+
+**Security Verification**:
+- [ ] Registration route is disabled (tested in 1.4)
+- [ ] Only default admin account exists initially
+- [ ] Cannot create accounts via public routes
+- [ ] Login page does not show registration link
 
 ### Troubleshooting Test Phase 1 & 2
 
