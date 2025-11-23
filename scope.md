@@ -320,6 +320,7 @@ The captive portal is the **core focus** of this project. The logic works as fol
    - Add time fields to devices table (remaining_time_minutes, total_time_allocated)
 
 2. **Basic Authentication** - Parent login system (needed for both portal and admin)
+   - 🧪 **TEST PHASE 1 & 2**: Test basic Laravel setup and database connectivity on Raspberry Pi
 
 3. **Time Tracking System** - **CRITICAL FOUNDATION**
    - Device time allocation and tracking
@@ -334,6 +335,7 @@ The captive portal is the **core focus** of this project. The logic works as fol
    - Video system (playback, completion tracking)
    - Time granting after successful completion
    - Device unblocking after time grant
+   - 🧪 **TEST PHASE 6**: Test full integration workflow on Raspberry Pi
 
 5. **NoDogSplash Integration** - Connect portal to Laravel backend
    - Configuration setup
@@ -346,17 +348,172 @@ The captive portal is the **core focus** of this project. The logic works as fol
    - Parent can add educational videos
    - Assign quizzes/videos to devices
    - Configure time rewards
+   - 🧪 **TEST PHASE 3**: Test file system operations and video storage on Raspberry Pi (after video system)
 
 **Why this order?** The captive portal with time expiration and quiz/video flow is the core of the project. Time tracking must be built first, then the portal logic, then parent management tools. This ensures the main workflow works end-to-end before adding other features.
+
+## Raspberry Pi Testing Phases
+
+To ensure compatibility and catch issues early, the following testing phases should be conducted on Raspberry Pi 4B with Raspberry Pi OS Lite (64-bit) at specific milestones during development.
+
+### Test Phase 1: Basic Laravel Setup
+
+**When to Test**: After Todo #3 (Authentication) is complete
+
+**What to Test**:
+- Laravel installation on Raspberry Pi OS Lite (64-bit)
+- PHP version compatibility (PHP 8.2+)
+- Web server setup (Nginx or Apache + PHP-FPM)
+- Basic routing (homepage, login page)
+- Environment configuration (.env file)
+- Application key generation
+- Basic Blade template rendering
+
+**Why Important**: Ensures the foundation works before building features. Catches environment-specific issues early.
+
+**Success Criteria**:
+- Laravel application accessible via browser on Raspberry Pi
+- Login page loads and displays correctly
+- No PHP errors in logs
+- Routes respond correctly
+
+**Reference**: See `TESTING.md` for detailed checklist and procedures.
+
+---
+
+### Test Phase 2: Database and Models
+
+**When to Test**: After Todo #3 (Authentication) is complete (can be combined with Phase 1)
+
+**What to Test**:
+- MariaDB connection and configuration
+- Running all migrations successfully
+- Model relationships (Device, User, Quiz, etc.)
+- Basic CRUD operations (create device, create user)
+- Database seeders (DictionaryWordSeeder)
+- Query performance on Raspberry Pi
+
+**Why Important**: Verifies data layer works correctly before building business logic. Ensures models and relationships function properly on Raspberry Pi.
+
+**Success Criteria**:
+- All migrations run without errors
+- Models can create/read/update/delete records
+- Relationships work correctly (e.g., `$device->user`, `$user->devices`)
+- Seeders execute successfully
+- Database queries complete in reasonable time (< 1 second for simple queries)
+
+**Reference**: See `TESTING.md` for detailed checklist and procedures.
+
+---
+
+### Test Phase 3: File System and Storage
+
+**When to Test**: After Todo #7 (Video System) is complete
+
+**What to Test**:
+- Storage directory permissions (`storage/app/videos/`)
+- Video file upload functionality
+- Video file reading/streaming
+- File size limits (Raspberry Pi storage constraints)
+- Symlink creation (`storage` → `public/storage`)
+- Video playback in browser
+
+**Why Important**: Video storage is critical for the captive portal. Raspberry Pi has specific storage constraints and permission requirements that must be verified.
+
+**Success Criteria**:
+- Video files can be uploaded successfully
+- Videos can be streamed/played in browser
+- Storage permissions are correct
+- Symlinks work correctly
+- File size limits are appropriate for Raspberry Pi storage
+
+**Reference**: See `TESTING.md` for detailed checklist and procedures.
+
+---
+
+### Test Phase 4: Shell Script Execution
+
+**When to Test**: After Todo #9 (Shell Scripts) is complete
+
+**What to Test**:
+- PHP `exec()` and `shell_exec()` permissions
+- Bash script execution (`scripts/block_device.sh`)
+- Command output parsing
+- Error handling for failed commands
+- Security (command injection prevention)
+- iptables/nftables access (may need sudo)
+
+**Why Important**: Network control depends on shell script execution. Raspberry Pi may have different permission requirements than development environment.
+
+**Success Criteria**:
+- Shell scripts execute successfully
+- Command output is parsed correctly
+- Errors are handled gracefully
+- Security measures prevent command injection
+- Network commands (iptables) work if permissions allow
+
+**Reference**: See `TESTING.md` for detailed checklist and procedures.
+
+---
+
+### Test Phase 5: Background Jobs and Queues
+
+**When to Test**: After Todo #12 (Background Jobs) is complete
+
+**What to Test**:
+- Queue system setup (database queue recommended for Pi)
+- Background job execution (`CheckTimeExpiration`, `TrackActiveSessions`)
+- Cron job scheduling
+- Job failure handling
+- Queue worker stability
+
+**Why Important**: Time tracking requires reliable background processing. Raspberry Pi may have different performance characteristics that affect job processing.
+
+**Success Criteria**:
+- Queue system is configured correctly
+- Background jobs execute successfully
+- Cron jobs run on schedule
+- Job failures are logged and handled
+- Queue worker runs stably without crashes
+
+**Reference**: See `TESTING.md` for detailed checklist and procedures.
+
+---
+
+### Test Phase 6: Full Integration Test
+
+**When to Test**: After Todo #8 (Portal Core) is complete
+
+**What to Test**:
+- Complete workflow: time expiration → portal redirect → quiz/video → time grant
+- NoDogSplash integration (if available)
+- Real device connection (via WiFi)
+- MAC address detection
+- End-to-end time tracking
+
+**Why Important**: Validates the complete core workflow before adding advanced features. Ensures all components work together on Raspberry Pi.
+
+**Success Criteria**:
+- Time expiration triggers portal redirect
+- Quiz completion grants time correctly
+- Video completion with word validation grants time correctly
+- Device time tracking works accurately
+- Portal flow completes successfully
+
+**Reference**: See `TESTING.md` for detailed checklist and procedures.
+
+---
 
 ### Phase 1B: Backend Services & Admin Dashboard
 
 5. **Shell Scripts & Services** - Network control layer
+   - 🧪 **TEST PHASE 4**: Test shell script execution on Raspberry Pi
 6. **Device Management** - CRUD operations for devices
 7. **Website Management** - Blocking and flagging
 8. **Scheduling System** - Time-based access control
 9. **Monitoring & Logging** - Browsing logs and access attempts
 10. **Background Jobs** - Automated monitoring and enforcement
+    - 🧪 **TEST PHASE 5**: Test background jobs and queue system on Raspberry Pi
 11. **Admin Dashboard** - Parent control panel
 12. **WebSockets** - Real-time notifications
 
@@ -540,19 +697,24 @@ scripts/
 1. **db-schema**: Create MariaDB migrations for all core tables including time tracking (devices with time fields, device_time_grants), quiz system (quizzes, quiz_attempts), video system (videos, video_completions), plus blocked_websites, flagged_websites, device_schedules, browsing_logs, access_attempts, device_sessions with proper relationships and indexes
 2. **models**: Create Eloquent models with relationships: Device (with time tracking methods), DeviceTimeGrant, Quiz, QuizAttempt, Video, VideoCompletion, BlockedWebsite, FlaggedWebsite, DeviceSchedule, BrowsingLog, AccessAttempt, DeviceSession
 3. **auth**: Set up Laravel authentication system for parent login with role management
-4. **time-tracking**: Build TimeTrackingService to monitor device time, calculate remaining time, detect expiration, and track active sessions
-5. **time-granting**: Build TimeGrantingService to add time to devices after quiz/video completion
-6. **quiz-system**: Build QuizController for parent to create/edit quizzes, PortalController quiz flow for children (display, answer validation, scoring, time reward)
-7. **video-system**: Build VideoController for parent to add/edit videos, PortalController video flow for children (playback, completion tracking, time reward)
-8. **portal-core**: Build captive portal core flow: landing page (quiz vs video selection), time expiration detection, automatic redirect, completion handling, time granting, device unblocking
-9. **shell-scripts**: Create shell scripts for network operations (block/unblock device, whitelist, get connected devices, monitor traffic) in scripts/ directory
-10. **services**: Create service classes: TimeTrackingService, TimeGrantingService, NetworkService (iptables/nftables operations), NoDogSplashService (portal management), ScriptExecutor (secure shell execution)
-11. **nodogsplash**: Integrate NoDogSplash: configuration management, automatic redirect when time expires (intercept HTTP requests), redirect handling after portal completion, integration with time tracking
-12. **background-jobs**: Create background jobs: CheckTimeExpiration (CRITICAL - continuously check and redirect expired devices), TrackActiveSessions (monitor and deduct time), ParseNetworkLogs, EnforceSchedules, MonitorDeviceConnections
-13. **device-management**: Build DeviceController with CRUD operations, MAC address validation, time allocation management, and views for device management
-14. **website-management**: Build BlockedWebsiteController and FlaggedWebsiteController with URL validation and management views
-15. **scheduling**: Build DeviceScheduleController for time-based access control with schedule enforcement logic
-16. **monitoring**: Build BrowsingLogController and AccessAttemptController with log parsing and display views
-17. **websockets**: Set up Laravel Broadcasting with WebSockets, create events (DeviceConnected, BlockedWebsiteAccessed, TimeExpired, TimeGranted, etc.), configure frontend with Laravel Echo
-18. **dashboard**: Build admin dashboard UI with device overview, time status, recent activity, alerts, and real-time notification panel using Blade + Alpine.js
+4. **test-phase-1-2**: Test basic Laravel setup and database connectivity on Raspberry Pi OS Lite after authentication is complete. Verify Laravel installation, PHP compatibility, web server configuration, routing, environment setup, and model/database operations. See TESTING.md for detailed procedures.
+5. **time-tracking**: Build TimeTrackingService to monitor device time, calculate remaining time, detect expiration, and track active sessions
+6. **time-granting**: Build TimeGrantingService to add time to devices after quiz/video completion
+7. **quiz-system**: Build QuizController for parent to create/edit quizzes, PortalController quiz flow for children (display, answer validation, scoring, time reward)
+8. **video-system**: Build VideoController for parent to add/edit videos, PortalController video flow for children (playback, completion tracking, time reward)
+9. **test-phase-3**: Test file system operations and video storage on Raspberry Pi after video system is built. Verify storage permissions, video upload/streaming, symlinks, and file size limits. See TESTING.md for detailed procedures.
+10. **portal-core**: Build captive portal core flow: landing page (quiz vs video selection), time expiration detection, automatic redirect, completion handling, time granting, device unblocking
+11. **test-phase-6**: Test full integration workflow (time expiration → portal → quiz/video → time grant) on Raspberry Pi after portal core is complete. Verify complete end-to-end flow, NoDogSplash integration, device connection, and time tracking accuracy. See TESTING.md for detailed procedures.
+12. **shell-scripts**: Create shell scripts for network operations (block/unblock device, whitelist, get connected devices, monitor traffic) in scripts/ directory
+13. **test-phase-4**: Test shell script execution and network control commands on Raspberry Pi after shell scripts are created. Verify PHP exec permissions, bash script execution, command output parsing, error handling, and security measures. See TESTING.md for detailed procedures.
+14. **services**: Create service classes: TimeTrackingService, TimeGrantingService, NetworkService (iptables/nftables operations), NoDogSplashService (portal management), ScriptExecutor (secure shell execution)
+15. **nodogsplash**: Integrate NoDogSplash: configuration management, automatic redirect when time expires (intercept HTTP requests), redirect handling after portal completion, integration with time tracking
+16. **background-jobs**: Create background jobs: CheckTimeExpiration (CRITICAL - continuously check and redirect expired devices), TrackActiveSessions (monitor and deduct time), ParseNetworkLogs, EnforceSchedules, MonitorDeviceConnections
+17. **test-phase-5**: Test background jobs and queue system on Raspberry Pi after background jobs are implemented. Verify queue configuration, job execution, cron scheduling, and worker stability. See TESTING.md for detailed procedures.
+18. **device-management**: Build DeviceController with CRUD operations, MAC address validation, time allocation management, and views for device management
+19. **website-management**: Build BlockedWebsiteController and FlaggedWebsiteController with URL validation and management views
+20. **scheduling**: Build DeviceScheduleController for time-based access control with schedule enforcement logic
+21. **monitoring**: Build BrowsingLogController and AccessAttemptController with log parsing and display views
+22. **websockets**: Set up Laravel Broadcasting with WebSockets, create events (DeviceConnected, BlockedWebsiteAccessed, TimeExpired, TimeGranted, etc.), configure frontend with Laravel Echo
+23. **dashboard**: Build admin dashboard UI with device overview, time status, recent activity, alerts, and real-time notification panel using Blade + Alpine.js
 
