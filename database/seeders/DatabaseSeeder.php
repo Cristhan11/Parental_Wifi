@@ -12,19 +12,18 @@ class DatabaseSeeder extends Seeder
 
     /**
      * Seed the application's database.
+     * 
+     * This seeder runs automatically when executing: php artisan db:seed
+     * It creates:
+     * 1. Default admin account (for initial system access)
+     * 2. Dictionary words (built-in English words for video validation)
      */
     public function run(): void
     {
-        // User::factory(10)->create();
-
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
-        ]);
-
-        // Seed dictionary words (built-in English words)
+        // Seed default admin account and dictionary words
         $this->call([
-            DictionaryWordSeeder::class,
+            DefaultUserSeeder::class,      // Creates default admin account
+            DictionaryWordSeeder::class,    // Seeds built-in dictionary words
         ]);
     }
 }
