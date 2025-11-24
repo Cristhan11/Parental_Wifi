@@ -14,6 +14,7 @@
 
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        @stack('scripts')
     </head>
     <body class="font-sans antialiased" style="font-family: 'Montserrat', sans-serif;">
         <div class="min-h-screen" style="background-color: #FFFFCC;">
@@ -33,5 +34,6 @@
                 {{ $slot }}
             </main>
         </div>
+        @stack('scripts')
     </body>
 </html>
