@@ -18,9 +18,10 @@ class DatabaseSeeder extends Seeder
      * 1. Default admin account (for initial system access)
      * 2. Dictionary words (built-in English words for video validation)
      * 
-     * Note: QuizTestDataSeeder is available for testing but not run by default.
-     * Run it separately with: php artisan db:seed --class=QuizTestDataSeeder
-     * Or use: php artisan quiz:setup-test-data
+     * Note: QuizTestDataSeeder and VideoTestDataSeeder are available for testing but not run by default.
+     * Run them separately with:
+     * - php artisan db:seed --class=QuizTestDataSeeder
+     * - php artisan db:seed --class=VideoTestDataSeeder
      */
     public function run(): void
     {

@@ -11,7 +11,28 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * Video Completion Model
  * 
  * Tracks when a child completes watching a video, including
- * dictionary word validation results.
+ * dictionary word validation results. This model represents a single
+ * viewing session where a child watches a video and attempts to
+ * remember the dictionary words that appeared.
+ * 
+ * Key Concepts:
+ * - One video can have many completions (different children, different attempts)
+ * - One completion belongs to one device (which child watched)
+ * - One completion belongs to one video (which video was watched)
+ * - One completion has many word displays (which words appeared)
+ * 
+ * Lifecycle:
+ * 1. Completion record created when child starts watching video
+ * 2. Word displays created as words are shown during playback
+ * 3. Completion updated when child submits words
+ * 4. Validation result stored (passed/failed)
+ * 5. Time granted if validation passed
+ * 
+ * Retry Logic:
+ * - If child fails, they can retry the video
+ * - New completion record created with incremented attempt_number
+ * - New random words selected for new attempt
+ * - Previous attempts preserved for history
  */
 class VideoCompletion extends Model
 {
@@ -158,4 +179,3 @@ class VideoCompletion extends Model
         return array_map('trim', explode(',', $this->words_entered));
     }
 }
-

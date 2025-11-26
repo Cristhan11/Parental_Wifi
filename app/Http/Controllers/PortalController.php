@@ -5,7 +5,11 @@ namespace App\Http\Controllers;
 use App\Models\Device;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
+use App\Models\Video;
+use App\Models\VideoCompletion;
+use App\Models\VideoWordDisplay;
 use App\Services\TimeGrantingService;
+use App\Services\VideoWordService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -14,10 +18,88 @@ use Illuminate\View\View;
 class PortalController extends Controller
 {
     protected TimeGrantingService $timeGrantingService;
+    protected VideoWordService $videoWordService;
 
-    public function __construct(TimeGrantingService $timeGrantingService)
+    public function __construct(TimeGrantingService $timeGrantingService, VideoWordService $videoWordService)
     {
         $this->timeGrantingService = $timeGrantingService;
+        $this->videoWordService = $videoWordService;
+    }
+
+    /**
+     * Display portal landing page.
+     * 
+     * Route: GET /portal?mac=AA:BB:CC:DD:EE:FF
+     * Route Name: portal.landing
+     * 
+     * What it does:
+     * 1. Identifies child's device by MAC address from URL query parameter
+     * 2. Fetches all active quizzes assigned to this device
+     * 3. Fetches all active videos assigned to this device
+     * 4. Displays landing page showing available activities
+     * 
+     * This is the main entry point for children accessing the portal.
+     * Children see a list of quizzes and videos they can complete to earn internet time.
+     * 
+     * How it works:
+     * - Device is identified by MAC address (unique device identifier)
+     * - Only active quizzes/videos assigned to this device are shown
+     * - Each activity shows time reward (minutes child will earn)
+     * - Child clicks on activity to start it
+     * 
+     * Security:
+     * - No authentication required (captive portal)
+     * - Device must exist in database
+     * - Only shows activities assigned to this specific device
+     * 
+     * @param Request $request HTTP request (contains MAC address in ?mac= parameter)
+     * @return View Portal landing page with available activities
+     * 
+     * Usage Example:
+     * URL: http://example.com/portal?mac=AA:BB:CC:DD:EE:FF
+     * - Gets device with MAC address AA:BB:CC:DD:EE:FF
+     * - Shows all quizzes and videos assigned to that device
+     */
+    public function landing(Request $request): View
+    {
+        // Get device from MAC address in request
+        // getDevice() looks for MAC in URL query (?mac=...), POST data, or session
+        $device = $this->getDevice($request);
+        
+        // If device not found, show landing page with error message
+        // This happens if MAC address doesn't exist in database
+        // Child will see friendly error message instead of crash
+        if (!$device) {
+            return view('portal.landing', [
+                'device' => null,  // No device found
+                'error' => 'Device not found. Please connect to the network.',
+            ]);
+        }
+        
+        // Get available quizzes for this device
+        // ->quizzes() gets all quizzes assigned to this device (many-to-many relationship)
+        // ->where('is_active', true) filters to only active quizzes (parents can deactivate)
+        // ->get() executes query and returns collection of Quiz models
+        $quizzes = $device->quizzes()
+            ->where('is_active', true)
+            ->get();
+        
+        // Get available videos for this device
+        // ->videos() gets all videos assigned to this device (many-to-many relationship)
+        // ->where('is_active', true) filters to only active videos
+        // ->get() executes query and returns collection of Video models
+        $videos = $device->videos()
+            ->where('is_active', true)
+            ->get();
+        
+        // Return landing page view with data
+        // Passes device, quizzes, and videos to the Blade template
+        // Template will display them in a user-friendly format
+        return view('portal.landing', [
+            'device' => $device,      // Device information (name, remaining time, etc.)
+            'quizzes' => $quizzes,    // Collection of available quizzes
+            'videos' => $videos,      // Collection of available videos
+        ]);
     }
 
     /**
@@ -326,6 +408,351 @@ class PortalController extends Controller
             'attempt' => $attempt,
             'device' => $device,
             'timeGranted' => 0,  // No time granted for failed quiz
+        ]);
+    }
+
+    /**
+     * Display video for child to watch.
+     * 
+     * Route: GET /portal/video/{video}?mac=AA:BB:CC:DD:EE:FF
+     * 
+     * What it does:
+     * 1. Identifies the child's device by MAC address
+     * 2. Validates video is active and assigned to device
+     * 3. Gets or creates video completion record (tracks viewing session)
+     * 4. If dictionary words enabled, selects random words and generates timestamps
+     * 5. Stores word displays in database (for validation later)
+     * 6. Displays video player with word overlays
+     * 
+     * Security checks:
+     * - Device must exist in database
+     * - Video must be active (is_active = true)
+     * - Device must be assigned to video (many-to-many relationship)
+     * 
+     * Dictionary Words:
+     * - If enabled, random words are selected from dictionary pool
+     * - Random timestamps are generated throughout video duration
+     * - Words will appear as overlays during playback (handled by JavaScript)
+     * - Words are stored in VideoWordDisplay table for validation
+     * 
+     * Retry Logic:
+     * - If child failed previous attempt, creates new attempt (increments attempt_number)
+     * - New attempt gets new random words and timestamps
+     * - This ensures child can't memorize words from previous attempt
+     * 
+     * @param Request $request HTTP request (contains MAC address)
+     * @param Video $video The video to display (found by ID from URL)
+     * @return View|RedirectResponse Video player interface or redirect if validation fails
+     */
+    public function showVideo(Request $request, Video $video): View|RedirectResponse
+    {
+        // Get device from MAC address in request
+        $device = $this->getDevice($request);
+
+        // Validation: Device must exist
+        if (!$device) {
+            return redirect()->route('portal.landing')
+                ->with('error', 'Device not found. Please connect to the network.');
+        }
+
+        // Validation: Video must be active
+        // Parents can deactivate videos to prevent children from watching them
+        if (!$video->is_active) {
+            return redirect()->route('portal.landing')
+                ->with('error', 'This video is not available.');
+        }
+
+        // Validation: Device must be assigned to this video
+        // ->videos gets all videos assigned to this device (relationship)
+        // ->contains($video) checks if this specific video is in that list
+        if (!$device->videos->contains($video)) {
+            return redirect()->route('portal.landing')
+                ->with('error', 'You do not have access to this video.');
+        }
+
+        // Get or create video completion record
+        // This tracks the viewing session and stores validation results
+        // If child is retrying (previous attempt failed), get the latest attempt
+        $latestCompletion = VideoCompletion::where('device_id', $device->id)
+            ->where('video_id', $video->id)
+            ->latest('attempt_number')
+            ->first();
+
+        // Calculate next attempt number
+        // If no previous attempts, start at 1
+        // If previous attempts exist, increment by 1
+        $attemptNumber = $latestCompletion ? ($latestCompletion->attempt_number + 1) : 1;
+
+        // Create new video completion record
+        // This will store the viewing session and validation results
+        $completion = VideoCompletion::create([
+            'device_id' => $device->id,           // Which device is watching
+            'video_id' => $video->id,              // Which video is being watched
+            'attempt_number' => $attemptNumber,    // Attempt number (1, 2, 3, etc.)
+            'completed_at' => null,                 // Will be set when video ends
+            'watched_duration' => 0,               // Will be updated as video plays
+            'words_shown_count' => 0,               // Will be set when words are displayed
+            'words_entered' => null,                // Will be set when child submits words
+            'words_correct' => 0,                   // Will be set after validation
+            'passed_validation' => false,           // Will be set after validation
+        ]);
+
+        // Handle dictionary words if enabled
+        $wordsData = [];
+        if ($video->dictionary_words_enabled && $video->word_count > 0) {
+            // Select random words from dictionary pool
+            // VideoWordService handles the random selection logic
+            $words = $this->videoWordService->selectRandomWords($video->word_count);
+
+            // Generate random timestamps throughout video duration
+            // Timestamps determine when words appear during playback
+            $timestamps = $this->videoWordService->generateRandomTimestamps(
+                $video->duration_seconds,
+                $video->word_count
+            );
+
+            // Store word displays in database
+            // This creates records in VideoWordDisplay table for validation
+            foreach ($words as $index => $word) {
+                VideoWordDisplay::create([
+                    'video_completion_id' => $completion->id,
+                    'dictionary_word_id' => $word->id,
+                    'displayed_at_timestamp' => $timestamps[$index] ?? 0,
+                    'word_text' => $word->word,  // Store word text for easy access
+                ]);
+
+                // Prepare data for JavaScript (word overlays)
+                $wordsData[] = [
+                    'word' => $word->word,
+                    'definition' => $word->definition,
+                    'timestamp' => $timestamps[$index] ?? 0,
+                ];
+            }
+
+            // Update completion with word count
+            $completion->update([
+                'words_shown_count' => count($wordsData),
+            ]);
+        }
+
+        // Store completion ID in session for later retrieval
+        // This allows us to find the completion record when child submits words
+        session(['video_completion_id' => $completion->id]);
+
+        // Display video player interface
+        // Passes video, device, completion, and words data to the view
+        return view('portal.video', [
+            'video' => $video,
+            'device' => $device,
+            'completion' => $completion,
+            'wordsData' => $wordsData,  // Array of words with timestamps for JavaScript
+        ]);
+    }
+
+    /**
+     * Process video word submission and validate words.
+     * 
+     * Route: POST /portal/video/submit-words
+     * 
+     * This is the CORE method that processes word validation and grants time.
+     * 
+     * What it does:
+     * 1. Gets device and video completion from session
+     * 2. Retrieves child's entered words from form
+     * 3. Gets words that were actually displayed during video
+     * 4. Validates entered words against displayed words (case-insensitive, trimmed)
+     * 5. Updates completion record with validation results
+     * 6. Grants time if validation passed (via TimeGrantingService)
+     * 7. Redirects to results page
+     * 
+     * Word Validation:
+     * - Case-insensitive: "Adventure" = "adventure" = "ADVENTURE"
+     * - Trimmed: " adventure " = "adventure"
+     * - All words must be correct (no partial credit)
+     * - Uses VideoWordService for validation logic
+     * 
+     * Retry Logic:
+     * - If validation fails, child can retry
+     * - New attempt creates new random words and timestamps
+     * - Previous attempt is preserved in database (for history)
+     * 
+     * @param Request $request HTTP request containing entered words
+     * @return RedirectResponse Redirects to video result page
+     */
+    public function submitVideoWords(Request $request): RedirectResponse
+    {
+        // Get device from MAC address in request
+        $device = $this->getDevice($request);
+
+        // Get video completion ID from session (stored in showVideo())
+        $completionId = session('video_completion_id');
+
+        // Validation: Both device and completion must exist
+        if (!$device || !$completionId) {
+            return redirect()->route('portal.landing')
+                ->with('error', 'Session expired. Please try again.');
+        }
+
+        // Get video completion record
+        $completion = VideoCompletion::findOrFail($completionId);
+
+        // Security check: Ensure completion belongs to this device
+        // Prevents one device from submitting words for another device's completion
+        if ($completion->device_id !== $device->id) {
+            return redirect()->route('portal.landing')
+                ->with('error', 'Invalid session.');
+        }
+
+        // Get video that was watched
+        // Load video relationship to ensure it's available
+        $video = $completion->video;
+        
+        // Safety check: Video must exist
+        if (!$video) {
+            Log::error('Video not found for completion', [
+                'completion_id' => $completion->id,
+                'video_id' => $completion->video_id,
+            ]);
+            return redirect()->route('portal.landing')
+                ->with('error', 'Video not found. Please try again.');
+        }
+
+        // Get child's entered words from form
+        // Form sends words as array or comma-separated string
+        // Example: ["adventure", "curious", "discover"] or "adventure, curious, discover"
+        $wordsEnteredInput = $request->input('words', '');
+        
+        // Convert to array if it's a string
+        // Handles both array input and comma-separated string input
+        if (is_string($wordsEnteredInput)) {
+            // Split by comma and trim each word
+            $wordsEntered = array_map('trim', explode(',', $wordsEnteredInput));
+            // Remove empty strings
+            $wordsEntered = array_filter($wordsEntered);
+        } else {
+            $wordsEntered = is_array($wordsEnteredInput) ? $wordsEnteredInput : [];
+        }
+
+        // Get words that were actually displayed during video
+        // These are stored in VideoWordDisplay table
+        $wordsShown = $completion->getWordsShown();
+
+        // Validate words using VideoWordService
+        // This compares entered words with displayed words
+        $validationResult = $this->videoWordService->validateWords($wordsShown, $wordsEntered);
+
+        // Update completion record with validation results
+        $completion->update([
+            'completed_at' => now(),  // Mark video as completed
+            'words_entered' => json_encode($wordsEntered),  // Store entered words as JSON
+            'words_correct' => $validationResult['words_correct'],  // Number of correct words
+            'passed_validation' => $validationResult['passed_validation'],  // Pass/fail status
+        ]);
+
+        // Refresh completion from database to ensure all updated fields are current
+        // This is important because TimeGrantingService checks passed_validation and completed_at
+        $completion->refresh();
+
+        // If child passed validation, grant additional internet time
+        if ($validationResult['passed_validation']) {
+            try {
+                // TimeGrantingService adds time to device
+                // Example: If time_reward_minutes is 15, device gets 15 more minutes
+                // Pass fresh completion to ensure all fields are up-to-date
+                $this->timeGrantingService->grantTimeFromVideo($device, $completion);
+                
+                Log::info('Time granted successfully after video completion', [
+                    'device_id' => $device->id,
+                    'video_completion_id' => $completion->id,
+                    'time_granted' => $video->time_reward_minutes,
+                ]);
+            } catch (\Exception $e) {
+                // Log error but don't fail the request
+                // Child still sees result, but time grant might have failed
+                Log::error('Failed to grant time after video', [
+                    'device_id' => $device->id,
+                    'video_completion_id' => $completion->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+            }
+        }
+
+        // Clear completion ID from session (no longer needed)
+        session()->forget('video_completion_id');
+
+        // Redirect to results page
+        // Child will see pass/fail status and time granted (if passed)
+        // Route model binding will automatically resolve VideoCompletion from ID
+        return redirect()->route('portal.video.result', $completion);
+    }
+
+    /**
+     * Show video result.
+     * 
+     * Route: GET /portal/video/result/{completion}
+     * 
+     * What it does:
+     * 1. Gets the video completion record (contains validation results)
+     * 2. Finds the device that watched the video
+     * 3. Displays result page with different content based on pass/fail
+     * 
+     * If Passed:
+     * - Shows success message
+     * - Displays correct word count
+     * - Shows time granted (e.g., "You earned 15 minutes!")
+     * - Auto-redirects after 3 seconds (JavaScript in view)
+     * 
+     * If Failed:
+     * - Shows failure message
+     * - Displays correct words (so child can learn)
+     * - Shows "Retry Video" button
+     * - Child must watch entire video again with new random words
+     * 
+     * Why show correct words on failure? Helps children learn the correct
+     * words for next attempt. They still must watch the entire video again
+     * with new random words, ensuring active learning.
+     * 
+     * @param VideoCompletion $completion The video completion record (found by ID from URL)
+     * @return View|RedirectResponse Video result page or redirect if device not found
+     */
+    public function videoResult(VideoCompletion $completion): View|RedirectResponse
+    {
+        // Get device that watched the video
+        $device = Device::find($completion->device_id);
+        
+        // Validation: Device must exist
+        if (!$device) {
+            return redirect()->route('portal.landing')
+                ->with('error', 'Device not found.');
+        }
+
+        // Get video that was watched
+        $video = $completion->video;
+
+        // Get words that were displayed (for showing in error message)
+        $wordsShown = $completion->getWordsShown();
+
+        // If child passed validation, show success page with time granted
+        if ($completion->passed_validation) {
+            return view('portal.video-result', [
+                'completion' => $completion,                                    // Video completion data
+                'device' => $device,                                              // Device data
+                'video' => $video,                                                // Video data
+                'timeGranted' => $video->time_reward_minutes,                    // Minutes granted (e.g., 15)
+                'wordsShown' => $wordsShown,                                     // Words that were displayed
+            ]);
+        }
+
+        // If child failed validation, show failure page with retry option
+        // timeGranted = 0 because no time was granted
+        // Show correct words so child can learn for next attempt
+        return view('portal.video-result', [
+            'completion' => $completion,
+            'device' => $device,
+            'video' => $video,
+            'timeGranted' => 0,  // No time granted for failed validation
+            'wordsShown' => $wordsShown,  // Show correct words for learning
         ]);
     }
 

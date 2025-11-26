@@ -3,6 +3,7 @@
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuizController;
+use App\Http\Controllers\VideoController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -31,14 +32,38 @@ Route::middleware('auth')->group(function () {
         Route::post('/import', [QuizController::class, 'processImport'])->name('import.process'); // Process Excel import
         Route::get('/template/download', [QuizController::class, 'downloadTemplate'])->name('template.download'); // Download Excel template
     });
+
+    // Video routes (parent dashboard) - requires authentication
+    // All routes are prefixed with /videos and named with videos.*
+    Route::prefix('videos')->name('videos.')->group(function () {
+        Route::get('/', [VideoController::class, 'index'])->name('index'); // List all videos
+        Route::get('/create', [VideoController::class, 'create'])->name('create'); // Show create form
+        Route::post('/', [VideoController::class, 'store'])->name('store'); // Save new video
+        Route::get('/{video}/edit', [VideoController::class, 'edit'])->name('edit'); // Show edit form
+        Route::put('/{video}', [VideoController::class, 'update'])->name('update'); // Update video
+        Route::delete('/{video}', [VideoController::class, 'destroy'])->name('destroy'); // Delete video
+    });
 });
 
 // Portal routes (no auth, device-based) - accessible without login
 // Device identification via MAC address in query parameter
+// These routes are for children accessing the captive portal to earn internet time
 Route::prefix('portal')->name('portal.')->group(function () {
+    // Landing page - shows available quizzes and videos for device
+    // Route: GET /portal?mac=AA:BB:CC:DD:EE:FF
+    // This is the main entry point where children see all available activities
+    // Displays device info, remaining time, and lists of quizzes/videos they can complete
+    Route::get('/', [PortalController::class, 'landing'])->name('landing');
+    
+    // Quiz routes
     Route::get('/quiz/{quiz}', [PortalController::class, 'showQuiz'])->name('quiz.show'); // Display quiz for child
     Route::post('/quiz/submit', [PortalController::class, 'submitQuiz'])->name('quiz.submit'); // Process quiz submission
     Route::get('/quiz/result/{attempt}', [PortalController::class, 'quizResult'])->name('quiz.result'); // Show quiz results
+    
+    // Video routes
+    Route::get('/video/{video}', [PortalController::class, 'showVideo'])->name('video.show'); // Display video for child
+    Route::post('/video/submit-words', [PortalController::class, 'submitVideoWords'])->name('video.submit'); // Process word submission
+    Route::get('/video/result/{completion}', [PortalController::class, 'videoResult'])->name('video.result'); // Show video results
 });
 
 require __DIR__.'/auth.php';

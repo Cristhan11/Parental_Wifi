@@ -18,6 +18,8 @@ This directory contains all project documentation for the Child-Centric WiFi Cap
 - **[QUIZ_SYSTEM_SUMMARY.md](QUIZ_SYSTEM_SUMMARY.md)** - Complete guide to the quiz system for beginners
 - **[TIME_TRACKING_SERVICE.md](TIME_TRACKING_SERVICE.md)** - Time tracking service documentation
 - **[TIME_GRANTING_SERVICE.md](TIME_GRANTING_SERVICE.md)** - Time granting service documentation
+- **[VIDEO_CAPTIVE_PORTAL.md](VIDEO_CAPTIVE_PORTAL.md)** - Detailed implementation guide for the Video System (Todo #8). Comprehensive, beginner-friendly explanation of how the video system works, from upload to viewing to time granting.
+- **[VIDEO_CAPTIVE_PORTAL_SUMMARY.md](VIDEO_CAPTIVE_PORTAL_SUMMARY.md)** - Summary of the Video System. Quick reference guide explaining the logic and flow in a concise format.
 
 ### Testing & Deployment
 - **[TESTING.md](TESTING.md)** - Comprehensive Raspberry Pi testing guide with all test phases
@@ -26,6 +28,8 @@ This directory contains all project documentation for the Child-Centric WiFi Cap
 
 ### Development Guides
 - **[PORTAL_ACCESS_GUIDE.md](PORTAL_ACCESS_GUIDE.md)** - Guide for accessing and testing the child quiz interface
+- **[VIDEO_PORTAL_ACCESS_GUIDE.md](VIDEO_PORTAL_ACCESS_GUIDE.md)** - Quick guide for accessing and testing the child video interface
+- **[VIDEO_SYSTEM_TESTING.md](VIDEO_SYSTEM_TESTING.md)** - Complete testing guide for the Video System (Todo #8)
 - **[LINTER_ERRORS_EXPLANATION.md](LINTER_ERRORS_EXPLANATION.md)** - Explanation of IDE linter errors and why they're safe to ignore
 
 ## 📖 Quick Navigation
@@ -43,8 +47,9 @@ This directory contains all project documentation for the Child-Centric WiFi Cap
 
 ### For Testing
 1. **[TESTING.md](TESTING.md)** - Complete testing guide
-2. **[RASPBERRY_PI_TEST_PHASE_1_2.md](RASPBERRY_PI_TEST_PHASE_1_2.md)** - Raspberry Pi setup and testing
-3. **[TEST_RESULTS_WINDOWS.md](TEST_RESULTS_WINDOWS.md)** - Windows test results
+2. **[VIDEO_SYSTEM_TESTING.md](VIDEO_SYSTEM_TESTING.md)** - Video System testing guide
+3. **[RASPBERRY_PI_TEST_PHASE_1_2.md](RASPBERRY_PI_TEST_PHASE_1_2.md)** - Raspberry Pi setup and testing
+4. **[TEST_RESULTS_WINDOWS.md](TEST_RESULTS_WINDOWS.md)** - Windows test results
 
 ### For Troubleshooting
 1. **[LINTER_ERRORS_EXPLANATION.md](LINTER_ERRORS_EXPLANATION.md)** - IDE error explanations
@@ -63,6 +68,9 @@ This directory contains all project documentation for the Child-Centric WiFi Cap
 - `QUIZ_SYSTEM_SUMMARY.md`
 - `TIME_TRACKING_SERVICE.md`
 - `TIME_GRANTING_SERVICE.md`
+- `VIDEO_CAPTIVE_PORTAL.md` - Detailed Video System implementation guide
+- `VIDEO_CAPTIVE_PORTAL_SUMMARY.md` - Video System summary and quick reference
+- `VIDEO_SYSTEM_TESTING.md`
 
 ### Setup & Configuration
 - `COMMANDS_AND_PACKAGES.md`
