@@ -341,7 +341,7 @@ class PortalController extends Controller
             try {
                 // TimeGrantingService adds time to device
                 // Example: If time_reward_minutes is 15, device gets 15 more minutes
-                $this->timeGrantingService->grantTimeFromQuizAttempt($device, $attempt);
+                $this->timeGrantingService->grantTimeFromQuiz($device, $attempt);
             } catch (\Exception $e) {
                 // Log error but don't fail the request
                 // Child still sees result, but time grant might have failed

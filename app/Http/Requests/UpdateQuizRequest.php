@@ -17,6 +17,8 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Validation\Rule;
 
 class UpdateQuizRequest extends FormRequest
 {
@@ -76,6 +78,13 @@ class UpdateQuizRequest extends FormRequest
             ],
             'questions.*.options.*' => ['required', 'string', 'max:500'],
             'questions.*.correct_answer' => ['required', 'string', 'max:500'],
+            'devices' => ['nullable', 'array'],
+            'devices.*' => [
+                'integer',
+                Rule::exists('devices', 'id')->where(function ($query) {
+                    $query->where('user_id', Auth::id());
+                }),
+            ],
         ];
     }
 
@@ -100,6 +109,9 @@ class UpdateQuizRequest extends FormRequest
             'questions.*.type.in' => 'Question type must be multiple choice, fill in the blank, or true/false.',
             'questions.*.options.required_if' => 'Options are required for multiple choice and true/false questions.',
             'questions.*.correct_answer.required' => 'Correct answer is required.',
+            'devices.array' => 'Device selection must be an array.',
+            'devices.*.integer' => 'Each selected device must be a valid ID.',
+            'devices.*.exists' => 'One or more selected devices were not found or do not belong to you.',
         ];
     }
 }

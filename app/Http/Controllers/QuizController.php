@@ -24,7 +24,6 @@ use App\Http\Requests\UpdateQuizRequest;
 use App\Models\Quiz;
 use App\Services\QuizImportService;
 use Illuminate\Http\RedirectResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
@@ -102,9 +101,10 @@ class QuizController extends Controller
      */
     public function create(): View
     {
-        // Simply return the create form view
-        // No data needed since it's a new, empty quiz
-        return view('quizzes.create');
+        // Get all devices owned by the logged-in parent so quizzes can be assigned
+        $devices = Auth::user()->devices()->get();
+
+        return view('quizzes.create', compact('devices'));
     }
 
     /**
@@ -164,6 +164,10 @@ class QuizController extends Controller
             'is_active' => true,  // New quizzes are active by default
         ]);
 
+        // Assign quiz to selected devices (if any)
+        $deviceIds = $request->input('devices', []);
+        $quiz->devices()->sync($deviceIds);
+
         // Redirect to quiz list page with success message
         // ->with() stores a message in session that displays on next page
         return redirect()->route('quizzes.index')
@@ -196,9 +200,13 @@ class QuizController extends Controller
             abort(403, 'Unauthorized action.');  // 403 = Forbidden
         }
 
-        // Return edit form with quiz data
-        // compact('quiz') creates ['quiz' => $quiz] for the view
-        return view('quizzes.edit', compact('quiz'));
+        // Get devices owned by the parent for assignment checkboxes
+        $devices = Auth::user()->devices()->get();
+
+        // Current device assignments for this quiz (used to pre-check boxes)
+        $assignedDeviceIds = $quiz->devices()->pluck('devices.id')->toArray();
+
+        return view('quizzes.edit', compact('quiz', 'devices', 'assignedDeviceIds'));
     }
 
     /**
@@ -257,6 +265,10 @@ class QuizController extends Controller
             // ?? false means if is_active is missing, default to false
             'is_active' => (bool)($validated['is_active'] ?? false),
         ]);
+
+        // Update device assignments (empty array removes all assignments)
+        $deviceIds = $request->input('devices', []);
+        $quiz->devices()->sync($deviceIds);
 
         return redirect()->route('quizzes.index')
             ->with('success', 'Quiz updated successfully!');

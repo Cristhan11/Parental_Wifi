@@ -1,412 +1,733 @@
+
 # Video System Testing Guide (Todo #8)
 
-## Quick Start
+## Raspberry Pi Initial Setup
 
-### Step 1: Setup Test Data
+Before running the critical tests, you need to set up the Laravel application on your Raspberry Pi. This section covers the essential setup steps including cloning the repository from GitHub.
 
+**Important**: If you completed **Test Phase 1 & 2**, you may have already installed some software and completed some setup steps. Each step includes verification commands - check if something is already installed/configured before reinstalling.
+
+### Prerequisites
+
+- ✅ Raspberry Pi 4B with Raspberry Pi OS Lite (64-bit) installed
+- ✅ SSH access enabled
+- ✅ Internet connection (for cloning repository and installing packages)
+- ✅ GitHub repository access (SSH key or HTTPS credentials)
+
+---
+
+### Step 1: Install Required Software
+
+**Note**: If you completed Test Phase 1 & 2, you may have already installed some of these. Check each item and skip if already installed.
+
+**Update package list:**
 ```bash
-# Seed test data (creates test user, device, and videos)
+sudo apt update
+```
+
+**Check and Install Git (if not already installed):**
+```bash
+# Check if Git is installed
+git --version
+
+# If not installed, install it:
+sudo apt install -y git
+```
+
+**Check and Install PHP and Required Extensions:**
+```bash
+# Check if PHP is installed
+php -v
+
+# If not installed or wrong version, install PHP 8.2:
+sudo apt install -y php8.2-fpm php8.2-cli php8.2-mysql php8.2-xml php8.2-mbstring php8.2-curl php8.2-zip
+
+# Verify PHP extensions are installed:
+php -m | grep -E "mysql|xml|mbstring|curl|zip"
+```
+
+**Check and Install Composer (if not already installed):**
+```bash
+# Check if Composer is installed
+composer --version
+
+# If not installed, install it:
+curl -sS https://getcomposer.org/installer | php
+sudo mv composer.phar /usr/local/bin/composer
+composer --version  # Verify installation
+```
+
+**Check and Install MariaDB (if not already installed):**
+```bash
+# Check if MariaDB is installed and running
+sudo systemctl status mariadb --no-pager
+
+# If not installed, install it:
+sudo apt install -y mariadb-server
+sudo systemctl start mariadb
+sudo systemctl enable mariadb
+
+# Verify it's running:
+sudo systemctl status mariadb --no-pager
+```
+
+**Check and Install Nginx (if not already installed):**
+```bash
+# Check if Nginx is installed and running
+sudo systemctl status nginx --no-pager
+
+# If not installed, install it:
+sudo apt install -y nginx
+sudo systemctl start nginx
+sudo systemctl enable nginx
+
+# Verify it's running:
+sudo systemctl status nginx --no-pager
+```
+
+---
+
+### Step 2: Set Up SSH Keys for GitHub (Optional but Recommended)
+
+**Why SSH keys?** Allows passwordless access to GitHub repositories.
+
+**Generate SSH Key:**
+```bash
+ssh-keygen -t ed25519 -C "your-email@example.com"
+# Press Enter to accept default location (~/.ssh/id_ed25519)
+# Press Enter twice for no passphrase (or set one if you prefer)
+```
+
+**Add Key to SSH Agent:**
+```bash
+eval "$(ssh-agent -s)"
+ssh-add ~/.ssh/id_ed25519
+```
+
+**Copy Public Key:**
+```bash
+cat ~/.ssh/id_ed25519.pub
+# Copy the entire output
+```
+
+**Add to GitHub:**
+1. Go to GitHub.com → Settings → SSH and GPG keys
+2. Click "New SSH key"
+3. Paste your public key
+4. Save
+
+**Test Connection:**
+```bash
+ssh -T git@github.com
+# Should see: "Hi [username]! You've successfully authenticated..."
+```
+
+---
+
+### Step 3: Clone Repository (Skip if Already Done)
+
+**Check if repository is already cloned:**
+```bash
+# Check if project directory exists
+ls -la /var/www/parental_wifi
+# Or check your preferred directory location
+```
+
+**If repository is NOT cloned yet:**
+
+**Navigate to web root directory:**
+```bash
+cd /var/www
+# Or use your preferred directory (e.g., /home/pi/projects)
+```
+
+**Clone the repository:**
+```bash
+# Using SSH (recommended if SSH keys are set up)
+sudo git clone git@github.com:Cristhan11/Parental_Wifi.git parental_wifi
+
+# OR using HTTPS (if SSH keys not set up)
+# sudo git clone https://github.com/Cristhan11/Parental_Wifi.git parental_wifi
+```
+
+**If repository is already cloned, navigate to it:**
+```bash
+cd /var/www/parental_wifi
+# Or your project directory location
+```
+
+**Set proper permissions (run this even if already cloned):**
+```bash
+sudo chown -R $USER:www-data .
+sudo chmod -R 775 storage bootstrap/cache
+sudo mkdir -p storage/app/public/videos
+sudo chmod -R 775 storage/app/public/videos
+```
+
+---
+
+### Step 4: Install Dependencies
+
+**Check if dependencies are already installed:**
+```bash
+# Check if vendor directory exists (Composer dependencies)
+ls -la vendor/
+
+# Check if node_modules exists (Node.js dependencies)
+ls -la node_modules/
+```
+
+**Install PHP dependencies (if vendor/ doesn't exist):**
+```bash
+composer install --no-dev --optimize-autoloader
+```
+
+**Check and Install Node.js and npm (if needed for frontend assets):**
+```bash
+# Check if Node.js is installed
+node --version
+npm --version
+
+# If not installed, install Node.js:
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# Install frontend dependencies (if node_modules/ doesn't exist)
+npm install
+
+# Build frontend assets
+npm run build
+```
+
+---
+
+### Step 5: Configure Environment
+
+**Check if `.env` file already exists:**
+```bash
+ls -la .env
+```
+
+**If `.env` doesn't exist, create it:**
+```bash
+cp .env.example .env
+```
+
+**Check if application key is set:**
+```bash
+# Check if APP_KEY is set in .env
+grep APP_KEY .env
+# If empty or not set, generate it:
+php artisan key:generate
+```
+
+**If `.env` already exists, verify settings:**
+```bash
+nano .env
+```
+
+**Required settings (verify these are correct):**
+```env
+APP_ENV=production
+APP_DEBUG=false
+APP_URL=http://[YOUR_RASPBERRY_PI_IP]
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=parental_wifi
+DB_USERNAME=parental_wifi_user
+DB_PASSWORD=your_secure_password
+```
+
+**Replace `[YOUR_RASPBERRY_PI_IP]` with your Raspberry Pi's IP address** (find it with `hostname -I`)
+
+---
+
+### Step 6: Set Up Database
+
+**Check if database already exists:**
+```bash
+# Test database connection
+php artisan migrate:status
+# If this works, database is already set up
+```
+
+**If database is NOT set up yet:**
+
+**Create database and user:**
+```bash
+sudo mysql -u root
+```
+
+**In MariaDB prompt:**
+```sql
+CREATE USER IF NOT EXISTS 'parental_wifi_user'@'localhost' IDENTIFIED BY 'your_secure_password';
+CREATE DATABASE IF NOT EXISTS parental_wifi CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+GRANT ALL PRIVILEGES ON parental_wifi.* TO 'parental_wifi_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+```
+
+**Run migrations (if not already run):**
+```bash
+php artisan migrate
+```
+
+**Check migration status:**
+```bash
+php artisan migrate:status
+# Should show all migrations as "Ran"
+```
+
+**Seed initial data (optional, for testing):**
+```bash
 php artisan db:seed --class=VideoTestDataSeeder
-
-# Verify setup
-php artisan video:verify
 ```
 
-### Step 2: Upload Test Video Files
+---
 
-**Option A: Via Parent Dashboard**
-1. Login: `parent@test.com` / `password`
-2. Go to `/videos`
-3. Edit each test video and upload actual video files
+### Step 7: Create Storage Symlink
 
-**Option B: Manual File Placement**
-1. Place test video files in `storage/app/videos/`
-2. Name them: `test_video_1.mp4`, `test_video_2.mp4`, etc.
-3. Ensure files are MP4, WebM, or OGG format
-
-### Step 3: Access Portal
-
-Use these URLs (replace `{video_id}` with actual video ID):
-
-```
-http://127.0.0.1:8000/portal/video/{video_id}?mac=AA:BB:CC:DD:EE:FF
-```
-
-Get video IDs:
+**Check if symlink already exists:**
 ```bash
-php artisan tinker
->>> App\Models\Video::where('is_active', true)->get(['id', 'title']);
+ls -la public/storage
+# If it shows a symlink, it's already created
 ```
 
-## Test Checklist
-
-### ✅ Test 1: Parent Dashboard - Video List
-
-**URL**: `http://127.0.0.1:8000/videos`
-
-**Steps**:
-1. Login as `parent@test.com` / `password`
-2. Navigate to `/videos`
-3. Verify page loads
-4. Check videos are listed (or empty state shown)
-
-**Expected**: Yellow header "VIDEOS", "+ New" button, video table or empty state
-
----
-
-### ✅ Test 2: Parent Dashboard - Create Video
-
-**URL**: `http://127.0.0.1:8000/videos/create`
-
-**Steps**:
-1. Click "+ New"
-2. Fill form:
-   - Title: "My Test Video"
-   - Upload video file (MP4/WebM/OGG, < 512MB)
-   - Duration: 600 seconds
-   - Time Reward: 15 minutes
-   - Enable Dictionary Words: ✓
-   - Word Count: 5
-   - Assign to device: ✓
-   - Active: ✓
-3. Click "Create Video"
-
-**Expected**: Success message, redirect to index, video appears in list
-
-**Validation Tests**:
-- Submit without title → Error
-- Upload file > 512MB → Error
-- Upload non-video file → Error
-- Word count without enabling words → Error
-
----
-
-### ✅ Test 3: Parent Dashboard - Edit Video
-
-**URL**: `http://127.0.0.1:8000/videos/{video_id}/edit`
-
-**Steps**:
-1. Click "Edit" on any video
-2. Change title, description, word count
-3. Optionally upload new video file
-4. Click "Update Video"
-
-**Expected**: Changes saved, video updated
-
----
-
-### ✅ Test 4: Parent Dashboard - Delete Video
-
-**Steps**:
-1. Click "Delete" on a video
-2. Confirm deletion
-
-**Expected**:
-- If video has completions → Error, not deleted
-- If no completions → Video deleted, file removed
-
----
-
-### ✅ Test 5: Device Assignment
-
-**Steps**:
-1. Edit a video
-2. Select/deselect devices
-3. Save
-4. Test access in portal
-
-**Expected**: Only selected devices can access video
-
----
-
-### ✅ Test 6: Portal - Landing Page
-
-**URL**: `http://127.0.0.1:8000/portal?mac=AA:BB:CC:DD:EE:FF`
-
-**Steps**:
-1. Access landing page URL
-2. Verify page loads
-3. Check device information is displayed
-4. Verify available quizzes are listed
-5. Verify available videos are listed
-6. Click on a video to start it
-
-**Expected**: 
-- Landing page displays with device info
-- Quizzes shown in blue cards with time rewards
-- Videos shown in green cards with time rewards
-- Clicking video navigates to video player
-
-**Error Cases**:
-- Wrong MAC → "Device not found" error message
-- No activities assigned → "No quizzes or videos available" message
-
----
-
-### ✅ Test 7: Portal - Access Video
-
-**URL**: `http://127.0.0.1:8000/portal/video/{video_id}?mac=AA:BB:CC:DD:EE:FF`
-
-**Steps**:
-1. Get video ID from dashboard or landing page
-2. Access portal URL (directly or from landing page)
-3. Verify video player loads
-
-**Expected**: Video player displays, title shown, play button visible
-
-**Error Cases**:
-- Wrong MAC → "Device not found"
-- Video not assigned → "You do not have access"
-- Video inactive → "This video is not available"
-
----
-
-### ✅ Test 8: Portal - Video Playback Controls
-
-**Steps**:
-1. Start video playback
-2. Test:
-   - Play/Pause ✓
-   - Volume control ✓
-   - Try to seek/fast-forward ✗ (should be disabled)
-
-**Expected**: Play/pause/volume work, seeking disabled
-
----
-
-### ✅ Test 9: Portal - Dictionary Word Display
-
-**Prerequisites**: Video with dictionary words enabled
-
-**Steps**:
-1. Start video playback
-2. Watch for word overlays
-3. Note words and timestamps
-
-**Expected**: Words appear at random timestamps, display for ~3 seconds, fade in/out
-
-**Verification**:
+**If symlink doesn't exist, create it:**
 ```bash
-php artisan video:check-completion --device=AA:BB:CC:DD:EE:FF
+php artisan storage:link
 ```
 
----
-
-### ✅ Test 10: Portal - Video Completion
-
-**Steps**:
-1. Play video to end
-2. Observe behavior
-
-**Expected**: Word submission form appears, scrolls into view
-
----
-
-### ✅ Test 11: Portal - Word Submission (Correct)
-
-**Steps**:
-1. Complete video
-2. Enter all words that appeared (comma-separated)
-3. Submit
-
-**Expected**: 
-- Validation passes
-- Success page shown
-- Time granted
-- Countdown timer (3 seconds)
-- Auto-redirect to landing page after 3 seconds
-
-**Verification**:
+**Verify symlink:**
 ```bash
-php artisan tinker
->>> $device = App\Models\Device::where('mac_address', 'AA:BB:CC:DD:EE:FF')->first();
->>> echo "Remaining time: {$device->remaining_time_minutes} minutes\n";
->>> $completion = App\Models\VideoCompletion::latest()->first();
->>> echo "Passed: " . ($completion->passed_validation ? 'Yes' : 'No') . "\n";
+ls -la public/storage
+# Should show: public/storage -> ../storage/app/public
 ```
 
 ---
 
-### ✅ Test 12: Portal - Word Submission (Incorrect)
+### Step 8: Configure Nginx
 
-**Steps**:
-1. Complete video
-2. Enter wrong/missing words
-3. Submit
-
-**Expected**: 
-- Validation fails
-- Failure page shown
-- Correct words displayed (for learning)
-- No time granted
-- "Watch Video Again" button
-
----
-
-### ✅ Test 13: Portal - Retry Logic
-
-**Steps**:
-1. Fail validation (Test 11)
-2. Click "Watch Video Again"
-3. Watch video again
-4. Observe new words
-
-**Expected**: New attempt, new random words, new timestamps, previous attempt preserved
-
-**Verification**:
+**Check if Nginx configuration already exists:**
 ```bash
-php artisan video:check-completion --device=AA:BB:CC:DD:EE:FF
+ls -la /etc/nginx/sites-available/parental_wifi
+ls -la /etc/nginx/sites-enabled/parental_wifi
 ```
 
----
+**If configuration doesn't exist, create it:**
 
-### ✅ Test 14: Time Granting (Success)
-
-**Steps**:
-1. Complete video with correct words
-2. Verify time granted
-
-**Expected**: Device time increases, DeviceTimeGrant record created
-
-**Verification**:
+**Create Nginx configuration file:**
 ```bash
-php artisan tinker
->>> $device = App\Models\Device::where('mac_address', 'AA:BB:CC:DD:EE:FF')->first();
->>> $grant = $device->timeGrants()->latest()->first();
->>> echo "Source: {$grant->source}\n";
->>> echo "Minutes: {$grant->minutes_granted}\n";
+sudo nano /etc/nginx/sites-available/parental_wifi
 ```
 
----
+**Add configuration (replace `[YOUR_RASPBERRY_PI_IP]` with your Pi's IP):**
+```nginx
+server {
+    listen 80;
+    server_name [YOUR_RASPBERRY_PI_IP];
+    root /var/www/parental_wifi/public;
 
-### ✅ Test 15: Time Granting (Failure)
+    add_header X-Frame-Options "SAMEORIGIN";
+    add_header X-Content-Type-Options "nosniff";
 
-**Steps**:
-1. Complete video with incorrect words
-2. Verify time NOT granted
+    index index.php;
 
-**Expected**: Device time unchanged, no DeviceTimeGrant record
+    charset utf-8;
 
----
+    location / {
+        try_files $uri $uri/ /index.php?$query_string;
+    }
 
-### ✅ Test 16: Video Without Dictionary Words
+    location = /favicon.ico { access_log off; log_not_found off; }
+    location = /robots.txt  { access_log off; log_not_found off; }
 
-**Steps**:
-1. Create video with words disabled
-2. Access in portal
-3. Watch to completion
+    error_page 404 /index.php;
 
-**Expected**: No word overlays, no submission form, time granted immediately (if configured)
+    location ~ \.php$ {
+        fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+        fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
+        include fastcgi_params;
+    }
 
----
+    location ~ /\.(?!well-known).* {
+        deny all;
+    }
+}
+```
 
-### ✅ Test 17: Video File Storage
-
-**Steps**:
-1. Upload video
-2. Check storage
-
-**Expected**: File in `storage/app/videos/`, accessible via URL
-
-**Verification**:
+**Enable site:**
 ```bash
-php artisan tinker
->>> $video = App\Models\Video::latest()->first();
->>> echo "Path: {$video->video_path}\n";
->>> echo "URL: {$video->getVideoUrl()}\n";
->>> echo "Exists: " . (file_exists($video->getFullPath()) ? 'Yes' : 'No') . "\n";
+sudo ln -s /etc/nginx/sites-available/parental_wifi /etc/nginx/sites-enabled/
+sudo nginx -t  # Test configuration
+sudo systemctl reload nginx
 ```
 
 ---
 
-### ✅ Test 18: Multiple Devices, Same Video
+### Step 9: Set File Permissions
+
+**Set proper ownership and permissions:**
+```bash
+cd /var/www/parental_wifi
+sudo chown -R www-data:www-data storage bootstrap/cache
+sudo chmod -R 775 storage bootstrap/cache
+sudo chmod -R 775 storage/app/public/videos
+```
+
+---
+
+### Step 10: Verify Setup
+
+**Check Laravel is accessible:**
+```bash
+# From another device on the network
+curl http://[YOUR_RASPBERRY_PI_IP]/
+# Should return HTML (not error)
+```
+
+**Check storage directory:**
+```bash
+ls -la storage/app/public/videos/
+# Directory should exist and be writable
+```
+
+**Check symlink:**
+```bash
+ls -la public/storage
+# Should show symlink to storage/app/public
+```
+
+**Get your Raspberry Pi IP address:**
+```bash
+hostname -I
+# Use this IP in URLs and .env file
+```
+
+---
+
+### Quick Setup Checklist
+
+- [ ] Git installed
+- [ ] PHP 8.2+ and extensions installed
+- [ ] Composer installed
+- [ ] MariaDB installed and database created
+- [ ] Nginx installed and configured
+- [ ] Repository cloned from GitHub
+- [ ] Dependencies installed (`composer install`)
+- [ ] `.env` file configured with correct IP and database credentials
+- [ ] Database migrations run
+- [ ] Storage symlink created
+- [ ] File permissions set correctly
+- [ ] Nginx configuration tested and reloaded
+- [ ] Application accessible via browser
+
+---
+
+### Troubleshooting Setup Issues
+
+**Issue: Permission denied when cloning**
+- Solution: Use `sudo` or ensure you have write permissions to the directory
+
+**Issue: Composer not found**
+- Solution: Check PATH or use full path: `/usr/local/bin/composer`
+
+**Issue: Database connection failed**
+- Solution: Verify database credentials in `.env`, check MariaDB is running: `sudo systemctl status mariadb`
+
+**Issue: 502 Bad Gateway**
+- Solution: Check PHP-FPM is running: `sudo systemctl status php8.2-fpm`, check Nginx error logs: `sudo tail -f /var/log/nginx/error.log`
+
+**Issue: Storage symlink not working**
+- Solution: Remove old symlink: `rm public/storage`, recreate: `php artisan storage:link`
+
+**Issue: Cannot access application from network**
+- Solution: Check firewall: `sudo ufw status`, allow HTTP: `sudo ufw allow 80/tcp`
+
+---
+
+## Raspberry Pi Critical Tests (Test Phase 3)
+
+This section focuses on **Raspberry Pi-specific tests** for the Video System. These tests verify critical file system and storage functionality that must work correctly on Raspberry Pi OS Lite.
+
+**Note**: Basic functionality (video upload, playback, word validation, etc.) has already been tested on Windows/XAMPP. This section only includes tests that are specific to Raspberry Pi deployment, such as:
+- File permissions (Linux vs Windows)
+- Symlink functionality (Linux symlinks)
+- Web server file serving (Nginx/Apache)
+- Network access via Raspberry Pi WiFi
+- Storage constraints (limited Raspberry Pi storage)
+
+---
+
+### Pre-Testing Checklist
+
+Before starting, ensure:
+- [ ] Laravel application is running on Raspberry Pi
+- [ ] Storage directory exists: `storage/app/public/videos/`
+- [ ] Symlink exists: `php artisan storage:link` (run if needed)
+- [ ] Available storage space: `df -h` (should have at least 100MB free)
+- [ ] Web server (Nginx/Apache) is running
+- [ ] PHP upload limits: `php -i | grep upload_max_filesize` (should be >= 512M)
+
+---
+
+### ✅ Test 1: Storage Directory Permissions
+
+**Why Critical**: Raspberry Pi uses Linux file permissions. Web server must be able to write video files.
 
 **Steps**:
-1. Assign video to multiple devices
-2. Access from different devices
-3. Complete from each
+1. Check directory exists and permissions:
+   ```bash
+   ls -la storage/app/public/videos/
+   ```
+2. Test write access:
+   ```bash
+   touch storage/app/public/videos/test.txt
+   rm storage/app/public/videos/test.txt
+   ```
 
-**Expected**: Separate completions, separate word displays, independent time grants
+**Expected Result**:
+- ✅ Directory exists
+- ✅ Web server user (www-data) can write files
+- ✅ Files can be created and deleted
+
+**If Failed**:
+```bash
+# Fix permissions
+chmod -R 775 storage/app/public/videos/
+chown -R www-data:www-data storage/app/public/videos/
+```
 
 ---
 
-### ✅ Test 19: Portal - Auto-Redirect After Completion
+### ✅ Test 2: Symlink Functionality
+
+**Why Critical**: Laravel uses symlinks to serve files from `storage/app/public/` via `public/storage/`. Linux symlinks behave differently than Windows.
 
 **Steps**:
-1. Complete video with correct words
-2. Wait on result page
-3. Observe countdown timer
-4. Wait for auto-redirect
+1. Check symlink exists:
+   ```bash
+   ls -la public/storage
+   # Should show: public/storage -> ../storage/app/public
+   ```
+2. Verify symlink points to correct location
+3. Test file access via URL: `http://[RASPBERRY_PI_IP]/storage/videos/[filename].mp4`
 
-**Expected**: 
-- Countdown shows 3, 2, 1
-- Automatically redirects to landing page after 3 seconds
-- Landing page shows updated remaining time
+**Expected Result**:
+- ✅ Symlink exists and points to `../storage/app/public`
+- ✅ Files accessible via `/storage/` URL
+- ✅ No 404 errors when accessing files
+
+**If Failed**:
+```bash
+# Recreate symlink
+php artisan storage:link
+```
 
 ---
 
-## Helper Commands
+### ✅ Test 3: Video File Upload (Raspberry Pi)
 
-### Verify System Setup
-```bash
-php artisan video:verify
-```
+**Why Critical**: Tests realistic file handling on Raspberry Pi with limited resources. 20MB+ files test upload performance and storage handling.
 
-### Check Video Completions
-```bash
-# Check specific completion
-php artisan video:check-completion {completion_id}
+**Steps**:
+1. Login to Parent Dashboard: `http://[RASPBERRY_PI_IP]/videos`
+2. Create new video or edit existing video
+3. Upload test video file (at least 20MB)
+4. Verify file appears in storage:
+   ```bash
+   ls -la storage/app/public/videos/
+   ```
+5. Check file permissions:
+   ```bash
+   ls -la storage/app/public/videos/[filename].mp4
+   # Should be readable by web server
+   ```
+6. Test direct file access: `http://[RASPBERRY_PI_IP]/storage/videos/[filename].mp4`
 
-# Check all completions for device
-php artisan video:check-completion --device=AA:BB:CC:DD:EE:FF
+**Expected Result**:
+- ✅ Upload succeeds without errors
+- ✅ File appears in `storage/app/public/videos/`
+- ✅ File permissions allow web server to read
+- ✅ File accessible via direct URL
 
-# Check all completions for video
-php artisan video:check-completion --video={video_id}
-```
-
-## Troubleshooting
-
-### Video File Not Uploading
-- Check `storage/app/videos/` exists and is writable
+**If Failed**:
 - Check PHP upload limits: `php -i | grep upload_max_filesize`
-- Check file size < 512MB
+- Check directory permissions (see Test 1)
+- Check available storage: `df -h`
 
-### Words Not Appearing
-- Verify dictionary words exist: `App\Models\DictionaryWord::count()`
-- Check video has `dictionary_words_enabled = true`
-- Check `word_count > 0`
-- Enable JavaScript in browser
+---
 
-### Time Not Granted
-- Check `passed_validation = true` in completion
-- Verify `words_correct = words_shown_count`
-- Check video has `time_reward_minutes > 0`
-- Check logs: `storage/logs/laravel.log`
+### ✅ Test 4: Video File Serving via Web Server
 
-### Video Not Playing
-- Check file format (MP4, WebM, OGG)
-- Verify file exists in storage
-- Check browser codec support
-- Verify `getVideoUrl()` returns correct URL
+**Why Critical**: Videos must be served by Nginx/Apache (not Laravel serve). Tests web server configuration and MIME types.
 
-## Test Data
+**Steps**:
+1. Upload a test video (20MB+) via Parent Dashboard
+2. Access video file directly via web server:
+   ```
+   http://[RASPBERRY_PI_IP]/storage/videos/[filename].mp4
+   ```
+3. Check browser network tab for:
+   - HTTP status (should be 200 OK)
+   - MIME type (should be `video/mp4` or similar)
+   - Response headers
 
-**Test User**: `parent@test.com` / `password`
+**Expected Result**:
+- ✅ Video loads and plays in browser
+- ✅ No 403 Forbidden errors
+- ✅ Correct MIME type served
+- ✅ Video streams correctly (not downloading entire file)
 
-**Test Device**: MAC `AA:BB:CC:DD:EE:FF`
+**If Failed**:
+- Check web server configuration (Nginx/Apache)
+- Verify symlink exists (see Test 2)
+- Check file permissions (see Test 1)
+- Verify MIME type configuration in web server
 
-**Test Videos** (created by seeder):
-1. Educational Video - With Dictionary Words (5 words, 10 min)
-2. Educational Video - No Dictionary Words (5 min)
-3. Inactive Video (should not appear)
-4. Short Video - Many Words (8 words, 2 min)
+---
 
-## Next Steps
+### ✅ Test 5: Video Playback via Portal (Network Access)
 
-After testing:
-1. Document any issues
-2. Test on Raspberry Pi (if applicable)
-3. Test with various video file sizes
-4. Test concurrent video sessions
-5. Performance test with large files
+**Why Critical**: Children access portal via Raspberry Pi WiFi network, not localhost. Tests network access and performance.
+
+**Steps**:
+1. Connect a test device (phone/tablet) to Raspberry Pi WiFi network
+2. Access portal landing page:
+   ```
+   http://[RASPBERRY_PI_IP]/portal?mac=AA:BB:CC:DD:EE:FF
+   ```
+3. Select a video from the list
+4. Play video and observe:
+   - Video loads within 5-10 seconds (reasonable for 20MB+ file)
+   - Playback is smooth (no significant stuttering)
+   - Words appear at correct timestamps
+   - Video controls work (play, pause, volume)
+
+**Expected Result**:
+- ✅ Portal accessible from WiFi-connected device
+- ✅ Video loads within reasonable time
+- ✅ Playback is smooth
+- ✅ All features work (words, form, submission)
+
+**If Failed**:
+- Check Raspberry Pi IP address
+- Verify device is on same network
+- Check firewall settings
+- Check CPU/memory usage: `htop` (may need to reduce video quality)
+
+---
+
+### ✅ Test 6: Storage Space Management
+
+**Why Critical**: Raspberry Pi has limited storage. Must verify space is tracked correctly and freed when videos are deleted.
+
+**Steps**:
+1. Check available storage before upload:
+   ```bash
+   df -h  # Check total available space
+   du -sh storage/app/public/videos/  # Check video directory size
+   ```
+2. Upload 20MB+ video via Parent Dashboard
+3. Check storage after upload:
+   ```bash
+   df -h
+   du -sh storage/app/public/videos/
+   # Should show increased usage
+   ```
+4. Delete video via Parent Dashboard
+5. Check storage after deletion:
+   ```bash
+   df -h
+   du -sh storage/app/public/videos/
+   # Should show decreased usage (space freed)
+   ```
+
+**Expected Result**:
+- ✅ Storage space decreases after upload
+- ✅ Storage space increases after deletion
+- ✅ Space is properly tracked and freed
+
+**If Failed**:
+- Check file deletion in controller (should use `Storage::disk('public')->delete()`)
+- Verify file actually deleted: `ls storage/app/public/videos/`
+- Check for orphaned files: `php artisan video:cleanup-orphaned`
+
+---
+
+### ✅ Test 7: File Size Limit Enforcement
+
+**Why Critical**: 512MB limit prevents storage from filling up. Must verify limit is enforced and PHP is configured correctly.
+
+**Steps**:
+1. Check PHP upload configuration:
+   ```bash
+   php -i | grep upload_max_filesize  # Should show >= 512M
+   php -i | grep post_max_size  # Should show >= 512M
+   ```
+2. Verify validation rule exists in `StoreVideoRequest`:
+   - Check `'max:512000'` rule (512MB in KB)
+3. (Optional) Attempt to upload file > 512MB if available
+   - Should be rejected with validation error
+   - Error message: "Video file size cannot exceed 512MB"
+
+**Expected Result**:
+- ✅ PHP configuration allows 512MB uploads
+- ✅ Validation rule exists and enforces limit
+- ✅ Error message displayed if file too large
+
+**Note**: Don't need to actually upload 512MB file - just verify limit is checked and PHP config is correct. Uploading 512MB files would consume significant storage on Raspberry Pi.
+
+**If Failed**:
+- Update `php.ini`:
+  ```
+  upload_max_filesize = 512M
+  post_max_size = 512M
+  ```
+- Restart PHP-FPM: `sudo systemctl restart php8.2-fpm` (or your PHP version)
+
+---
+
+### Quick Test Summary
+
+**Minimum Viable Test (5 minutes)**:
+1. Upload one test video (at least 20MB)
+2. Verify file exists and is accessible
+3. Access portal from WiFi device
+4. Play video - verify it loads and plays
+5. Complete video - verify word submission works
+
+**If all 5 steps work, the system is functional on Raspberry Pi.**
+
+---
+
+### Troubleshooting Quick Reference
+
+| Issue | Solution |
+|-------|----------|
+| Permission errors | `chmod -R 775 storage/app/public/videos/`<br>`chown -R www-data:www-data storage/app/public/videos/` |
+| Symlink missing | `php artisan storage:link` |
+| 403 Forbidden | Check file permissions and web server config |
+| Slow playback | Check CPU/memory: `htop`<br>Consider reducing video quality |
+| Storage full | Delete old videos<br>Check disk usage: `df -h`<br>Run cleanup: `php artisan video:cleanup-orphaned --delete` |
+| Upload fails | Check PHP limits: `php -i \| grep upload_max_filesize`<br>Update `php.ini` if needed |
+| Video doesn't load | Check symlink: `ls -la public/storage`<br>Check file exists: `ls storage/app/public/videos/`<br>Check web server is running |
+
+---
+
+### What's Excluded (Already Tested on Windows/XAMPP)
+
+The following functionality has already been verified on Windows/XAMPP and does not need Raspberry Pi testing:
+- ✅ Basic video upload functionality
+- ✅ Video playback in browser (localhost)
+- ✅ Database operations
+- ✅ Word validation logic
+- ✅ UI/UX elements
+- ✅ Form submissions
+- ✅ Basic CRUD operations
+- ✅ Duration detection
+- ✅ Word display timing
+- ✅ Time granting logic
 

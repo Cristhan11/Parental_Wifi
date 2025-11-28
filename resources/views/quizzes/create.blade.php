@@ -62,6 +62,38 @@
                             </div>
                         </div>
 
+                        {{-- Device Assignment --}}
+                        @if(isset($devices) && $devices->count() > 0)
+                            <div class="mb-6">
+                                <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Devices</label>
+                                <p class="text-sm text-gray-500 mb-3">Select which child devices can take this quiz.</p>
+                                <div class="border border-gray-300 rounded-md p-4 max-h-48 overflow-y-auto">
+                                    @foreach($devices as $device)
+                                        <div class="flex items-center mb-2">
+                                            <input type="checkbox" name="devices[]" id="device_{{ $device->id }}" value="{{ $device->id }}"
+                                                {{ in_array($device->id, old('devices', [])) ? 'checked' : '' }}
+                                                class="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded">
+                                            <label for="device_{{ $device->id }}" class="ml-2 block text-sm text-gray-700">
+                                                {{ $device->name }} ({{ $device->mac_address }})
+                                            </label>
+                                        </div>
+                                    @endforeach
+                                </div>
+                                @error('devices')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                                @error('devices.*')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        @else
+                            <div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
+                                <p class="text-sm text-yellow-800">
+                                    No devices available. Please add devices before assigning quizzes.
+                                </p>
+                            </div>
+                        @endif
+
                         {{-- Questions Section: Dynamic question builder --}}
                         {{-- Questions are added/removed dynamically using JavaScript --}}
                         <div class="mb-6">
