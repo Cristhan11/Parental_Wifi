@@ -6,12 +6,28 @@ This document provides a quick reference for managing required services and pull
 
 **Username:** `snasna`  
 **Project Directory:** `/var/www/parental_wifi`  
-**PHP Version:** `8.4.11`  
+**PHP Version:** `8.4.11 (cli) (built: Aug 3 2025 07:32:21) (NTS)`  
+**PHP Major.Minor:** `8.4`  
 **PHP-FPM Service:** `php8.4-fpm`  
+**PHP-FPM Status:** `active (running)`  
 **Web Server:** `nginx`  
-**Database:** `mariadb`  
+**Nginx Version:** `nginx/1.26.3`  
+**Nginx Status:** `active (running)`  
+**Database:** `MariaDB` (mariadb.service)  
+**Database Status:** `active (running)`  
 **Nginx Config:** `/etc/nginx/sites-available/parental_wifi`  
-**PHP-FPM Socket:** `unix:/var/run/php/php8.4-fpm.sock`
+**PHP-FPM Socket:** `unix:/var/run/php/php8.4-fpm.sock`  
+**Socket Path:** `/var/run/php/php8.4-fpm.sock` (exists and accessible)  
+**Git Remote:** `git@github.com:Cristhan11/Parental_Wifi.git`  
+**Git Branch:** `main`
+
+### Verified Configuration
+
+All services are confirmed running and properly configured:
+- ✅ PHP-FPM socket exists and is accessible
+- ✅ Nginx is configured to use PHP 8.4-FPM
+- ✅ All services are active and running
+- ✅ Git repository is properly configured
 
 ---
 
@@ -133,6 +149,15 @@ sudo systemctl restart mariadb
 php -v
 ```
 
+**Your output:**
+```
+PHP 8.4.11 (cli) (built: Aug  3 2025 07:32:21) (NTS)
+Copyright (c) The PHP Group
+Built by Debian
+Zend Engine v4.4.11, Copyright (c) Zend Technologies
+    with Zend OPcache v8.4.11, Copyright (c), by Zend Technologies
+```
+
 ### Find PHP-FPM Service Name
 
 ```bash
@@ -146,13 +171,15 @@ systemctl list-units --all | grep php
 dpkg -l | grep php.*fpm
 ```
 
-### Common PHP-FPM Service Names
+**Your PHP-FPM Service:** `php8.4-fpm` (confirmed active and running)
 
-- `php8.4-fpm` (PHP 8.4)
-- `php8.2-fpm` (PHP 8.2)
-- `php8.1-fpm` (PHP 8.1)
-- `php8.0-fpm` (PHP 8.0)
-- `php-fpm` (generic, no version number)
+### PHP-FPM Socket Locations
+
+Your PHP-FPM sockets are located at:
+- `/var/run/php/php8.4-fpm.sock` (primary socket)
+- `/run/php/php8.4-fpm.sock` (symlink)
+
+Both sockets exist and are accessible. Socket ownership: `www-data:www-data`
 
 ---
 
@@ -167,17 +194,19 @@ grep "fastcgi_pass" /etc/nginx/sites-available/parental_wifi
 
 ### Verify Nginx Config is Correct
 
-Your Nginx configuration should already be set correctly. Verify it:
+Your Nginx configuration is confirmed correct. Verify it:
 
 ```bash
 # Check PHP-FPM socket in Nginx config
 grep "fastcgi_pass" /etc/nginx/sites-available/parental_wifi
 ```
 
-**Expected output:**
+**Your actual output:**
 ```
 fastcgi_pass unix:/var/run/php/php8.4-fpm.sock;
 ```
+
+✅ **Confirmed:** Nginx is correctly configured to use PHP 8.4-FPM socket.
 
 If it shows a different version (e.g., php8.2-fpm), update it:
 
@@ -303,18 +332,39 @@ ls -la app/Console/Commands/TestPhase3Verification.php
 git log --oneline -5
 ```
 
+### Your Git Configuration
+
+**Remote URL:** `git@github.com:Cristhan11/Parental_Wifi.git`  
+**Current Branch:** `main`  
+**Repository Status:** Configured and accessible via SSH
+
+To check your Git configuration:
+```bash
+# Check remote URL
+git remote get-url origin
+
+# Check current branch
+git branch --show-current
+
+# Check repository status
+git status
+```
+
 ---
 
 ## Quick Setup Checklist
 
 Before running tests or using the application:
 
-- [ ] Nginx is running: `systemctl is-active nginx` (should return `active`)
-- [ ] PHP-FPM 8.4 is running: `systemctl is-active php8.4-fpm` (should return `active`)
-- [ ] MariaDB is running: `systemctl is-active mariadb` (should return `active`)
-- [ ] Nginx config points to PHP 8.4-FPM: `grep "fastcgi_pass" /etc/nginx/sites-available/parental_wifi` shows `php8.4-fpm.sock`
+- [x] Nginx is running: `systemctl is-active nginx` → `active` ✅ (nginx/1.26.3)
+- [x] PHP-FPM 8.4 is running: `systemctl is-active php8.4-fpm` → `active` ✅
+- [x] MariaDB is running: `systemctl is-active mariadb` → `active` ✅
+- [x] Nginx config points to PHP 8.4-FPM: `grep "fastcgi_pass" /etc/nginx/sites-available/parental_wifi` shows `php8.4-fpm.sock` ✅
+- [x] PHP-FPM socket exists: `ls -la /var/run/php/php8.4-fpm.sock` → socket file exists ✅
 - [ ] Repository is up to date: `git pull` completed successfully
 - [ ] Laravel is accessible: `curl http://localhost/` returns HTML (not error)
+
+**Status:** All services verified and running correctly. Ready for testing.
 
 ---
 
@@ -395,16 +445,41 @@ git log --oneline -5
 
 ---
 
+## Diagnostic Script
+
+To verify your setup or check another Raspberry Pi, run:
+
+```bash
+# Make script executable (first time only)
+chmod +x scripts/check-raspberry-pi-setup.sh
+
+# Run diagnostic
+./scripts/check-raspberry-pi-setup.sh
+```
+
+This script will check:
+- Current user and project directory
+- PHP version and PHP-FPM service
+- Nginx installation and status
+- Database server (MariaDB/MySQL)
+- Nginx PHP-FPM configuration
+- PHP-FPM socket locations
+- Git repository configuration
+
 ## Notes
 
-- **This document is customized for your setup:**
+- **This document is customized for your verified setup:**
   - Username: `snasna`
-  - PHP Version: `8.4.11`
-  - PHP-FPM Service: `php8.4-fpm`
+  - PHP Version: `8.4.11` (PHP 8.4)
+  - PHP-FPM Service: `php8.4-fpm` (active and running)
+  - Nginx Version: `1.26.3` (active and running)
+  - Database: `mariadb.service` (active and running)
   - Project Directory: `/var/www/parental_wifi`
-  - Database: `mariadb`
+  - Git Remote: `git@github.com:Cristhan11/Parental_Wifi.git`
+  - Git Branch: `main`
 - Always test Nginx configuration before reloading: `sudo nginx -t`
 - All commands assume you're in the project directory: `/var/www/parental_wifi`
+- All services are confirmed active and properly configured
 
 ---
 
