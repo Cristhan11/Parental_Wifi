@@ -30,7 +30,7 @@ class TestPhase3Verification extends Command
      *
      * @var string
      */
-    protected $signature = 'test:phase3 {--verbose : Show detailed output}';
+    protected $signature = 'test:phase3';
 
     /**
      * The console command description.
@@ -50,7 +50,7 @@ class TestPhase3Verification extends Command
         $this->newLine();
 
         $allPassed = true;
-        $verbose = $this->option('verbose');
+        $verbose = $this->getOutput()->isVerbose();
 
         // Test 1: Storage Directory Permissions
         $this->info('📁 Test 1: Storage Directory Permissions');
@@ -262,7 +262,7 @@ class TestPhase3Verification extends Command
         } else {
             $this->error("   ❌ upload_max_filesize is too small: {$uploadMaxFilesize}");
             $this->line("   💡 Update php.ini: upload_max_filesize = 512M");
-            $this->line("   💡 Restart PHP-FPM: sudo systemctl restart php8.2-fpm");
+            $this->line("   💡 Restart PHP-FPM: sudo systemctl restart php8.4-fpm");
             $passed = false;
         }
 
@@ -272,7 +272,7 @@ class TestPhase3Verification extends Command
         } else {
             $this->error("   ❌ post_max_size is too small: {$postMaxSize}");
             $this->line("   💡 Update php.ini: post_max_size = 512M");
-            $this->line("   💡 Restart PHP-FPM: sudo systemctl restart php8.2-fpm");
+            $this->line("   💡 Restart PHP-FPM: sudo systemctl restart php8.4-fpm");
             $passed = false;
         }
 
@@ -390,12 +390,12 @@ class TestPhase3Verification extends Command
         }
 
         // Check PHP-FPM
-        $phpFpmStatus = shell_exec('systemctl is-active php8.2-fpm 2>/dev/null');
+        $phpFpmStatus = shell_exec('systemctl is-active php8.4-fpm 2>/dev/null');
         if (trim($phpFpmStatus) === 'active') {
             $this->line("   ✅ PHP-FPM is running");
         } else {
             // Try other PHP versions
-            $phpVersions = ['php8.1-fpm', 'php8.0-fpm', 'php-fpm'];
+            $phpVersions = ['php8.4-fpm', 'php8.3-fpm', 'php8.2-fpm', 'php8.1-fpm', 'php8.0-fpm', 'php-fpm'];
             $found = false;
             foreach ($phpVersions as $version) {
                 $status = shell_exec("systemctl is-active {$version} 2>/dev/null");
@@ -407,7 +407,7 @@ class TestPhase3Verification extends Command
             }
             if (!$found) {
                 $this->warn("   ⚠️  PHP-FPM not detected");
-                $this->line("   💡 Start PHP-FPM: sudo systemctl start php8.2-fpm");
+                $this->line("   💡 Start PHP-FPM: sudo systemctl start php8.4-fpm");
                 $passed = false;
             }
         }

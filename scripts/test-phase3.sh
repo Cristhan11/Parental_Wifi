@@ -240,7 +240,7 @@ if [ "$(uname)" = "Linux" ]; then
     
     # Check PHP-FPM
     PHP_FPM_FOUND=0
-    for php_version in php8.2-fpm php8.1-fpm php8.0-fpm php-fpm; do
+    for php_version in php8.4-fpm php8.3-fpm php8.2-fpm php8.1-fpm php8.0-fpm php-fpm; do
         if systemctl is-active --quiet "$php_version" 2>/dev/null; then
             echo "   ✅ $php_version is running"
             PHP_FPM_FOUND=1
