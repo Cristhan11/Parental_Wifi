@@ -6,6 +6,8 @@ use App\Models\Device;
 use App\Models\DeviceTimeGrant;
 use App\Models\QuizAttempt;
 use App\Models\VideoCompletion;
+use App\Services\NetworkService;
+use App\Services\NoDogSplashService;
 use Illuminate\Support\Facades\Log;
 use InvalidArgumentException;
 
@@ -22,6 +24,40 @@ use InvalidArgumentException;
  */
 class TimeGrantingService
 {
+    /**
+     * NetworkService instance for network-level device blocking/unblocking.
+     * 
+     * This service handles iptables/firewall rules to physically block or
+     * unblock devices at the network level. It's used to unblock devices
+     * after time is granted so they can actually access the internet.
+     */
+    protected NetworkService $networkService;
+
+    /**
+     * NoDogSplashService instance for portal redirect management.
+     * 
+     * This service handles NoDogSplash configuration to redirect devices
+     * to the portal or allow them through. It's used to remove redirects
+     * after time is granted so devices can access internet normally.
+     */
+    protected NoDogSplashService $noDogSplashService;
+
+    /**
+     * Constructor - inject dependencies.
+     * 
+     * Laravel's dependency injection automatically provides NetworkService
+     * and NoDogSplashService instances when this service is created.
+     * This allows us to use these services in our methods.
+     * 
+     * @param NetworkService $networkService Service for network-level blocking
+     * @param NoDogSplashService $noDogSplashService Service for portal redirects
+     */
+    public function __construct(NetworkService $networkService, NoDogSplashService $noDogSplashService)
+    {
+        $this->networkService = $networkService;
+        $this->noDogSplashService = $noDogSplashService;
+    }
+
     /**
      * Grant time to a device based on a quiz attempt.
      * 
@@ -421,22 +457,38 @@ class TimeGrantingService
     /**
      * Unblock the device so it can browse again.
      * 
-     * This method unblocks a device after time is granted. It updates the device
-     * status from 'blocked' to 'active', allowing the device to access the internet
-     * again with the newly granted time.
+     * This method unblocks a device after time is granted. It performs a complete
+     * unblocking at three levels:
+     * 1. Database level: Updates device status from 'blocked' to 'active'
+     * 2. Network level: Removes iptables/firewall rules that block the device
+     * 3. Portal level: Removes NoDogSplash redirect so device can access internet
      * 
-     * Current Implementation:
-     * - Updates database status (immediate)
-     * - Logs the unblocking operation
+     * Why We Need All Three Levels:
+     * - Database status: Tracks device state in our application (for UI, reports)
+     * - Network blocking: Physically prevents device from accessing internet (iptables)
+     * - Portal redirect: Intercepts HTTP requests and redirects to portal (NoDogSplash)
+     * - All three must be in sync for device to actually access internet
      * 
-     * Future Implementation:
-     * - Will also call NetworkService::unblockDevice() to update iptables/nftables
-     * - This will allow device to actually access internet (not just database status)
+     * Order of Operations:
+     * 1. Update database status first (source of truth)
+     * 2. Unblock at network level (remove iptables rules)
+     * 3. Remove portal redirect (allow device through NoDogSplash)
      * 
-     * Why This Is Needed:
-     * - When time expires, device is blocked (status: 'active' → 'blocked')
-     * - After time is granted, device should be unblocked (status: 'blocked' → 'active')
-     * - Device can then immediately resume browsing with newly granted time
+     * This order ensures:
+     * - Database is updated first (so other parts of system see correct status)
+     * - Network blocking is removed (so device can physically access internet)
+     * - Portal redirect is removed (so device isn't redirected to portal)
+     * 
+     * Error Handling:
+     * - If network unblocking fails, we still update database and log error
+     * - If portal redirect removal fails, we still update database and log error
+     * - This ensures partial success - device status is updated even if network operations fail
+     * - Errors are logged so we can debug and fix issues
+     * 
+     * When Is This Called?
+     * - After child completes quiz and earns time (via grantTimeFromQuiz)
+     * - After child completes video and earns time (via grantTimeFromVideo)
+     * - When parent manually grants time to device
      * 
      * @param Device $device The device to unblock
      * @return void No return value
@@ -444,31 +496,122 @@ class TimeGrantingService
      * Usage Example:
      * ```php
      * $device = Device::find(1);
-     * $device->status = 'blocked'; // Currently blocked
+     * $device->status = 'blocked'; // Currently blocked (time expired)
      * 
      * $this->unblockDevice($device);
-     * // Device status is now 'active'
+     * // Device status is now 'active' (database)
+     * // Device is unblocked at network level (iptables)
+     * // Device redirect is removed (NoDogSplash)
      * // Device can browse internet again
      * ```
      */
     protected function unblockDevice(Device $device): void
     {
-        // Update device status from 'blocked' to 'active'
-        // This allows device to access internet again
-        // update() saves to database immediately
+        // Step 1: Update device status from 'blocked' to 'active' in database
+        // This is the "source of truth" for our application
+        // Other parts of the system check database status to know if device is blocked
+        // 
+        // Why update database first?
+        // - Database status is checked by other services and controllers
+        // - Even if network operations fail, we record the intent
+        // - Status change: 'blocked' → 'active'
         $device->update(['status' => 'active']);
 
-        // Log the unblocking operation for debugging and audit trail
-        // This helps track when devices were unblocked and why
-        Log::info('Device unblocked after time grant.', [
-            'device_id' => $device->id,
-            'remaining_time_minutes' => $device->remaining_time_minutes, // Time available after grant
-        ]);
+        // Step 2: Unblock device at network level using NetworkService
+        // This removes the iptables/firewall rules that were blocking the device
+        // 
+        // What NetworkService::unblockDevice() does:
+        // - Gets device's MAC address
+        // - Removes iptables rule that blocks that MAC address
+        // - Device can now physically access internet (firewall allows it)
+        // 
+        // Current implementation (stub):
+        // - Only updates database status (already done above)
+        // - Logs the operation
+        // - Actual iptables unblocking will be implemented in TODO #12
+        // 
+        // Error handling:
+        // - If network unblocking fails, we catch and log the error
+        // - We continue with portal redirect removal (partial success)
+        try {
+            $networkUnblocked = $this->networkService->unblockDevice($device);
+            
+            if (!$networkUnblocked) {
+                // Log warning if network unblocking failed
+                // This helps us debug network issues
+                Log::warning('Network unblocking may have failed', [
+                    'device_id' => $device->id,
+                    'device_name' => $device->name,
+                    'mac_address' => $device->mac_address,
+                ]);
+            }
+        } catch (\Exception $e) {
+            // If network unblocking throws an exception, catch it here
+            // Log the error but continue with portal redirect removal
+            // This ensures we still try to remove redirect even if network fails
+            Log::error('Error unblocking device at network level', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $device->mac_address,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
 
-        // TODO: Integrate with NetworkService::unblockDevice($device) once available.
-        // This will update iptables/nftables firewall rules to allow device internet access
-        // Currently, we only update database status
-        // Network-level unblocking will be added when NetworkService is implemented
+        // Step 3: Remove portal redirect using NoDogSplashService
+        // This removes the NoDogSplash configuration that redirects device to portal
+        // 
+        // What NoDogSplashService::allowDeviceThrough() does:
+        // - Gets device's MAC address
+        // - Removes redirect rule from NoDogSplash config file
+        // - Restarts NoDogSplash service to apply changes
+        // - Device's HTTP requests now go to actual websites (not portal)
+        // 
+        // Current implementation (stub):
+        // - Only logs the operation
+        // - Actual NoDogSplash config removal will be implemented in TODO #15
+        // 
+        // Error handling:
+        // - If redirect removal fails, we catch and log the error
+        // - Database and network unblocking already succeeded (partial success)
+        try {
+            $redirectRemoved = $this->noDogSplashService->allowDeviceThrough($device);
+            
+            if (!$redirectRemoved) {
+                // Log warning if redirect removal failed
+                // This helps us debug NoDogSplash issues
+                Log::warning('Portal redirect removal may have failed', [
+                    'device_id' => $device->id,
+                    'device_name' => $device->name,
+                    'mac_address' => $device->mac_address,
+                ]);
+            }
+        } catch (\Exception $e) {
+            // If redirect removal throws an exception, catch it here
+            // Log the error - database and network unblocking already succeeded
+            // This ensures we don't crash even if redirect removal fails
+            Log::error('Error removing portal redirect', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $device->mac_address,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+        }
+
+        // Step 4: Log successful unblocking operation
+        // This creates an audit trail of when devices were unblocked and why
+        // Helps with debugging and monitoring system health
+        // 
+        // Note: We log even if network or redirect operations failed
+        // This gives us a complete picture of what happened
+        Log::info('Device unblocked after time grant (complete unblocking process)', [
+            'device_id' => $device->id,
+            'device_name' => $device->name,
+            'mac_address' => $device->mac_address,
+            'remaining_time_minutes' => $device->remaining_time_minutes, // Time available after grant
+            'status' => 'active', // Device status after unblocking
+        ]);
     }
 }
 
