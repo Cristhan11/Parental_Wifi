@@ -485,7 +485,8 @@ This script will check:
 
 ## Related Documentation
 
-- **Test Phase 3 Execution**: `docs/TEST_PHASE_3_EXECUTION.md`
-- **Video System Testing**: `docs/VIDEO_SYSTEM_TESTING.md`
+- **Video System Testing (Test Phase 3)**: `docs/VIDEO_SYSTEM_TESTING.md`
+- **Test Phase 3 Results**: `docs/TEST_PHASE_3_RESULTS.md`
+- **General Testing Guide**: `docs/TESTING.md`
 - **Raspberry Pi Setup**: `docs/VIDEO_SYSTEM_TESTING.md` (Steps 1-10)
 
