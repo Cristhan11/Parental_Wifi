@@ -73,5 +73,4 @@ Artisan::command('inspire', function () {
 Schedule::job(new CheckTimeExpiration)
     ->everyTwoMinutes() // Run every 2 minutes
     ->name('check-time-expiration') // Name for logging and monitoring
-    ->withoutOverlapping() // Prevent multiple instances running at once
-    ->runInBackground(); // Run in background (non-blocking)
+    ->withoutOverlapping(); // Prevent multiple instances running at once
