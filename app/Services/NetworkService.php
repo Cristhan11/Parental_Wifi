@@ -1000,13 +1000,14 @@ class NetworkService
         $validDevices = [];
         foreach ($devices as $device) {
             // Check if device has required fields
-            // Each device must have mac_address, ip_address, and hostname
-            if (isset($device['mac_address']) && isset($device['ip_address'])) {
+            // Script outputs: mac, ip, hostname
+            // We map to: mac_address, ip_address, hostname for consistency
+            if (isset($device['mac']) && isset($device['ip'])) {
                 // Device has required fields - add to valid devices
                 // hostname is optional (may be empty if not available)
                 $validDevices[] = [
-                    'mac_address' => $device['mac_address'],
-                    'ip_address' => $device['ip_address'],
+                    'mac_address' => $device['mac'],      // Map 'mac' to 'mac_address'
+                    'ip_address' => $device['ip'],        // Map 'ip' to 'ip_address'
                     'hostname' => $device['hostname'] ?? '', // Default to empty string if not set
                 ];
             }
