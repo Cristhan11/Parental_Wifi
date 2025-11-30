@@ -15,6 +15,7 @@
 - [ ] Diagram 2.3.1: Software Component Overview (Section 2.3.1 Design Description)
 - [ ] Diagram 2.3.2: Hardware Interaction Architecture (Section 2.3.2 Hardware Interaction)
 - [ ] Diagram 2.3.3: Software Architecture Layers (Section 2.3.3 Schematic Design)
+- [ ] Diagram 2.3.3a: Network Control System Architecture (Section 2.3.3 Schematic Design - Detailed Network Control)
 - [ ] Diagram 2.3.4: Device Registration to Time Grant Sequence (Section 2.3.4 Illustrative Design)
 - [ ] Diagram 2.3.5: Video System with Dictionary Words Workflow (Section 2.3.4 Illustrative Design)
 - [ ] Diagram 2.3.6: Quiz System Workflow (Section 2.3.4 Illustrative Design)
@@ -114,7 +115,9 @@ This architecture ensures that all child device traffic is controlled and monito
         │  └────────────────────────┘  │
         │  ┌────────────────────────┐  │
         │  │  WiFi Access Point     │  │
-        │  │  SSID: Child_WiFi     │  │
+        │  │  SSID: Parental_WiFi  │  │
+        │  │  Interface: wlan0     │  │
+        │  │  IP: 192.168.4.1/24   │  │
         │  │  (802.11ac)           │  │
         │  └────────────────────────┘  │
         │  ┌────────────────────────┐  │
@@ -180,7 +183,10 @@ This architecture ensures that all child device traffic is controlled and monito
 │  ┌──────────────────────────────────────────────────┐   │
 │  │  WiFi Access Point (hostapd)                     │   │
 │  │  - Receives WiFi connections from child devices  │   │
-│  │  - SSID: Child_WiFi                              │   │
+│  │  - SSID: Parental_WiFi                           │   │
+│  │  - Interface: wlan0                              │   │
+│  │  - IP: 192.168.4.1/24                            │   │
+│  │  - DHCP Range: 192.168.4.2 to 192.168.4.51       │   │
 │  └──────────────────────────────────────────────────┘   │
 │                          │                               │
 │  ┌───────────────────────▼──────────────────────────┐   │
@@ -549,63 +555,118 @@ The Illustrative Design section (2.2.4) demonstrates the user interface design a
 ### Diagram 2.3.2: Hardware Interaction Architecture
 **Type:** Interaction Diagram  
 **Section:** 2.3.2 Hardware Interaction  
-**Purpose:** Show how Laravel interacts with Raspberry Pi hardware and system services  
+**Purpose:** Show how Laravel interacts with Raspberry Pi hardware and system services, including the network control system architecture  
 **Content:**
 ```
 ┌─────────────────────────────────────────────────────────┐
 │              Laravel Application                        │
 │  ┌──────────────────────────────────────────────────┐  │
-│  │  Controllers (DeviceController, NetworkController) │  │
+│  │  Controllers                                      │  │
+│  │  (DeviceController, CheckTimeExpiration Job,      │  │
+│  │   TimeGrantingService, PortalController)          │  │
 │  └───────────────────────┬──────────────────────────┘  │
 │                          │                               │
 │  ┌───────────────────────▼──────────────────────────┐  │
-│  │  Service Layer                                      │  │
+│  │  Network Control Service Layer                      │  │
+│  │  ┌──────────────────────────────────────────────┐  │  │
+│  │  │  NetworkService (High-Level Interface)        │  │  │
+│  │  │  - blockDevice()                             │  │  │
+│  │  │  - unblockDevice()                           │  │  │
+│  │  │  - whitelistDevice()                         │  │  │
+│  │  │  - getConnectedDevices()                     │  │  │
+│  │  │  - getTrafficStats()                         │  │  │
+│  │  │  - isDeviceBlocked()                         │  │  │
+│  │  └──────────────────┬───────────────────────────┘  │  │
+│  │                      │                               │  │
+│  │  ┌───────────────────▼───────────────────────────┐  │  │
+│  │  │  ScriptExecutor (Secure Wrapper)               │  │  │
+│  │  │  - Whitelist validation                        │  │  │
+│  │  │  - Path validation (prevents ../ attacks)     │  │  │
+│  │  │  - Argument sanitization (escapeshellarg)       │  │  │
+│  │  │  - Sudo execution with logging                 │  │  │
+│  │  └──────────────────┬───────────────────────────┘  │  │
+│  └──────────────────────┼───────────────────────────┘  │
+│                          │                               │
+│  ┌───────────────────────▼──────────────────────────┐  │
+│  │  Other Service Layer                               │  │
 │  │  ┌──────────────┐  ┌──────────────┐              │  │
-│  │  │ ScriptExecutor│ │ NetworkService│              │  │
-│  │  │ (Validates & │ │ NoDogSplash   │              │  │
-│  │  │  Sanitizes)  │ │ Service       │              │  │
-│  │  └──────────────┘  └──────────────┘              │  │
+│  │  │ NoDogSplash │  │ Process      │  │ Media     │  │
+│  │  │ Service     │  │ Monitoring   │  │ Handling │  │
+│  │  └──────────────┘  └──────────────┘  └──────────┘  │  │
 │  └───────────────────────┬──────────────────────────┘  │
 │                          │                               │
 │        ┌─────────────────┼─────────────────┐          │
 │        │                 │                 │          │
 │  ┌─────▼─────┐  ┌───────▼──────┐  ┌───────▼──────┐  │
-│  │ Command    │  │ Process      │  │ Media       │  │
-│  │ Execution  │  │ Monitoring   │  │ Handling    │  │
-│  │ Layer      │  │ Layer        │  │ Layer        │  │
+│  │ Shell     │  │ Process      │  │ Media       │  │
+│  │ Scripts   │  │ Monitoring   │  │ Handling    │  │
+│  │ Execution  │  │ Layer        │  │ Layer        │  │
+│  │ Layer      │  │              │  │              │  │
+│  │            │  │              │  │              │  │
+│  │ ┌────────┐ │  │              │  │              │  │
+│  │ │block_  │ │  │              │  │              │  │
+│  │ │device. │ │  │              │  │              │  │
+│  │ │sh      │ │  │              │  │              │  │
+│  │ ├────────┤ │  │              │  │              │  │
+│  │ │unblock_│ │  │              │  │              │  │
+│  │ │device. │ │  │              │  │              │  │
+│  │ │sh      │ │  │              │  │              │  │
+│  │ ├────────┤ │  │              │  │              │  │
+│  │ │whitelist│ │  │              │  │              │  │
+│  │ │_device.│ │  │              │  │              │  │
+│  │ │sh      │ │  │              │  │              │  │
+│  │ ├────────┤ │  │              │  │              │  │
+│  │ │get_    │ │  │              │  │              │  │
+│  │ │connected│ │  │              │  │              │  │
+│  │ │_devices│ │  │              │  │              │  │
+│  │ │.sh     │ │  │              │  │              │  │
+│  │ ├────────┤ │  │              │  │              │  │
+│  │ │monitor_│ │  │              │  │              │  │
+│  │ │traffic.│ │  │              │  │              │  │
+│  │ │sh      │ │  │              │  │              │  │
+│  │ └────────┘ │  │              │  │              │  │
 │  └─────┬─────┘  └───────┬──────┘  └───────┬──────┘  │
 │        │                 │                 │          │
 │        │                 │                 │          │
 │  ┌─────▼─────────────────▼─────────────────▼──────┐  │
 │  │  System Services & Hardware                     │  │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐     │  │
-│  │  │ Shell    │  │ System   │  │ File     │     │  │
-│  │  │ Commands │  │ Logs     │  │ System   │     │  │
-│  │  │ (iptables│  │ (hostapd │  │ (SSD     │     │  │
-│  │  │ hostapd  │  │ dnsmasq) │  │ Storage) │     │  │
-│  │  │ dnsmasq) │  │          │  │          │     │  │
+│  │  │ iptables │  │ System   │  │ File     │     │  │
+│  │  │ (INPUT   │  │ Logs     │  │ System   │     │  │
+│  │  │  FORWARD │  │ (hostapd │  │ (SSD     │     │  │
+│  │  │  chains)│  │ dnsmasq) │  │ Storage) │     │  │
+│  │  │          │  │          │  │          │     │  │
+│  │  │ MAC-based│  │          │  │          │     │  │
+│  │  │ DROP/    │  │          │  │          │     │  │
+│  │  │ ACCEPT  │  │          │  │          │     │  │
+│  │  │ rules   │  │          │  │          │     │  │
 │  │  └──────────┘  └──────────┘  └──────────┘     │  │
 │  │  ┌──────────┐  ┌──────────┐                    │  │
 │  │  │ Python    │  │ Network  │                    │  │
 │  │  │ Scripts   │  │ Services │                    │  │
-│  │  │ (Complex  │  │ (WiFi AP │                    │  │
-│  │  │ Operations)│ │ Firewall)│                    │  │
+│  │  │ (Complex  │  │ (hostapd │                    │  │
+│  │  │ Operations)│ │ dnsmasq) │                    │  │
 │  │  └──────────┘  └──────────┘                    │  │
 │  └──────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────────┘
 ```
 
 **Details to Include:**
-- Three interaction layers: Command Execution, Process Monitoring, Media Handling
+- Network Control Architecture showing three-tier structure:
+  - NetworkService (high-level interface with methods: blockDevice, unblockDevice, whitelistDevice, getConnectedDevices, getTrafficStats, isDeviceBlocked)
+  - ScriptExecutor (secure wrapper with whitelist validation, path validation, argument sanitization, sudo execution)
+  - Shell scripts (block_device.sh, unblock_device.sh, whitelist_device.sh, get_connected_devices.sh, monitor_traffic.sh)
+- Three interaction layers: Network Control (via ScriptExecutor), Process Monitoring, Media Handling
 - Service classes that act as security layer (ScriptExecutor, NetworkService, NoDogSplashService)
-- System services and hardware components matching scope.md:
-  - Shell commands (direct Linux command execution)
+- System services and hardware components matching scope.md and NETWORK_CONTROL_SYSTEM_ARCHITECTURE.md:
+  - iptables INPUT and FORWARD chains with MAC-based DROP/ACCEPT rules
+  - Shell scripts for network control (executed via ScriptExecutor)
   - Python helper scripts (complex operations)
-  - Bash scripts (network and system management)
+  - System logs (hostapd, dnsmasq) for process monitoring
   - Systemd service restarts (NoDogSplash, network services)
-  - IPTables/NFTables rules (firewall and routing)
-- Data flow from Laravel to system level
+- Data flow from Laravel Controllers → NetworkService → ScriptExecutor → Shell Scripts → iptables
 - **Note:** Laravel does NOT directly control hardware - it triggers system-level operations through these mechanisms (as per scope.md)
+- **Security:** Show ScriptExecutor's security features (whitelist, path validation, argument sanitization)
 
 **Suggested Tool:** Draw.io, Lucidchart, or interaction diagram tools
 
@@ -635,7 +696,34 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
 │  Layer 5: Network Control Layer              │
-│  (Shell Scripts + ScriptExecutor)            │
+│  ┌─────────────────────────────────────────┐ │
+│  │  NetworkService (High-Level Interface)  │ │
+│  │  - blockDevice(), unblockDevice()       │ │
+│  │  - whitelistDevice(), getConnectedDevices()│ │
+│  │  - getTrafficStats(), isDeviceBlocked() │ │
+│  └──────────────────┬──────────────────────┘ │
+│                     │                        │
+│  ┌──────────────────▼──────────────────────┐ │
+│  │  ScriptExecutor (Secure Wrapper)         │ │
+│  │  - Whitelist validation                  │ │
+│  │  - Path validation                       │ │
+│  │  - Argument sanitization                 │ │
+│  │  - Sudo execution                        │ │
+│  └──────────────────┬──────────────────────┘ │
+│                     │                        │
+│  ┌──────────────────▼──────────────────────┐ │
+│  │  Shell Scripts (scripts/ directory)      │ │
+│  │  - block_device.sh                       │ │
+│  │  - unblock_device.sh                     │ │
+│  │  - whitelist_device.sh                   │ │
+│  │  - get_connected_devices.sh              │ │
+│  │  - monitor_traffic.sh                    │ │
+│  └──────────────────┬──────────────────────┘ │
+│                     │                        │
+│  ┌──────────────────▼──────────────────────┐ │
+│  │  iptables (INPUT & FORWARD chains)       │ │
+│  │  - MAC-based DROP/ACCEPT rules          │ │
+│  └──────────────────────────────────────────┘ │
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
 │  Layer 4: Automation Layer                   │
@@ -657,10 +745,170 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 
 **Details to Include:**
 - All seven layers clearly labeled
+- Layer 5 (Network Control Layer) expanded to show the three-tier architecture:
+  - NetworkService (high-level interface)
+  - ScriptExecutor (secure wrapper)
+  - Shell Scripts (actual execution)
+  - iptables (system-level firewall)
 - Direction of communication (requests flow down, responses flow up)
 - Key technologies in each layer
+- Security features shown in ScriptExecutor layer
 
 **Suggested Tool:** Draw.io, PowerPoint, or architecture diagram tools
+
+---
+
+### Diagram 2.3.3a: Network Control System Architecture
+**Type:** Detailed Architecture Diagram  
+**Section:** 2.3.3 Schematic Design (Network Control Layer Detail)  
+**Purpose:** Show the complete network control system architecture with all components and data flow, based on NETWORK_CONTROL_SYSTEM_ARCHITECTURE.md  
+**Content:**
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Laravel Application                      │
+│  (CheckTimeExpiration Job, TimeGrantingService, etc.)      │
+└──────────────────────┬──────────────────────────────────────┘
+                       │
+                       │ Calls methods
+                       ▼
+┌─────────────────────────────────────────────────────────────┐
+│                   NetworkService (PHP)                       │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  High-Level Network Operations                       │   │
+│  │  - blockDevice(Device $device): bool                │   │
+│  │  - unblockDevice(Device $device): bool              │   │
+│  │  - whitelistDevice(Device $device): bool             │   │
+│  │  - getConnectedDevices(): array                      │   │
+│  │  - getTrafficStats(?string $macAddress): array      │   │
+│  │  - isDeviceBlocked(Device $device): bool            │   │
+│  │                                                       │   │
+│  │  Responsibilities:                                    │   │
+│  │  - Validates device has MAC address                  │   │
+│  │  - Updates database status                           │   │
+│  │  - Logs operations                                   │   │
+│  │  - Handles errors gracefully                         │   │
+│  └──────────────────────┬───────────────────────────────┘   │
+└─────────────────────────┼───────────────────────────────────┘
+                          │
+                          │ Uses ScriptExecutor
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                ScriptExecutor Service (PHP)                  │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  Secure Script Execution Wrapper                      │   │
+│  │                                                       │   │
+│  │  Security Features:                                   │   │
+│  │  - Whitelist validation (only approved scripts)      │   │
+│  │  - Path validation (prevents ../ attacks)            │   │
+│  │  - Argument sanitization (escapeshellarg)             │   │
+│  │  - Sudo execution (via /etc/sudoers.d config)          │   │
+│  │  - Comprehensive logging (all executions logged)     │   │
+│  │                                                       │   │
+│  │  Allowed Scripts:                                     │   │
+│  │  - block_device.sh                                    │   │
+│  │  - unblock_device.sh                                  │   │
+│  │  - whitelist_device.sh                                │   │
+│  │  - get_connected_devices.sh                           │   │
+│  │  - monitor_traffic.sh                                 │   │
+│  └──────────────────────┬───────────────────────────────┘   │
+└─────────────────────────┼───────────────────────────────────┘
+                          │
+                          │ Executes with sudo
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    Shell Scripts (Bash)                     │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  block_device.sh                                      │   │
+│  │  - Validates MAC address format                     │   │
+│  │  - Normalizes MAC address (uppercase, colons)        │   │
+│  │  - Adds DROP rules to INPUT chain                    │   │
+│  │  - Adds DROP rules to FORWARD chain                  │   │
+│  │  - Idempotent (safe to run multiple times)           │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  unblock_device.sh                                    │   │
+│  │  - Validates and normalizes MAC address              │   │
+│  │  - Removes DROP rules from INPUT chain               │   │
+│  │  - Removes DROP rules from FORWARD chain             │   │
+│  │  - Idempotent                                        │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  whitelist_device.sh                                  │   │
+│  │  - Removes any existing DROP rules                   │   │
+│  │  - Adds ACCEPT rule at position 1 in INPUT chain      │   │
+│  │  - Adds ACCEPT rule at position 1 in FORWARD chain   │   │
+│  │  - Position 1 ensures bypass of all DROP rules       │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  get_connected_devices.sh                             │   │
+│  │  - Queries ARP table (ip neigh show dev wlan0)       │   │
+│  │  - Extracts IP and MAC addresses                     │   │
+│  │  - Performs reverse DNS lookup for hostnames         │   │
+│  │  - Outputs JSON array                                │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  monitor_traffic.sh                                   │   │
+│  │  - Queries iptables statistics (iptables -L -v -n -x)│   │
+│  │  - Correlates traffic with MAC addresses             │   │
+│  │  - Outputs JSON with bytes_sent/bytes_received       │   │
+│  └──────────────────────┬───────────────────────────────┘   │
+└─────────────────────────┼───────────────────────────────────┘
+                          │
+                          │ Modifies/Queries
+                          ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    iptables (Linux Firewall)                 │
+│  ┌──────────────────────────────────────────────────────┐   │
+│  │  INPUT Chain                                            │   │
+│  │  - Handles traffic coming TO the Raspberry Pi          │   │
+│  │  - DROP rules block device from accessing Pi services │   │
+│  │  - ACCEPT rules (position 1) bypass all restrictions  │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  FORWARD Chain                                         │   │
+│  │  - Handles traffic being FORWARDED through Pi        │   │
+│  │  - DROP rules block device from accessing internet   │   │
+│  │  - ACCEPT rules (position 1) bypass all restrictions  │   │
+│  ├──────────────────────────────────────────────────────┤   │
+│  │  Rule Format:                                          │   │
+│  │  iptables -A FORWARD -i wlan0 -m mac                  │   │
+│  │           --mac-source AA:BB:CC:DD:EE:FF -j DROP      │   │
+│  │                                                       │   │
+│  │  iptables -I FORWARD 1 -i wlan0 -m mac                │   │
+│  │           --mac-source AA:BB:CC:DD:EE:FF -j ACCEPT   │   │
+│  └──────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────┘
+
+Data Flow Example (Blocking a Device):
+1. CheckTimeExpiration Job detects time = 0
+2. Calls NetworkService::blockDevice($device)
+3. NetworkService validates MAC address exists
+4. NetworkService calls ScriptExecutor::execute('block_device.sh', [MAC])
+5. ScriptExecutor validates script is whitelisted
+6. ScriptExecutor validates script path (prevents ../ attacks)
+7. ScriptExecutor sanitizes MAC address argument
+8. ScriptExecutor executes: sudo /path/to/block_device.sh 'AA:BB:CC:DD:EE:FF'
+9. block_device.sh validates MAC format
+10. block_device.sh normalizes MAC address
+11. block_device.sh adds iptables DROP rules to INPUT and FORWARD chains
+12. ScriptExecutor captures output and return code
+13. ScriptExecutor logs execution
+14. NetworkService updates database status to 'blocked'
+15. NetworkService logs operation
+16. Device is now blocked at network level
+```
+
+**Details to Include:**
+- Complete three-tier architecture: NetworkService → ScriptExecutor → Shell Scripts → iptables
+- NetworkService methods and responsibilities clearly shown
+- ScriptExecutor security features (whitelist, path validation, argument sanitization, logging)
+- All five shell scripts with their specific functions
+- iptables INPUT and FORWARD chains with rule examples
+- MAC address-based rules (DROP for blocking, ACCEPT for whitelisting)
+- Rule priority explanation (position 1 = highest priority)
+- Complete data flow example showing step-by-step blocking process
+- Security measures at each layer
+- Idempotent operations (scripts safe to run multiple times)
+- JSON output format for query scripts (get_connected_devices.sh, monitor_traffic.sh)
+
+**Suggested Tool:** Draw.io, Lucidchart, or architecture diagram tools
+
+**Reference:** This diagram is based on the detailed architecture documented in `docs/NETWORK_CONTROL_SYSTEM_ARCHITECTURE.md`
 
 ---
 
@@ -904,15 +1152,27 @@ The Illustrative Design section provides detailed workflow examples that demonst
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 3: Time Expiration Detection                                │
 └─────────────────────────────────────────────────────────────────┘
-    Background Jobs         TimeTrackingService    Firewall
-          │                         │                │
-          │──Check Expiration──────>│                │
-          │                         │                │
-          │<──Time = 0──────────────│                │
-          │                         │                │
-          │──Block Device───────────┼───────────────>│
-          │                         │                │
-          │                         │<──Device Blocked│
+    Background Jobs    TimeTrackingService    NetworkService    ScriptExecutor    iptables
+          │                    │                    │                  │              │
+          │──Check Expiration─>│                    │                  │              │
+          │                    │                    │                  │              │
+          │<──Time = 0─────────│                    │                  │              │
+          │                    │                    │                  │              │
+          │──Block Device──────┼──>blockDevice()───>│                  │              │
+          │                    │                    │                  │              │
+          │                    │                    │──execute()──────>│              │
+          │                    │                    │  ('block_device.│              │
+          │                    │                    │   sh', [MAC])    │              │
+          │                    │                    │                  │              │
+          │                    │                    │                  │──sudo exec──>│
+          │                    │                    │                  │  (adds DROP  │
+          │                    │                    │                  │   rules to    │
+          │                    │                    │                  │   INPUT &     │
+          │                    │                    │                  │   FORWARD)    │
+          │                    │                    │                  │              │
+          │                    │                    │<──Success───────│<──Rules Added│
+          │                    │                    │                  │              │
+          │                    │<──Device Blocked───│                  │              │
 
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 4: Captive Portal Redirect                                 │
@@ -951,17 +1211,30 @@ The Illustrative Design section provides detailed workflow examples that demonst
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 6: Time Granting & Device Unblocking                       │
 └─────────────────────────────────────────────────────────────────┘
-    QuizController      TimeGrantingService      Firewall      WebSocket
-          │                      │                  │              │
-          │──Grant Time─────────>│                  │              │
-          │                      │                  │              │
-          │                      │──Unblock Device─>│              │
-          │                      │                  │              │
-          │                      │<──Device Unblocked│              │
-          │                      │                  │              │
-          │                      │──Notify Parent───┼─────────────>│
-          │                      │                  │              │
-          │<──Time Granted───────│                  │              │
+    QuizController  TimeGrantingService  NetworkService  ScriptExecutor  iptables  WebSocket
+          │                  │                  │              │            │          │
+          │──Grant Time──────>│                  │              │            │          │
+          │                  │                  │              │            │          │
+          │                  │──unblockDevice()─>│              │            │          │
+          │                  │                  │              │            │          │
+          │                  │                  │──execute()───>│            │          │
+          │                  │                  │  ('unblock_  │            │          │
+          │                  │                  │   device.sh',│            │          │
+          │                  │                  │   [MAC])     │            │          │
+          │                  │                  │              │            │          │
+          │                  │                  │              │──sudo exec>│          │
+          │                  │                  │              │  (removes  │          │
+          │                  │                  │              │   DROP     │          │
+          │                  │                  │              │   rules)   │          │
+          │                  │                  │              │            │          │
+          │                  │                  │<──Success─────│<──Rules    │          │
+          │                  │                  │              │   Removed  │          │
+          │                  │                  │              │            │          │
+          │                  │<──Device Unblocked│              │            │          │
+          │                  │                  │              │            │          │
+          │                  │──Notify Parent───┼──────────────┼───────────>│
+          │                  │                  │              │            │          │
+          │<──Time Granted───│                  │              │            │          │
 
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 7: Device Regains Internet Access                          │
@@ -1313,9 +1586,11 @@ The Illustrative Design section provides detailed workflow examples that demonst
 - Consistent styling and color scheme throughout
 
 ### Priority Levels:
-- **High Priority:** Diagrams 2.2.2, 2.2.3, 2.3.1, 2.3.2, 2.3.3, 2.3.7 (Core architecture and system design)
+- **High Priority:** Diagrams 2.2.2, 2.2.3, 2.3.1, 2.3.2, 2.3.3, 2.3.3a, 2.3.7 (Core architecture and system design)
 - **Medium Priority:** Diagrams 2.2.1, 2.2.4, 2.3.4, 2.3.5, 2.3.6 (Detailed workflows and processes)
 - **Low Priority:** Diagrams 2.2.5, 2.2.6, 2.2.7 (UI mockups - can use screenshots from actual system)
+
+**Note:** Diagram 2.3.3a (Network Control System Architecture) is a new high-priority diagram that provides detailed insight into the network control system, complementing the overview shown in Diagram 2.3.3. This diagram is essential for understanding how device blocking/unblocking works at the system level.
 
 ---
 
