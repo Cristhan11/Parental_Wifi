@@ -26,7 +26,9 @@ This document provides a quick reference for managing required services and pull
 All services are confirmed running and properly configured:
 - ✅ PHP-FPM socket exists and is accessible
 - ✅ Nginx is configured to use PHP 8.4-FPM
-- ✅ All services are active and running
+- ✅ All web application services are active and running
+- ✅ WiFi Access Point services are active and running (hostapd, dnsmasq, dhcpcd)
+- ✅ Access Point is operational (devices can connect and access internet)
 - ✅ Git repository is properly configured
 
 ---
@@ -38,6 +40,45 @@ The following services must be running for the Laravel application to function p
 1. **Nginx** - Web server
 2. **PHP-FPM 8.4** - PHP FastCGI Process Manager (php8.4-fpm)
 3. **MariaDB** - Database server
+
+### WiFi Access Point Services
+
+The following services are required for the WiFi Access Point functionality:
+
+1. **hostapd** - WiFi Access Point daemon (creates and manages WiFi network)
+2. **dnsmasq** - DHCP and DNS server (assigns IP addresses and resolves domain names)
+3. **dhcpcd** - DHCP client daemon (manages static IP for wlan0 interface)
+
+**Current Status:**
+- ✅ hostapd: `active (running)`
+- ✅ dnsmasq: `active (running)`
+- ✅ dhcpcd: `active (running)`
+
+**Network Configuration:**
+- **WiFi Interface:** `wlan0`
+- **Access Point IP:** `192.168.4.1/24`
+- **SSID (Network Name):** `Parental_WiFi`
+- **DHCP Range:** `192.168.4.2` to `192.168.4.51` (50 devices)
+- **Gateway:** `192.168.4.1` (the Pi itself)
+- **DNS Server:** `192.168.4.1` (the Pi itself, via dnsmasq)
+- **Subnet Mask:** `255.255.255.0` (`/24`)
+- **IP Forwarding:** `enabled` (1)
+
+**Configuration Files:**
+- **hostapd config:** `/etc/hostapd/hostapd.conf`
+- **dnsmasq config:** `/etc/dnsmasq.conf` (backup: `/etc/dnsmasq.conf.orig`)
+- **dhcpcd config:** `/etc/dhcpcd.conf`
+- **NetworkManager config:** `/etc/NetworkManager/conf.d/99-unmanaged-devices.conf`
+- **IP forwarding:** `/etc/sysctl.conf`
+
+**NetworkManager Configuration:**
+- wlan0 is configured as unmanaged by NetworkManager
+- This allows dhcpcd to manage the interface for access point mode
+
+**iptables NAT Configuration:**
+- MASQUERADE rule active on eth0 interface
+- FORWARD rules configured for wlan0 ↔ eth0 traffic
+- Rules saved persistently via netfilter-persistent
 
 ---
 
@@ -60,6 +101,23 @@ PHP-FPM: active
 MariaDB: active
 ```
 
+### Check Access Point Services
+
+```bash
+echo "=== Access Point Services ==="
+echo "hostapd: $(systemctl is-active hostapd)"
+echo "dnsmasq: $(systemctl is-active dnsmasq)"
+echo "dhcpcd: $(systemctl is-active dhcpcd)"
+```
+
+**Expected output when all services are running:**
+```
+=== Access Point Services ===
+hostapd: active
+dnsmasq: active
+dhcpcd: active
+```
+
 ### Check Individual Services
 
 ```bash
@@ -77,6 +135,21 @@ systemctl is-active php8.4-fpm
 sudo systemctl status mariadb
 # OR
 systemctl is-active mariadb
+
+# Check hostapd (WiFi Access Point)
+sudo systemctl status hostapd
+# OR
+systemctl is-active hostapd
+
+# Check dnsmasq (DHCP/DNS)
+sudo systemctl status dnsmasq
+# OR
+systemctl is-active dnsmasq
+
+# Check dhcpcd (Network Manager)
+sudo systemctl status dhcpcd
+# OR
+systemctl is-active dhcpcd
 ```
 
 ---
@@ -96,6 +169,21 @@ sudo systemctl start php8.4-fpm
 sudo systemctl start mariadb
 ```
 
+### Start Access Point Services
+
+```bash
+# Start dnsmasq (DHCP/DNS) - start this first
+sudo systemctl start dnsmasq
+
+# Start hostapd (WiFi Access Point)
+sudo systemctl start hostapd
+
+# Start dhcpcd (Network Manager)
+sudo systemctl start dhcpcd
+```
+
+**Note:** Start dnsmasq before hostapd to ensure DHCP is ready when devices connect.
+
 ### Enable Services to Start on Boot
 
 ```bash
@@ -107,6 +195,11 @@ sudo systemctl enable php8.4-fpm
 
 # Enable MariaDB
 sudo systemctl enable mariadb
+
+# Enable Access Point Services
+sudo systemctl enable dnsmasq
+sudo systemctl enable hostapd
+sudo systemctl enable dhcpcd
 ```
 
 ---
@@ -122,6 +215,11 @@ sudo systemctl stop php8.4-fpm
 
 # Stop MariaDB
 sudo systemctl stop mariadb
+
+# Stop Access Point Services
+sudo systemctl stop hostapd
+sudo systemctl stop dnsmasq
+# Note: Usually don't stop dhcpcd as it manages network interfaces
 ```
 
 ---
@@ -137,6 +235,88 @@ sudo systemctl restart php8.4-fpm
 
 # Restart MariaDB
 sudo systemctl restart mariadb
+
+# Restart Access Point Services
+sudo systemctl restart dnsmasq
+sudo systemctl restart hostapd
+sudo systemctl restart dhcpcd
+```
+
+**Note:** When restarting access point services, restart dnsmasq first, then hostapd.
+
+---
+
+## Verify Access Point Configuration
+
+### Check WiFi Interface Status
+
+```bash
+# Check wlan0 IP address
+ip addr show wlan0 | grep "inet "
+
+# Expected output:
+#     inet 192.168.4.1/24 brd 192.168.4.255 scope global noprefixroute wlan0
+```
+
+### Check Access Point Configuration
+
+```bash
+# Check SSID (WiFi network name)
+sudo grep "^ssid=" /etc/hostapd/hostapd.conf
+
+# Check WiFi password (wpa_passphrase)
+sudo grep "^wpa_passphrase=" /etc/hostapd/hostapd.conf
+
+# Check DHCP range
+sudo grep "^dhcp-range=" /etc/dnsmasq.conf
+
+# Check gateway and DNS settings
+sudo grep "^dhcp-option=" /etc/dnsmasq.conf
+```
+
+**Your Current Configuration:**
+- **SSID:** `Parental_WiFi`
+- **DHCP Range:** `192.168.4.2` to `192.168.4.51`
+- **Gateway:** `192.168.4.1`
+- **DNS:** `192.168.4.1`
+
+### Check Connected Devices
+
+```bash
+# See connected devices and their IP addresses
+ip neigh show dev wlan0
+
+# Or check DHCP leases
+cat /var/lib/misc/dnsmasq.leases
+
+# Check active connections
+sudo iptables -t nat -L POSTROUTING -v -n
+```
+
+### Verify IP Forwarding
+
+```bash
+# Check if IP forwarding is enabled (should output: 1)
+cat /proc/sys/net/ipv4/ip_forward
+
+# Check iptables NAT rules
+sudo iptables -t nat -L POSTROUTING -v -n
+
+# Check FORWARD rules
+sudo iptables -L FORWARD -v -n
+```
+
+### Check NetworkManager Configuration
+
+```bash
+# Verify wlan0 is unmanaged by NetworkManager
+sudo cat /etc/NetworkManager/conf.d/99-unmanaged-devices.conf
+```
+
+**Expected output:**
+```
+[keyfile]
+unmanaged-devices=interface-name:wlan0
 ```
 
 ---
@@ -356,15 +536,29 @@ git status
 
 Before running tests or using the application:
 
+### Web Application Services
 - [x] Nginx is running: `systemctl is-active nginx` → `active` ✅ (nginx/1.26.3)
 - [x] PHP-FPM 8.4 is running: `systemctl is-active php8.4-fpm` → `active` ✅
 - [x] MariaDB is running: `systemctl is-active mariadb` → `active` ✅
 - [x] Nginx config points to PHP 8.4-FPM: `grep "fastcgi_pass" /etc/nginx/sites-available/parental_wifi` shows `php8.4-fpm.sock` ✅
 - [x] PHP-FPM socket exists: `ls -la /var/run/php/php8.4-fpm.sock` → socket file exists ✅
+
+### WiFi Access Point Services
+- [x] hostapd is running: `systemctl is-active hostapd` → `active` ✅
+- [x] dnsmasq is running: `systemctl is-active dnsmasq` → `active` ✅
+- [x] dhcpcd is running: `systemctl is-active dhcpcd` → `active` ✅
+- [x] wlan0 has static IP: `ip addr show wlan0` shows `192.168.4.1/24` ✅
+- [x] IP forwarding is enabled: `cat /proc/sys/net/ipv4/ip_forward` → `1` ✅
+- [x] iptables NAT rules configured: `sudo iptables -t nat -L POSTROUTING` shows MASQUERADE rule ✅
+
+### General
 - [ ] Repository is up to date: `git pull` completed successfully
 - [ ] Laravel is accessible: `curl http://localhost/` returns HTML (not error)
+- [ ] WiFi network is visible: Devices can see "Parental_WiFi" network
+- [ ] Devices can connect: Test device successfully connects and gets IP address
+- [ ] Internet access works: Connected devices can browse the internet
 
-**Status:** All services verified and running correctly. Ready for testing.
+**Status:** All services verified and running correctly. Access point is operational. Ready for testing.
 
 ---
 
@@ -410,6 +604,85 @@ ps aux | grep php-fpm
 ls -la /var/run/php/php8.4-fpm.sock
 ```
 
+### Access Point Not Visible
+
+```bash
+# Check hostapd status
+sudo systemctl status hostapd
+
+# Check hostapd logs for errors
+sudo journalctl -u hostapd -n 50
+
+# Test hostapd configuration
+sudo hostapd -dd /etc/hostapd/hostapd.conf
+# (Press Ctrl+C to stop)
+
+# Restart hostapd
+sudo systemctl restart hostapd
+
+# Check if WiFi is blocked (RF-kill)
+rfkill list
+
+# Unblock WiFi if needed
+sudo rfkill unblock wifi
+```
+
+### Devices Can't Get IP Address
+
+```bash
+# Check dnsmasq status
+sudo systemctl status dnsmasq
+
+# Check dnsmasq logs
+sudo journalctl -u dnsmasq -n 50
+
+# Check DHCP leases
+cat /var/lib/misc/dnsmasq.leases
+
+# Verify wlan0 has correct IP
+ip addr show wlan0
+
+# Restart dnsmasq
+sudo systemctl restart dnsmasq
+```
+
+### No Internet Access for Connected Devices
+
+```bash
+# Check IP forwarding is enabled
+cat /proc/sys/net/ipv4/ip_forward
+# Should output: 1
+
+# Check iptables NAT rules
+sudo iptables -t nat -L POSTROUTING -v -n
+
+# Check FORWARD rules
+sudo iptables -L FORWARD -v -n
+
+# Check Ethernet connection
+ip addr show eth0
+# Should show an IP address from your router
+
+# Test internet from Pi
+ping -c 3 8.8.8.8
+
+# Restore iptables rules if needed
+sudo netfilter-persistent reload
+```
+
+### hostapd Service is Masked
+
+If you see "Unit hostapd.service is masked":
+
+```bash
+# Unmask the service
+sudo systemctl unmask hostapd
+
+# Enable and start
+sudo systemctl enable hostapd
+sudo systemctl start hostapd
+```
+
 ---
 
 ## Quick Reference Commands
@@ -417,17 +690,49 @@ ls -la /var/run/php/php8.4-fpm.sock
 ### Service Management
 
 ```bash
-# Check all services
+# Check all web application services
 systemctl is-active nginx php8.4-fpm mariadb
 
-# Start all services
+# Check all access point services
+systemctl is-active hostapd dnsmasq dhcpcd
+
+# Start all web application services
 sudo systemctl start nginx php8.4-fpm mariadb
 
-# Enable all services
+# Start all access point services (order matters: dnsmasq first, then hostapd)
+sudo systemctl start dnsmasq hostapd dhcpcd
+
+# Enable all web application services
 sudo systemctl enable nginx php8.4-fpm mariadb
 
-# Restart all services
+# Enable all access point services
+sudo systemctl enable dnsmasq hostapd dhcpcd
+
+# Restart all web application services
 sudo systemctl restart nginx php8.4-fpm mariadb
+
+# Restart all access point services
+sudo systemctl restart dnsmasq hostapd dhcpcd
+```
+
+### Access Point Quick Checks
+
+```bash
+# Check all access point services at once
+echo "hostapd: $(systemctl is-active hostapd)"
+echo "dnsmasq: $(systemctl is-active dnsmasq)"
+echo "dhcpcd: $(systemctl is-active dhcpcd)"
+
+# Check WiFi interface
+ip addr show wlan0
+
+# Check connected devices
+ip neigh show dev wlan0
+# OR
+cat /var/lib/misc/dnsmasq.leases
+
+# Check WiFi password
+sudo grep "^wpa_passphrase=" /etc/hostapd/hostapd.conf
 ```
 
 ### Git Operations
@@ -477,14 +782,24 @@ This script will check:
   - Project Directory: `/var/www/parental_wifi`
   - Git Remote: `git@github.com:Cristhan11/Parental_Wifi.git`
   - Git Branch: `main`
+- **WiFi Access Point Configuration:**
+  - SSID: `Parental_WiFi`
+  - Access Point IP: `192.168.4.1/24`
+  - DHCP Range: `192.168.4.2` to `192.168.4.51` (50 devices)
+  - Gateway/DNS: `192.168.4.1` (the Pi itself)
+  - WiFi Password: Stored in `/etc/hostapd/hostapd.conf` (wpa_passphrase)
+  - NetworkManager: wlan0 is unmanaged (configured in `/etc/NetworkManager/conf.d/99-unmanaged-devices.conf`)
 - Always test Nginx configuration before reloading: `sudo nginx -t`
 - All commands assume you're in the project directory: `/var/www/parental_wifi`
 - All services are confirmed active and properly configured
+- When restarting access point services, restart dnsmasq before hostapd
+- Access point requires Ethernet connection (eth0) for internet access
 
 ---
 
 ## Related Documentation
 
+- **WiFi Access Point Setup**: `docs/RASPBERRY_PI_ACCESS_POINT_SETUP.md` - Complete guide for setting up the Raspberry Pi as a WiFi access point
 - **Video System Testing (Test Phase 3)**: `docs/VIDEO_SYSTEM_TESTING.md`
 - **Test Phase 3 Results**: `docs/TEST_PHASE_3_RESULTS.md`
 - **General Testing Guide**: `docs/TESTING.md`
