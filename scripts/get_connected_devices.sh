@@ -138,7 +138,7 @@ while IFS= read -r line; do
     
     # Extract MAC address (5th field, after "lladdr")
     # awk '{print $5}' = Print 5th field
-    mac_address=$(echo "$line" | awk '{print $5}')
+    mac_address=$(echo "$line" | awk '{print $3}')
     
     # Skip if MAC address is empty or invalid
     # -z checks if string is empty
