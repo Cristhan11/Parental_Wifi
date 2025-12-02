@@ -28,77 +28,155 @@ Based on your existing setup:
 
 ## Step 1: Install NoDogSplash
 
-### 1.1 Update Package List
+**Important Note:** NoDogSplash is not available in the default Raspberry Pi package repositories. We need to compile and install it from source.
+
+### 1.1 Update Package List and Install Dependencies
 
 ```bash
 sudo apt update
+sudo apt install -y build-essential git libmicrohttpd-dev libnl-3-dev libnl-genl-3-dev libjson-c-dev
 ```
 
 **What this does:**
-- Updates the list of available packages from repositories
-- Ensures you get the latest version information
+- **`sudo apt update`** - Updates package list from repositories
+- **`build-essential`** - Compiler tools (gcc, make, etc.)
+- **`git`** - To clone the NoDogSplash repository
+- **`libmicrohttpd-dev`** - HTTP library (required by NoDogSplash)
+- **`libnl-3-dev`** - Netlink library (for network management)
+- **`libnl-genl-3-dev`** - Netlink generic netlink library
+- **`libjson-c-dev`** - JSON library (required for state file support)
 
-### 1.2 Install NoDogSplash
+### 1.2 Clone NoDogSplash Repository
 
 ```bash
-sudo apt install nodogsplash -y
+cd ~
+git clone https://github.com/nodogsplash/nodogsplash.git
+cd nodogsplash
 ```
 
 **What this does:**
-- **`sudo apt install`** - Package manager install command with administrator privileges
-- **`nodogsplash`** - The captive portal software package
-- **`-y`** - Automatically answer "yes" to prompts (non-interactive)
+- **`cd ~`** - Navigate to home directory
+- **`git clone`** - Clones the official NoDogSplash repository from GitHub
+- **`cd nodogsplash`** - Navigates into the source directory
 
 **Expected Output:**
 ```
-Reading package lists... Done
-Building dependency tree... Done
+Cloning into 'nodogsplash'...
+remote: Enumerating objects: 5604, done.
 ...
-Setting up nodogsplash (X.X.X) ...
+Resolving deltas: 100% (3547/3547), done.
 ```
 
-### 1.3 Verify Installation
+### 1.3 Compile NoDogSplash
 
 ```bash
-which nodogsplash
-nodogsplash --version
-```
-
-**What to check:**
-- **`which nodogsplash`** - Should return: `/usr/sbin/nodogsplash` or similar path
-- **`nodogsplash --version`** - Should display version number (e.g., `4.11.0`)
-
-**If commands fail:**
-- Installation may have failed, re-run `sudo apt install nodogsplash -y`
-- Check for error messages in the installation output
-
----
-
-## Step 2: Stop NoDogSplash Service (Temporary)
-
-NoDogSplash starts automatically after installation. We need to stop it temporarily while we configure it.
-
-```bash
-sudo systemctl stop nodogsplash
-sudo systemctl disable nodogsplash
+make
 ```
 
 **What this does:**
-- **`systemctl stop nodogsplash`** - Stops the running service immediately
-- **`systemctl disable nodogsplash`** - Prevents service from starting automatically on boot
-- We'll enable it again after configuration is complete
+- **`make`** - Compiles the source code using the Makefile
+- This may take a few minutes depending on your Raspberry Pi's speed
 
-**Why stop it now?**
-- We need to modify configuration files
-- We want to test configuration before enabling it permanently
-- Avoids conflicts with existing network setup
+**Expected Output:**
+- Compilation messages showing object files being built
+- Should complete without errors
 
-**Verify it's stopped:**
+**If compilation fails:**
+- Check that all dependencies were installed correctly
+- Look for error messages indicating missing libraries
+- Common issue: Missing `libjson-c-dev` (will show error about `json-c/json.h`)
+
+### 1.4 Install NoDogSplash
+
 ```bash
-sudo systemctl status nodogsplash
+sudo make install
 ```
 
-**Expected output:** Should show `inactive (dead)` or `disabled`
+**What this does:**
+- **`sudo make install`** - Installs the compiled binaries and configuration files
+- Copies `nodogsplash` binary to `/usr/bin/`
+- Copies configuration files to `/etc/nodogsplash/`
+
+**Expected Output:**
+```
+strip nodogsplash
+strip ndsctl
+mkdir -p /usr/bin/
+cp ndsctl /usr/bin/
+cp nodogsplash /usr/bin/
+mkdir -p /etc/nodogsplash/htdocs/images
+cp resources/nodogsplash.conf /etc/nodogsplash/
+...
+```
+
+### 1.5 Verify Installation
+
+```bash
+which nodogsplash
+nodogsplash -version
+```
+
+**What to check:**
+- **`which nodogsplash`** - Should return: `/usr/bin/nodogsplash`
+- **`nodogsplash -version`** - Should display version number (e.g., `5.0.2`)
+
+**Note:** The version flag is `-version` (not `--version`) in version 5.0.2
+
+---
+
+## Step 2: Create Systemd Service File
+
+Since we installed from source, NoDogSplash may not have created a systemd service automatically. We'll create one now, but won't enable it until after configuration.
+
+### 2.1 Create Service File
+
+```bash
+sudo nano /etc/systemd/system/nodogsplash.service
+```
+
+Add this content:
+
+```ini
+[Unit]
+Description=NoDogSplash Captive Portal
+After=network.target hostapd.service dnsmasq.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/nodogsplash -f
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+```
+
+**What this does:**
+- **`[Unit]`** - Service unit configuration
+  - **`After=network.target hostapd.service dnsmasq.service`** - Ensures NoDogSplash starts after network, hostapd, and dnsmasq are ready
+- **`[Service]`** - Service execution configuration
+  - **`Type=simple`** - Service runs in foreground (process is the main service)
+  - **`ExecStart=/usr/bin/nodogsplash -f`** - Command to start NoDogSplash with `-f` flag (foreground mode)
+  - **`Restart=always`** - Automatically restart if service crashes
+  - **`RestartSec=5`** - Wait 5 seconds before restarting
+- **`[Install]`** - Installation configuration
+  - **`WantedBy=multi-user.target`** - Start service when system reaches multi-user target (normal boot)
+
+Save: `Ctrl+O`, `Enter`, `Ctrl+X`
+
+### 2.2 Reload Systemd Configuration
+
+```bash
+sudo systemctl daemon-reload
+```
+
+**What this does:**
+- **`daemon-reload`** - Reloads systemd configuration files
+- Required after creating or modifying service files
+
+**Important:** Do NOT start the service yet. We'll configure it first, then start it.
 
 ---
 
@@ -148,14 +226,8 @@ GatewayInterface wlan0
 # Gateway Address (Access Point IP)
 GatewayAddress 192.168.4.1
 
-# Internet Interface (Ethernet interface for internet access)
-InternetInterface eth0
-
 # Gateway Name (SSID)
 GatewayName Parental_WiFi
-
-# Gateway FQDN (Fully Qualified Domain Name)
-GatewayFQDN parentalwifi.local
 
 # Max Clients (maximum number of connected devices)
 MaxClients 50
@@ -167,19 +239,22 @@ AuthIdleTimeout 480
 ClientIdleTimeout 480
 ```
 
+**Important Notes:**
+- **`InternetInterface`** is NOT a valid option in NoDogSplash version 5.0.2 - Do NOT add this line
+- If you see `InternetInterface` in commented form, leave it commented out
+- Only uncomment and set `GatewayInterface` and `GatewayAddress`
+
 ### 4.3 Configuration Explained
 
 **GatewayInterface wlan0**
 - Specifies which network interface NoDogSplash monitors
 - Should match your WiFi Access Point interface
+- **Required:** Must be set to the correct interface name
 
 **GatewayAddress 192.168.4.1**
 - The IP address of your Raspberry Pi on the WiFi network
 - Must match your Access Point IP configuration
-
-**InternetInterface eth0**
-- The interface connected to the internet (Ethernet)
-- NoDogSplash will forward traffic through this interface
+- **Required:** Must match the IP address of your wlan0 interface
 
 **GatewayName Parental_WiFi**
 - Display name for the captive portal
@@ -289,20 +364,26 @@ Check what NoDogSplash depends on and ensure network is fully configured before 
 ### 7.1 Validate Configuration File Syntax
 
 ```bash
-sudo nodogsplash -c /etc/nodogsplash/nodogsplash.conf -d 7 -f
+sudo /usr/bin/nodogsplash -c /etc/nodogsplash/nodogsplash.conf -f -d 3
 ```
 
 **What this does:**
+- **`/usr/bin/nodogsplash`** - Full path to NoDogSplash binary (installed from source)
 - **`-c /etc/nodogsplash/nodogsplash.conf`** - Specify config file to use
-- **`-d 7`** - Debug level 7 (maximum verbosity)
 - **`-f`** - Run in foreground (don't daemonize)
+- **`-d 3`** - Debug level 3 (shows important messages)
 
-**Expected output:** Should show configuration loaded successfully, no errors
+**Expected output:** Should show:
+- Configuration file loaded successfully
+- Gateway detected: `Detected gateway wlan0 at 192.168.4.1`
+- Web server created: `Created web server on 192.168.4.1:2050`
+- Firewall rules initialized
+- Process continues running (doesn't exit)
 
 **If you see errors:**
-- Check configuration file syntax
-- Verify all paths exist
-- Check interface names are correct
+- **"Bad configuration option: InternetInterface"** - Remove or comment out `InternetInterface` line (not valid in v5.0.2)
+- **"No such device"** - Check `GatewayInterface` matches actual interface name (use `ip addr show` to verify)
+- **Port conflicts** - Another service may be using port 2050
 
 **To stop the test:** Press `Ctrl + C`
 
@@ -353,15 +434,22 @@ sudo systemctl status nodogsplash
 **Expected output:**
 ```
 ● nodogsplash.service - NoDogSplash Captive Portal
-   Loaded: loaded (/lib/systemd/system/nodogsplash.service; enabled)
+   Loaded: loaded (/etc/systemd/system/nodogsplash.service; enabled)
    Active: active (running) since ...
+   Main PID: XXXX (nodogsplash)
    ...
 ```
 
 **Check for:**
 - ✅ **Active: active (running)** - Service is running
 - ✅ **enabled** - Service will start on boot
-- ❌ No error messages
+- ✅ **Main PID** - Shows process ID of running nodogsplash
+- ❌ No error messages or "activating (auto-restart)" status
+
+**If service fails to start:**
+- Check logs: `sudo journalctl -u nodogsplash -n 50`
+- Verify config file: `sudo /usr/bin/nodogsplash -c /etc/nodogsplash/nodogsplash.conf -f -d 3`
+- Check for interface issues: `ip addr show wlan0`
 
 ### 8.4 View Service Logs
 
@@ -501,8 +589,9 @@ sudo cat /etc/nodogsplash/nodogsplash.conf | grep -E "GatewayInterface|GatewayAd
 ```
 GatewayInterface wlan0
 GatewayAddress 192.168.4.1
-InternetInterface eth0
 ```
+
+**Note:** `InternetInterface` is not a valid option in NoDogSplash version 5.0.2 and should not appear in active configuration lines.
 
 ---
 
@@ -730,7 +819,8 @@ sudo iptables -L nodogsplash_preauth -n -v
 ### Issue 1: NoDogSplash Service Won't Start
 
 **Symptoms:**
-- `systemctl status nodogsplash` shows `failed` or `inactive`
+- `systemctl status nodogsplash` shows `failed`, `inactive`, or `activating (auto-restart)`
+- Service keeps restarting in a loop
 
 **Debug Steps:**
 
@@ -741,18 +831,21 @@ sudo iptables -L nodogsplash_preauth -n -v
 
 2. **Check configuration syntax:**
    ```bash
-   sudo nodogsplash -c /etc/nodogsplash/nodogsplash.conf -d 7 -f
+   sudo /usr/bin/nodogsplash -c /etc/nodogsplash/nodogsplash.conf -f -d 3
    ```
 
 3. **Common issues:**
-   - **Interface not found:** Check `GatewayInterface` matches actual interface name
+   - **"Bad configuration option: InternetInterface"** - Remove this line (not valid in v5.0.2)
+   - **"No such device"** - Check `GatewayInterface` matches actual interface name
    - **Port already in use:** Check what's using port 2050
-   - **Permission denied:** Check file permissions on config directory
+   - **Service exits immediately:** Service file may need `-f` flag (foreground mode)
 
 **Solutions:**
+- Remove `InternetInterface` line from config file (comment it out or delete it)
 - Verify interface names: `ip addr show`
 - Check for port conflicts: `sudo lsof -i :2050`
-- Fix permissions: `sudo chmod 644 /etc/nodogsplash/nodogsplash.conf`
+- Fix service file: Ensure `ExecStart=/usr/bin/nodogsplash -f` includes `-f` flag
+- Check service type: Use `Type=simple` with `-f` flag, or `Type=forking` if NoDogSplash daemonizes
 
 ---
 
@@ -903,28 +996,63 @@ Use this checklist to verify installation is complete:
 
 ---
 
+## Important Note: BlockList Configuration in NoDogSplash 5.0.2
+
+**Testing Required:** Our scripts use `BlockList MAC_ADDRESS` entries in the config file to redirect devices. NoDogSplash version 5.0.2 may handle blocklists differently than older versions. 
+
+**After completing setup:**
+1. Test the redirect scripts manually to verify BlockList entries work
+2. If BlockList doesn't work as expected, we may need to use alternative methods:
+   - `ndsctl` command-line tool to block/unblock devices
+   - Firewall rules directly (iptables)
+   - NoDogSplash's API/control interface
+
+**If BlockList doesn't work:** We can modify the scripts to use `ndsctl` commands instead, which is the recommended method for NoDogSplash 5.0+.
+
 ## Next Steps
 
 After successful setup and testing:
 
-1. **Test with Laravel Application:**
-   - Test `NoDogSplashService` methods from Laravel
+### Immediate Next Steps:
+
+1. **Make scripts executable:**
+   ```bash
+   cd /var/www/parental_wifi
+   chmod +x scripts/*.sh
+   ```
+
+2. **Configure sudoers:**
+   - Add script permissions to sudoers file (Step 9 above)
+   - Test sudo access from www-data user
+
+3. **Test scripts manually:**
+   - Test redirect script with a real MAC address
+   - Verify BlockList entry is added to config file
+   - Test check script to verify it detects the entry
+   - Test allow through script to remove the entry
+   - **Important:** Verify devices actually get redirected (may need adjustment if BlockList doesn't work)
+
+4. **Test from Laravel:**
+   - Test `NoDogSplashService` methods from Laravel tinker
    - Verify integration with `CheckTimeExpiration` job
    - Test full workflow: time expiration → redirect → quiz/video → allow through
 
-2. **Monitor Logs:**
+### Future Steps:
+
+5. **Monitor Logs:**
    - Watch for any errors in NoDogSplash logs
    - Monitor Laravel logs for script execution issues
 
-3. **Performance Testing:**
+6. **Performance Testing:**
    - Test with multiple devices
    - Check response times
    - Monitor resource usage
 
-4. **Documentation:**
+7. **Documentation:**
    - Note any custom configurations
    - Document any issues encountered
    - Update configuration if needed
+   - Document if BlockList method works or if alternative method is needed
 
 ---
 

@@ -12,7 +12,7 @@ The NoDogSplash integration follows the same security pattern as the NetworkServ
 2. **ScriptExecutor** (PHP) - Secure wrapper that executes bash scripts with validation
 3. **Bash Scripts** - System-level scripts that modify NoDogSplash configuration
 
-```
+``` 
 ┌─────────────────────────────────────────────────────────────┐
 │                  NoDogSplashService (PHP)                    │
 │  - redirectDeviceToPortal()                                  │

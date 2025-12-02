@@ -144,17 +144,15 @@ class NoDogSplashService
      * - Device sees our portal page (quiz/video selection)
      * - Device cannot access internet until redirect is removed
      * 
-     * Current Implementation (Stub):
-     * - Only logs the operation (so we can see what would happen)
-     * - Returns success status
-     * - Does NOT actually configure NoDogSplash yet
-     * 
-     * Future Implementation:
-     * - Will modify NoDogSplash config file to add device MAC address
+     * Implementation:
+     * - Executes redirect_device_portal.sh script via ScriptExecutor
+     * - Script validates and normalizes the MAC address
+     * - Script modifies NoDogSplash config file to add device MAC address to blocklist
      * - Config file location: /etc/nodogsplash/nodogsplash.conf (or similar)
-     * - Add redirect rule: Redirect MAC address AA:BB:CC:DD:EE:FF to /portal?mac=AA:BB:CC:DD:EE:FF
-     * - Restart NoDogSplash service to apply changes
+     * - Script adds redirect rule: Redirect MAC address AA:BB:CC:DD:EE:FF to /portal?mac=AA:BB:CC:DD:EE:FF
+     * - Script restarts NoDogSplash service to apply changes
      * - Device will then be redirected to portal on next HTTP request
+     * - Returns true on success, false on error
      * 
      * When Is This Called?
      * - When device time expires (via CheckTimeExpiration job)
@@ -167,7 +165,7 @@ class NoDogSplashService
      * - System continues to function even if redirect fails
      * 
      * @param Device $device The device to redirect to portal
-     * @return bool True if redirect was configured successfully (or logged), false on error
+     * @return bool True if redirect was configured successfully, false on error
      * 
      * Usage Example:
      * ```php
@@ -278,17 +276,15 @@ class NoDogSplashService
      * - Device's next HTTP request goes to the actual website (not portal)
      * - Device can browse internet normally again
      * 
-     * Current Implementation (Stub):
-     * - Only logs the operation (so we can see what would happen)
-     * - Returns success status
-     * - Does NOT actually modify NoDogSplash config yet
-     * 
-     * Future Implementation:
-     * - Will read NoDogSplash config file
-     * - Remove redirect rule for this device's MAC address
-     * - Save config file
-     * - Restart NoDogSplash service to apply changes
+     * Implementation:
+     * - Executes allow_device_through.sh script via ScriptExecutor
+     * - Script validates and normalizes the MAC address
+     * - Script reads NoDogSplash config file
+     * - Script removes redirect rule for this device's MAC address from blocklist
+     * - Script saves config file
+     * - Script restarts NoDogSplash service to apply changes
      * - Device will then be able to access internet normally
+     * - Returns true on success, false on error
      * 
      * When Is This Called?
      * - After child completes quiz and earns time (via TimeGrantingService)
@@ -302,7 +298,7 @@ class NoDogSplashService
      * - System continues to function even if redirect removal fails
      * 
      * @param Device $device The device to allow through (remove redirect)
-     * @return bool True if redirect was removed successfully (or logged), false on error
+     * @return bool True if redirect was removed successfully, false on error
      * 
      * Usage Example:
      * ```php
@@ -396,16 +392,14 @@ class NoDogSplashService
      * - This is the "real" check - database status might say "blocked"
      *   but this checks if device is actually being redirected
      * 
-     * Current Implementation (Stub):
-     * - Only checks database status (not actual NoDogSplash config)
-     * - Returns true if device status is 'blocked' in database
-     * - Does NOT actually check NoDogSplash config file yet
-     * 
-     * Future Implementation:
-     * - Will read NoDogSplash config file: /etc/nodogsplash/nodogsplash.conf
-     * - Search for redirect rule containing device's MAC address
-     * - If rule found, device is redirected; if not found, device is not redirected
-     * - Example: Search for "RedirectList AA:BB:CC:DD:EE:FF" in config file
+     * Implementation:
+     * - Executes check_device_redirected.sh script via ScriptExecutor
+     * - Script validates and normalizes the MAC address
+     * - Script reads NoDogSplash config file: /etc/nodogsplash/nodogsplash.conf
+     * - Script searches for redirect rule containing device's MAC address in blocklist
+     * - If rule found, device is redirected (script returns exit code 0)
+     * - If not found, device is not redirected (script returns exit code 1)
+     * - Example: Search for device MAC address in blocklist/redirect list
      * 
      * Why Check NoDogSplash Config?
      * - Database status might be out of sync with actual NoDogSplash state
