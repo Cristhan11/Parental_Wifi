@@ -113,6 +113,9 @@ class ScriptExecutor
         'whitelist_device.sh',
         'get_connected_devices.sh',
         'monitor_traffic.sh',
+        'redirect_device_portal.sh',
+        'allow_device_through.sh',
+        'check_device_redirected.sh',
     ];
 
     /**

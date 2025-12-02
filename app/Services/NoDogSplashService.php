@@ -32,15 +32,14 @@ use Illuminate\Support\Facades\Log;
  * 
  * Configuration Files:
  * - NoDogSplash uses config files (usually in /etc/nodogsplash/)
- * - We modify these files to add/remove device redirects
+ * - We modify these files to add/remove device redirects via bash scripts
  * - Example: Add device MAC address to redirect list = device gets redirected
  * - Remove device MAC address from redirect list = device can access internet
  * 
- * Current Implementation (Stub):
- * - Currently, this service only logs operations and returns success status
- * - NoDogSplash configuration file management will be implemented in TODO #15
- * - This stub allows other services to call these methods without errors
- * - When NoDogSplash integration is added, the methods will actually configure redirects
+ * Implementation:
+ * - Uses ScriptExecutor to securely execute bash scripts for NoDogSplash operations
+ * - Scripts handle config file modifications and service restarts
+ * - Follows same security model as NetworkService (whitelisted scripts only)
  * 
  * Integration Points:
  * - Called by CheckTimeExpiration job when device time expires (to redirect)
@@ -49,7 +48,7 @@ use Illuminate\Support\Facades\Log;
  * 
  * Usage Example:
  * ```php
- * $service = new NoDogSplashService();
+ * $service = new NoDogSplashService($scriptExecutor);
  * $device = Device::find(1);
  * 
  * // Redirect device to portal when time expires
@@ -68,6 +67,62 @@ use Illuminate\Support\Facades\Log;
  */
 class NoDogSplashService
 {
+    /**
+     * ScriptExecutor instance for secure script execution.
+     * 
+     * ScriptExecutor provides a secure wrapper for executing shell scripts.
+     * It validates scripts, sanitizes arguments, and handles errors safely.
+     * 
+     * Why Dependency Injection?
+     * - Makes the service testable (can inject mock ScriptExecutor in tests)
+     * - Follows Laravel's dependency injection pattern
+     * - Allows easy swapping of implementations if needed
+     * - Promotes loose coupling between NoDogSplashService and script execution
+     * 
+     * How Laravel Resolves This:
+     * - Laravel's service container automatically resolves ScriptExecutor
+     * - When NoDogSplashService is instantiated, Laravel creates ScriptExecutor
+     * - No manual instantiation needed - Laravel handles it automatically
+     * 
+     * @var ScriptExecutor
+     */
+    protected ScriptExecutor $scriptExecutor;
+
+    /**
+     * Constructor - Initialize NoDogSplashService with ScriptExecutor.
+     * 
+     * This constructor uses Laravel's dependency injection to automatically
+     * receive a ScriptExecutor instance. Laravel's service container will
+     * automatically create and inject the ScriptExecutor when NoDogSplashService
+     * is instantiated.
+     * 
+     * Why Dependency Injection?
+     * - **Testability**: Can inject mock ScriptExecutor in unit tests
+     * - **Flexibility**: Can swap ScriptExecutor implementation if needed
+     * - **Loose Coupling**: NoDogSplashService doesn't create ScriptExecutor directly
+     * - **Laravel Pattern**: Follows Laravel's dependency injection conventions
+     * 
+     * How It Works:
+     * - When NoDogSplashService is created (e.g., via service container or constructor),
+     *   Laravel automatically resolves ScriptExecutor from the service container
+     * - If ScriptExecutor is not bound in container, Laravel creates a new instance
+     * - The ScriptExecutor instance is stored as a property for use in methods
+     * 
+     * Usage:
+     * - NoDogSplashService is typically instantiated by Laravel automatically
+     * - Other services (CheckTimeExpiration job, TimeGrantingService) receive
+     *   NoDogSplashService via dependency injection
+     * - No manual instantiation needed - Laravel handles everything
+     * 
+     * @param ScriptExecutor $scriptExecutor The script executor service (injected by Laravel)
+     */
+    public function __construct(ScriptExecutor $scriptExecutor)
+    {
+        // Store ScriptExecutor instance for use in methods
+        // This allows all methods in NoDogSplashService to execute scripts securely
+        // ScriptExecutor handles validation, sanitization, and error handling
+        $this->scriptExecutor = $scriptExecutor;
+    }
     /**
      * Redirect a device to the portal page using NoDogSplash.
      * 
@@ -148,40 +203,58 @@ class NoDogSplashService
 
         // Build the portal URL with MAC address as query parameter
         // This is the URL that NoDogSplash will redirect to
-        // Example: http://192.168.1.1/portal?mac=AA:BB:CC:DD:EE:FF
+        // Example: http://192.168.4.1/portal?mac=AA:BB:CC:DD:EE:FF
         // The MAC address in the URL tells our portal which device is accessing it
+        // route() generates the full URL using Laravel's routing system
         $portalUrl = route('portal.landing', ['mac' => $macAddress]);
 
-        // TODO: Future Implementation - Configure NoDogSplash to redirect device
-        // This will be implemented in TODO #15 (NoDogSplash Integration)
-        // 
-        // Steps:
-        // 1. Read NoDogSplash config file: /etc/nodogsplash/nodogsplash.conf
-        // 2. Add redirect rule for this MAC address:
-        //    RedirectList AA:BB:CC:DD:EE:FF http://192.168.1.1/portal?mac=AA:BB:CC:DD:EE:FF
-        // 3. Save config file
-        // 4. Restart NoDogSplash service: systemctl restart nodogsplash
-        // 5. Device will be redirected on next HTTP request
-        // 
-        // Example code (future):
-        // $configFile = '/etc/nodogsplash/nodogsplash.conf';
-        // $redirectRule = "RedirectList {$macAddress} {$portalUrl}\n";
-        // file_put_contents($configFile, $redirectRule, FILE_APPEND);
-        // exec('sudo systemctl restart nodogsplash');
-
-        // Log the redirect operation for debugging and audit trail
-        // This helps us track when devices were redirected and why
-        Log::info('Device redirected to portal (stub - NoDogSplash config not yet implemented)', [
-            'device_id' => $device->id,
-            'device_name' => $device->name,
-            'mac_address' => $macAddress,
-            'portal_url' => $portalUrl,
-            'note' => 'NoDogSplash configuration will be implemented in TODO #15',
+        // Execute the redirect_device_portal.sh script via ScriptExecutor
+        // This script:
+        // 1. Validates and normalizes the MAC address
+        // 2. Adds device to NoDogSplash blocklist/redirect list in config file
+        // 3. Restarts NoDogSplash service to apply changes
+        // 4. Returns exit code 0 on success, non-zero on error
+        //
+        // Script arguments:
+        // - First argument: MAC address (e.g., "AA:BB:CC:DD:EE:FF")
+        // - Second argument: Portal URL (e.g., "http://192.168.4.1/portal?mac=AA:BB:CC:DD:EE:FF")
+        $result = $this->scriptExecutor->execute('redirect_device_portal.sh', [
+            $macAddress,
+            $portalUrl,
         ]);
 
-        // Return true to indicate operation was logged successfully
-        // In future, this will return true only if NoDogSplash config was updated successfully
-        return true;
+        // Check if script execution was successful
+        // Script returns exit code 0 on success, non-zero on error
+        if ($result['success']) {
+            // Script executed successfully - device redirect is configured
+            // Log the successful operation for debugging and audit trail
+            Log::info('Device redirected to portal successfully', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'portal_url' => $portalUrl,
+                'script_output' => $result['output'],
+            ]);
+
+            // Return true to indicate redirect was configured successfully
+            return true;
+        } else {
+            // Script execution failed - log error but don't crash
+            // This allows the system to continue functioning even if redirect fails
+            Log::error('Failed to redirect device to portal', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'portal_url' => $portalUrl,
+                'script_error' => $result['error'],
+                'script_output' => $result['output'],
+                'return_code' => $result['return_code'],
+            ]);
+
+            // Return false to indicate redirect configuration failed
+            // Calling code can check return value and handle error appropriately
+            return false;
+        }
     }
 
     /**
@@ -263,37 +336,51 @@ class NoDogSplashService
             return false; // Can't remove redirect without MAC address
         }
 
-        // TODO: Future Implementation - Remove redirect from NoDogSplash config
-        // This will be implemented in TODO #15 (NoDogSplash Integration)
-        // 
-        // Steps:
-        // 1. Read NoDogSplash config file: /etc/nodogsplash/nodogsplash.conf
-        // 2. Find and remove redirect rule for this MAC address:
-        //    Remove line: RedirectList AA:BB:CC:DD:EE:FF ...
-        // 3. Save config file
-        // 4. Restart NoDogSplash service: systemctl restart nodogsplash
-        // 5. Device will be able to access internet normally on next request
-        // 
-        // Example code (future):
-        // $configFile = '/etc/nodogsplash/nodogsplash.conf';
-        // $config = file_get_contents($configFile);
-        // $config = preg_replace("/RedirectList {$macAddress}.*\n/", '', $config);
-        // file_put_contents($configFile, $config);
-        // exec('sudo systemctl restart nodogsplash');
-
-        // Log the operation for debugging and audit trail
-        // This helps us track when devices were allowed through and why
-        Log::info('Device allowed through (redirect removed) (stub - NoDogSplash config not yet implemented)', [
-            'device_id' => $device->id,
-            'device_name' => $device->name,
-            'mac_address' => $macAddress,
-            'remaining_time_minutes' => $device->remaining_time_minutes,
-            'note' => 'NoDogSplash configuration will be implemented in TODO #15',
+        // Execute the allow_device_through.sh script via ScriptExecutor
+        // This script:
+        // 1. Validates and normalizes the MAC address
+        // 2. Removes device from NoDogSplash blocklist/redirect list in config file
+        // 3. Restarts NoDogSplash service to apply changes
+        // 4. Returns exit code 0 on success, non-zero on error
+        //
+        // Script arguments:
+        // - First argument: MAC address (e.g., "AA:BB:CC:DD:EE:FF")
+        $result = $this->scriptExecutor->execute('allow_device_through.sh', [
+            $macAddress,
         ]);
 
-        // Return true to indicate operation was logged successfully
-        // In future, this will return true only if NoDogSplash config was updated successfully
-        return true;
+        // Check if script execution was successful
+        // Script returns exit code 0 on success, non-zero on error
+        if ($result['success']) {
+            // Script executed successfully - device redirect is removed
+            // Log the successful operation for debugging and audit trail
+            Log::info('Device allowed through successfully (redirect removed)', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'remaining_time_minutes' => $device->remaining_time_minutes,
+                'script_output' => $result['output'],
+            ]);
+
+            // Return true to indicate redirect removal was successful
+            return true;
+        } else {
+            // Script execution failed - log error but don't crash
+            // This allows the system to continue functioning even if redirect removal fails
+            Log::error('Failed to allow device through (remove redirect)', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'remaining_time_minutes' => $device->remaining_time_minutes,
+                'script_error' => $result['error'],
+                'script_output' => $result['output'],
+                'return_code' => $result['return_code'],
+            ]);
+
+            // Return false to indicate redirect removal failed
+            // Calling code can check return value and handle error appropriately
+            return false;
+        }
     }
 
     /**
@@ -359,40 +446,45 @@ class NoDogSplashService
             return false; // Can't check without MAC address
         }
 
-        // TODO: Future Implementation - Check NoDogSplash config file for redirect
-        // This will be implemented in TODO #15 (NoDogSplash Integration)
-        // 
-        // Steps:
-        // 1. Read NoDogSplash config file: /etc/nodogsplash/nodogsplash.conf
-        // 2. Search for redirect rule containing device's MAC address
-        // 3. If found, device is redirected; if not found, device is not redirected
-        // 
-        // Example code (future):
-        // $configFile = '/etc/nodogsplash/nodogsplash.conf';
-        // $config = file_get_contents($configFile);
-        // $pattern = "/RedirectList {$macAddress}/";
-        // return preg_match($pattern, $config) === 1;
+        // Execute the check_device_redirected.sh script via ScriptExecutor
+        // This script:
+        // 1. Validates and normalizes the MAC address
+        // 2. Checks NoDogSplash config file for device MAC address in blocklist
+        // 3. Returns exit code 0 if device is redirected, 1 if not redirected
+        //
+        // Script arguments:
+        // - First argument: MAC address (e.g., "AA:BB:CC:DD:EE:FF")
+        $result = $this->scriptExecutor->execute('check_device_redirected.sh', [
+            $macAddress,
+        ]);
 
-        // Current Implementation: Check database status only
-        // This is a stub - in future, we'll check actual NoDogSplash config
-        // For now, we assume database status matches NoDogSplash redirect status
-        // If device is blocked, it's likely being redirected
-        $isRedirected = $device->status === 'blocked';
+        // Determine redirect status based on script exit code
+        // Script returns:
+        // - Exit code 0 = Device is redirected (found in blocklist)
+        // - Exit code 1 = Device is not redirected (not found in blocklist)
+        //
+        // Note: ScriptExecutor returns 'success' = true when exit code is 0
+        // So if script returns exit code 0 (device is redirected), result['success'] = true
+        // If script returns exit code 1 (device not redirected), result['success'] = false
+        //
+        // This seems backwards, but it's correct:
+        // - Exit code 0 = "yes, device IS redirected" = success (check succeeded, positive result)
+        // - Exit code 1 = "no, device is NOT redirected" = not success (check succeeded, negative result)
+        $isRedirected = $result['success'];
 
         // Log the check for debugging (optional - can be removed if too verbose)
-        // This helps us track when redirect status is checked
-        if ($isRedirected) {
-            Log::debug('Device redirect status checked (stub - NoDogSplash config not yet implemented)', [
-                'device_id' => $device->id,
-                'device_name' => $device->name,
-                'mac_address' => $macAddress,
-                'is_redirected' => true,
-                'note' => 'Currently checking database status only. NoDogSplash config check will be implemented in TODO #15',
-            ]);
-        }
+        // This helps us track when redirect status is checked and what the result was
+        Log::debug('Device redirect status checked', [
+            'device_id' => $device->id,
+            'device_name' => $device->name,
+            'mac_address' => $macAddress,
+            'is_redirected' => $isRedirected,
+            'script_output' => $result['output'],
+            'return_code' => $result['return_code'],
+        ]);
 
-        // Return true if device status is 'blocked' (likely redirected), false otherwise
-        // In future, this will check actual NoDogSplash config file
+        // Return true if device is redirected (exit code 0), false if not redirected (exit code 1)
+        // This gives us the actual redirect status from NoDogSplash configuration
         return $isRedirected;
     }
 }
