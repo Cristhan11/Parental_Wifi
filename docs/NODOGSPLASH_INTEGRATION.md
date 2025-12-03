@@ -57,7 +57,8 @@ app/Services/
 scripts/
 ├── redirect_device_portal.sh    # Redirect device to portal
 ├── allow_device_through.sh      # Remove redirect (allow device)
-└── check_device_redirected.sh   # Check redirect status
+├── check_device_redirected.sh   # Check redirect status
+└── manage_dns_interception.sh  # Manage DNS interception for HTTPS support
 ```
 
 ---
@@ -254,7 +255,9 @@ protected array $allowedScripts = [
 
 ### Purpose
 
-Adds a device to NoDogSplash blocklist, causing all HTTP requests from that device to redirect to the portal page.
+Deauthenticates a device using `ndsctl deauth`, putting it in Preauthenticated state. This causes NoDogSplash to redirect all HTTP requests from that device to the portal page (configured via `RedirectURL` in `nodogsplash.conf`).
+
+**Note:** DNS interception is handled separately by `manage_dns_interception.sh` and is called automatically by `NoDogSplashService` after deauthentication.
 
 ### Script Structure
 
@@ -270,9 +273,8 @@ Adds a device to NoDogSplash blocklist, causing all HTTP requests from that devi
 ### Configuration Constants
 
 ```bash
-NODOGSPLASH_CONFIG="/etc/nodogsplash/nodogsplash.conf"
-NODOGSPLASH_SERVICE="nodogsplash"
-BACKUP_DIR="/tmp/nodogsplash_backups"
+# NoDogSplash control command
+NDSCTL="/usr/bin/ndsctl"
 ```
 
 **Syntax Explanation:**
@@ -438,71 +440,72 @@ backup_config_file() {
   - **`"$NODOGSPLASH_CONFIG"`** - Source file
   - **`"$backup_file"`** - Destination file
 
-### Function: add_device_to_blocklist()
+### Function: find_device_token()
 
 ```bash
-add_device_to_blocklist() {
+find_device_token() {
     local mac="$1"
-    local portal_url="$2"
+    local token=""
     
-    if [ ! -f "$NODOGSPLASH_CONFIG" ]; then
-        sudo tee "$NODOGSPLASH_CONFIG" > /dev/null <<EOF
-# NoDogSplash Configuration
-BlockList $mac
-EOF
-        return 0
+    # Get client list from NoDogSplash
+    local clients_output=$(sudo "$NDSCTL" clients 2>/dev/null)
+    
+    if [ -z "$clients_output" ]; then
+        return 1
     fi
     
-    if sudo grep -qi "BlockList.*$mac" "$NODOGSPLASH_CONFIG"; then
-        return 0
-    fi
+    # Parse output to find token for this MAC address
+    # Output format: client_id=0 ip=192.168.4.32 mac=e6:6a:8f:19:be:b1 token=abc123
+    while IFS= read -r line; do
+        if echo "$line" | grep -qi "mac=$mac"; then
+            # Extract token from line
+            token=$(echo "$line" | grep -oE "token=[a-f0-9]+" | cut -d= -f2)
+            if [ -n "$token" ]; then
+                echo "$token"
+                return 0
+            fi
+        fi
+    done <<< "$clients_output"
     
-    echo "BlockList $mac" | sudo tee -a "$NODOGSPLASH_CONFIG" > /dev/null
+    return 1
 }
 ```
 
 **Syntax Breakdown:**
 
-- **`sudo tee "$NODOGSPLASH_CONFIG" > /dev/null`** - Write to file with sudo
-  - **`tee`** - Write to file and stdout
-  - **`> /dev/null`** - Redirect stdout to null (discard output)
-  - **Purpose:** `tee` can write to protected files, unlike `>` redirect
+- **`local clients_output=$(sudo "$NDSCTL" clients 2>/dev/null)`** - Execute command and capture output
+  - **`$()`** - Command substitution (execute command and use output)
+  - **`sudo "$NDSCTL" clients`** - Run ndsctl clients command with sudo
+  - **`2>/dev/null`** - Redirect stderr to null (suppress errors)
+  - **`local clients_output=...`** - Store output in local variable
 
-- **`<<EOF ... EOF`** - Here document (heredoc)
-  - **`<<EOF`** - Start of heredoc (EOF is delimiter name)
-  - **Content between** - Literal text to write
-  - **`EOF`** - End delimiter
-  - **Purpose:** Write multi-line text easily
+- **`while IFS= read -r line; do ... done <<< "$clients_output"`** - Read lines from variable
+  - **`while ... do ... done`** - Loop structure
+  - **`IFS=`** - Set Internal Field Separator to empty (preserve spaces)
+  - **`read -r line`** - Read one line into variable (raw mode, no backslash interpretation)
+  - **`<<< "$clients_output"`** - Here string (feed variable content to loop)
 
-- **`sudo grep -qi "BlockList.*$mac"`** - Search in file
-  - **`grep`** - Search command
-  - **`-q`** - Quiet (don't print, just return exit code)
-  - **`-i`** - Case insensitive
-  - **`"BlockList.*$mac"`** - Pattern (BlockList followed by anything then MAC)
-    - **`.*`** - Regex: any characters (zero or more)
+- **`echo "$line" | grep -qi "mac=$mac"`** - Check if line contains MAC address
+  - **`grep -qi`** - Search case-insensitively, quiet mode (just return exit code)
 
-- **`echo "BlockList $mac" | sudo tee -a "$NODOGSPLASH_CONFIG"`** - Append to file
-  - **`-a`** - Append mode (don't overwrite)
-  - **`|`** - Pipe output to tee
+- **`token=$(echo "$line" | grep -oE "token=[a-f0-9]+" | cut -d= -f2)`** - Extract token
+  - **`grep -oE "token=[a-f0-9]+"`** - Extract matching pattern (token= followed by hex digits)
+  - **`cut -d= -f2`** - Split by `=` and get second field (the token value)
 
-### Function: restart_nodogsplash_service()
+### Function: deauthenticate_device()
 
 ```bash
-restart_nodogsplash_service() {
-    if ! command -v systemctl > /dev/null 2>&1; then
-        return 1
-    fi
+deauthenticate_device() {
+    local token="$1"
     
-    if ! sudo systemctl list-unit-files | grep -q "$NODOGSPLASH_SERVICE.service"; then
-        return 1
-    fi
-    
-    sudo systemctl restart "$NODOGSPLASH_SERVICE"
-    sleep 1
-    
-    if sudo systemctl is-active --quiet "$NODOGSPLASH_SERVICE"; then
+    # Deauthenticate device using ndsctl deauth (not deauthenticate)
+    # This puts the device back in Preauthenticated state
+    # NoDogSplash will then redirect all HTTP requests to RedirectURL
+    if sudo "$NDSCTL" deauth "$token" >/dev/null 2>&1; then
+        echo "Info: Device deauthenticated successfully (token: $token)" >&2
         return 0
     else
+        echo "Error: Failed to deauthenticate device (token: $token)" >&2
         return 1
     fi
 }
@@ -510,25 +513,16 @@ restart_nodogsplash_service() {
 
 **Syntax Breakdown:**
 
-- **`command -v systemctl`** - Check if command exists
-  - **`command -v`** - Returns path to command if exists, nothing if not
-  - **`> /dev/null 2>&1`** - Redirect both stdout and stderr to null
-    - **`> /dev/null`** - Redirect stdout to null
-    - **`2>&1`** - Redirect stderr (file descriptor 2) to stdout (file descriptor 1)
+- **`sudo "$NDSCTL" deauth "$token"`** - Execute ndsctl deauth command
+  - **`deauth`** - Command to deauthenticate device (put in Preauthenticated state)
+  - **`"$token"`** - Device token (required parameter)
 
-- **`sudo systemctl list-unit-files`** - List systemd services
-  - **`systemctl`** - Systemd control command
-  - **`list-unit-files`** - List all service unit files
+- **`>/dev/null 2>&1`** - Suppress all output
+  - **`>/dev/null`** - Redirect stdout to null
+  - **`2>&1`** - Redirect stderr to stdout (also goes to null)
 
-- **`sudo systemctl restart "$NODOGSPLASH_SERVICE"`** - Restart service
-  - **`restart`** - Restart service command
-
-- **`sleep 1`** - Wait 1 second
-  - **Purpose:** Give service time to fully restart
-
-- **`sudo systemctl is-active --quiet`** - Check if service is running
-  - **`is-active`** - Check if service is active/running
-  - **`--quiet`** - Don't print output, just return exit code
+- **`if ... then ... else ... fi`** - Conditional execution
+  - Returns exit code 0 on success, 1 on failure
 
 ### Main Script Execution
 
@@ -563,14 +557,20 @@ fi
 # 3. Normalize MAC address
 NORMALIZED_MAC=$(normalize_mac_address "$MAC_ADDRESS")
 
-# 4. Backup config
-backup_config_file
+# 4. Find device token from NoDogSplash client list
+TOKEN=$(find_device_token "$NORMALIZED_MAC")
+if [ -z "$TOKEN" ]; then
+    echo "Error: Device not found in NoDogSplash client list" >&2
+    exit 2
+fi
 
-# 5. Add to blocklist
-add_device_to_blocklist "$NORMALIZED_MAC" "$PORTAL_URL"
+# 5. Deauthenticate device (puts in Preauthenticated state)
+if ! deauthenticate_device "$TOKEN"; then
+    exit 3
+fi
 
-# 6. Restart service
-restart_nodogsplash_service
+# 6. Success - device will be redirected on next HTTP request
+exit 0
 ```
 
 ---
@@ -579,38 +579,45 @@ restart_nodogsplash_service
 
 ### Purpose
 
-Removes a device from NoDogSplash blocklist, allowing it to access internet normally.
+Authenticates a device using `ndsctl auth`, putting it in Authenticated state. This allows the device to access the internet normally (no redirect).
 
-### Key Function: remove_device_from_blocklist()
+### Key Function: authenticate_device()
 
 ```bash
-remove_device_from_blocklist() {
-    local mac="$1"
+authenticate_device() {
+    local token="$1"
     
-    if [ ! -f "$NODOGSPLASH_CONFIG" ]; then
+    # Authenticate device using ndsctl auth (not authenticate)
+    # This puts the device in Authenticated state
+    # Device can now access internet normally
+    if sudo "$NDSCTL" auth "$token" >/dev/null 2>&1; then
+        echo "Info: Device authenticated successfully (token: $token)" >&2
         return 0
+    else
+        echo "Error: Failed to authenticate device (token: $token)" >&2
+        return 1
     fi
-    
-    if ! sudo grep -qi "BlockList.*$mac" "$NODOGSPLASH_CONFIG"; then
-        return 0
-    fi
-    
-    sudo sed -i.bak "/BlockList.*$mac/d" "$NODOGSPLASH_CONFIG"
-    sudo rm -f "$NODOGSPLASH_CONFIG.bak"
 }
 ```
 
 **Syntax Breakdown:**
 
-- **`sudo sed -i.bak "/BlockList.*$mac/d"`** - Delete lines matching pattern
-  - **`sed`** - Stream editor
-  - **`-i.bak`** - In-place edit, create backup with `.bak` extension
-  - **`/BlockList.*$mac/d`** - Pattern to match, then delete (`d` command)
-  - **Purpose:** Remove the BlockList line containing the MAC address
+- **`sudo "$NDSCTL" auth "$token"`** - Execute ndsctl auth command
+  - **`auth`** - Command to authenticate device (put in Authenticated state)
+  - **`"$token"`** - Device token (required parameter)
 
-- **`sudo rm -f "$NODOGSPLASH_CONFIG.bak"`** - Remove backup file
-  - **`rm`** - Remove command
-  - **`-f`** - Force (don't error if file doesn't exist)
+- **`>/dev/null 2>&1`** - Suppress all output
+  - **`>/dev/null`** - Redirect stdout to null
+  - **`2>&1`** - Redirect stderr to stdout (also goes to null)
+
+- **`if ... then ... else ... fi`** - Conditional execution
+  - Returns exit code 0 on success, 1 on failure
+
+**How It Works:**
+1. Script finds device token using `find_device_token()` (same as redirect script)
+2. Script calls `ndsctl auth <token>` to authenticate device
+3. Device is put in Authenticated state
+4. Device can now access internet normally
 
 ---
 
@@ -618,40 +625,52 @@ remove_device_from_blocklist() {
 
 ### Purpose
 
-Checks if a device is currently in the NoDogSplash blocklist (being redirected).
+Checks if a device is currently redirected by checking its authentication state in NoDogSplash.
 
-### Key Function: check_device_in_blocklist()
+### Key Function: check_device_state()
 
 ```bash
-check_device_in_blocklist() {
+check_device_state() {
     local mac="$1"
     
-    if [ ! -f "$NODOGSPLASH_CONFIG" ]; then
+    # Get client list from NoDogSplash
+    local clients_output=$(sudo "$NDSCTL" clients 2>/dev/null)
+    
+    if [ -z "$clients_output" ]; then
         echo "not_redirected" >&2
         return 1
     fi
     
-    if sudo grep -qiE "BlockList[[:space:]]+$mac" "$NODOGSPLASH_CONFIG"; then
-        echo "redirected"
-        return 0
-    else
-        echo "not_redirected"
-        return 1
-    fi
+    # Parse output to find device state
+    # Output format: client_id=0 ip=192.168.4.32 mac=e6:6a:8f:19:be:b1 token=abc123 state=Preauthenticated
+    while IFS= read -r line; do
+        if echo "$line" | grep -qi "mac=$mac"; then
+            # Check state
+            if echo "$line" | grep -qi "state=Preauthenticated"; then
+                echo "redirected"
+                return 0
+            elif echo "$line" | grep -qi "state=Authenticated"; then
+                echo "not_redirected"
+                return 1
+            fi
+        fi
+    done <<< "$clients_output"
+    
+    # Device not found in client list
+    echo "not_redirected" >&2
+    return 1
 }
 ```
 
 **Syntax Breakdown:**
 
-- **`[[:space:]]+`** - Character class in regex
-  - **`[[:space:]]`** - Matches any whitespace character (space, tab)
-  - **`+`** - One or more occurrences
-  - **Purpose:** Match "BlockList" followed by one or more spaces, then MAC
+- **`state=Preauthenticated`** - Device is in Preauthenticated state (will be redirected)
+- **`state=Authenticated`** - Device is in Authenticated state (can access internet)
 
 **Exit Code Logic:**
 
-- **Exit code 0** = Device IS redirected (found in blocklist)
-- **Exit code 1** = Device is NOT redirected (not in blocklist)
+- **Exit code 0** = Device IS redirected (state is Preauthenticated)
+- **Exit code 1** = Device is NOT redirected (state is Authenticated or not found)
 
 **Why this convention?**
 - Unix convention: Exit code 0 = success/true, non-zero = failure/false
@@ -673,30 +692,57 @@ $isRedirected = $result['success'];  // true if exit code 0, false if exit code 
 
 `/etc/nodogsplash/nodogsplash.conf`
 
-### Format
+### Required Settings
 
 ```
-# NoDogSplash Configuration
-# Auto-generated by Laravel Parental WiFi System
+# Gateway Interface (WiFi interface)
+GatewayInterface wlan0
 
-# BlockList: Devices that should be redirected to portal
-BlockList AA:BB:CC:DD:EE:FF
-BlockList 11:22:33:44:55:66
+# Gateway Address (Access Point IP)
+GatewayAddress 192.168.4.1
+
+# Redirect URL - Where Preauthenticated devices are redirected
+RedirectURL http://192.168.4.1/portal
 ```
 
-### Syntax
+### Firewall Rules Configuration
 
-- **`# Comment`** - Comment line (ignored by NoDogSplash)
-- **`BlockList MAC_ADDRESS`** - Add MAC address to blocklist
-  - Each device on its own line
-  - MAC address in format: `XX:XX:XX:XX:XX:XX`
+**Critical:** To prevent redirect loops, you must allow Preauthenticated users to access the portal on the gateway IP.
+
+The `FirewallRuleSet preauthenticated-users` section must include:
+
+```ini
+FirewallRuleSet preauthenticated-users {
+# For preauthenticated users to resolve IP addresses in their
+# initial request not using the router itself as a DNS server.
+FirewallRule allow tcp port 53
+FirewallRule allow udp port 53
+
+# CRITICAL: Allow access to portal on gateway (prevents redirect loop)
+# This allows Preauthenticated users to access http://192.168.4.1/portal
+# without being redirected again. Without this rule, accessing the portal
+# causes an infinite redirect loop because NoDogSplash intercepts the
+# request and redirects to RedirectURL (which is the same URL).
+FirewallRule allow tcp port 80 to 192.168.4.1
+}
+```
+
+**Why this is needed:** Without this rule, when a Preauthenticated device tries to access `http://192.168.4.1/portal`, NoDogSplash intercepts it and redirects to `RedirectURL` (which is the same URL), creating an infinite redirect loop.
+
+### Important Notes
+
+- **`RedirectURL`** - This is where NoDogSplash redirects all HTTP requests from Preauthenticated devices
+- **No `BlockList` entries** - We use `ndsctl` commands to manage device states instead
+- **`InternetInterface`** - NOT a valid option in NoDogSplash version 5.0.2 - Do NOT add this line
+- **Firewall rule for portal access** - Must allow port 80 to gateway IP for Preauthenticated users (prevents redirect loop)
 
 ### How NoDogSplash Uses It
 
 1. NoDogSplash reads the config file at startup
-2. Any device with MAC address in BlockList is intercepted
-3. All HTTP requests from blocked device redirect to portal
-4. Device cannot access internet until removed from BlockList
+2. Devices connecting to WiFi are automatically in **Preauthenticated** state
+3. All HTTP requests from Preauthenticated devices redirect to `RedirectURL`
+4. Devices can be authenticated using `ndsctl auth` to allow internet access
+5. Devices can be deauthenticated using `ndsctl deauth` to redirect them again
 
 ---
 
@@ -711,17 +757,23 @@ BlockList 11:22:33:44:55:66
    ↓
 3. Calls: NoDogSplashService::redirectDeviceToPortal($device)
    ↓
-4. Service calls: ScriptExecutor::execute('redirect_device_portal.sh', [mac, url])
+4. Service builds portal URL: http://192.168.4.1/portal?mac=AA:BB:CC:DD:EE:FF
    ↓
-5. Script validates MAC address
+5. Service calls: ScriptExecutor::execute('redirect_device_portal.sh', [mac, url])
    ↓
-6. Script backs up config file
+6. Script validates MAC address
    ↓
-7. Script adds "BlockList AA:BB:CC:DD:EE:FF" to config file
+7. Script finds device token using: ndsctl clients
    ↓
-8. Script restarts nodogsplash service
+8. Script calls: ndsctl deauth <token>
    ↓
-9. Device's next HTTP request → Redirected to portal
+9. Device is put in Preauthenticated state
+   ↓
+10. Device's next HTTP request → NoDogSplash intercepts → Redirects to RedirectURL
+    ↓
+11. Device sees splash page → Splash page redirects to /portal?tok=TOKEN
+    ↓
+12. PortalController looks up MAC from token → Shows portal page
 ```
 
 ### Flow 2: Child Completes Quiz → Allow Device Through
@@ -737,11 +789,11 @@ BlockList 11:22:33:44:55:66
    ↓
 5. Script validates MAC address
    ↓
-6. Script backs up config file
+6. Script finds device token using: ndsctl clients
    ↓
-7. Script removes "BlockList AA:BB:CC:DD:EE:FF" from config file
+7. Script calls: ndsctl auth <token>
    ↓
-8. Script restarts nodogsplash service
+8. Device is put in Authenticated state
    ↓
 9. Device can now access internet normally
 ```
@@ -755,13 +807,13 @@ BlockList 11:22:33:44:55:66
    ↓
 3. Service calls: ScriptExecutor::execute('check_device_redirected.sh', [mac])
    ↓
-4. Script reads config file
+4. Script queries: ndsctl clients
    ↓
-5. Script searches for MAC address in BlockList entries
+5. Script searches for device MAC address in client list
    ↓
-6. Script returns exit code:
-   - 0 if found (device is redirected)
-   - 1 if not found (device is not redirected)
+6. Script checks device state:
+   - Preauthenticated = redirected (exit code 0)
+   - Authenticated = not redirected (exit code 1)
    ↓
 7. PHP interprets exit code:
    - Exit 0 → $result['success'] = true → return true
@@ -803,14 +855,17 @@ Scripts validate MAC address format using regex:
 ### 5. Sudo Privileges
 
 Scripts require sudo for:
-- Reading/writing `/etc/nodogsplash/nodogsplash.conf`
-- Restarting `nodogsplash` service
+- Executing `ndsctl` commands (clients, auth, deauth)
 
 **Sudoers Configuration:**
 ```
+# NoDogSplash management scripts
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/redirect_device_portal.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/allow_device_through.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/check_device_redirected.sh
+
+# NoDogSplash control command for MAC address lookup (used by PortalController)
+www-data ALL=(ALL) NOPASSWD: /usr/bin/ndsctl clients
 ```
 
 ---
@@ -950,9 +1005,10 @@ if ($result['success']) {
 |------|---------------|
 | `NoDogSplashService.php` | High-level API, coordinates operations |
 | `ScriptExecutor.php` | Secure script execution wrapper |
-| `redirect_device_portal.sh` | Add device to blocklist |
-| `allow_device_through.sh` | Remove device from blocklist |
-| `check_device_redirected.sh` | Check if device is in blocklist |
+| `redirect_device_portal.sh` | Deauthenticate device (put in Preauthenticated state) |
+| `allow_device_through.sh` | Authenticate device (put in Authenticated state) |
+| `check_device_redirected.sh` | Check device authentication state |
+| `PortalController.php` | Token-based MAC address lookup |
 
 ### Integration Points
 

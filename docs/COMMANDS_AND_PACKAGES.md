@@ -293,6 +293,68 @@ Vite
 
 ---
 
+## NoDogSplash Installation Commands
+
+### Installation from Source
+
+NoDogSplash is not available in default Raspberry Pi repositories, so it must be compiled from source:
+
+```bash
+# Install dependencies
+sudo apt update
+sudo apt install -y build-essential git libmicrohttpd-dev libnl-3-dev libnl-genl-3-dev libjson-c-dev
+
+# Clone repository
+cd ~
+git clone https://github.com/nodogsplash/nodogsplash.git
+cd nodogsplash
+
+# Compile and install
+make
+sudo make install
+```
+
+### Verification
+
+```bash
+# Check installation
+which nodogsplash
+nodogsplash -version
+
+# Expected output: /usr/bin/nodogsplash and version number (e.g., 5.0.2)
+```
+
+### Systemd Service Setup
+
+```bash
+# Create service file
+sudo nano /etc/systemd/system/nodogsplash.service
+
+# Enable and start service
+sudo systemctl daemon-reload
+sudo systemctl enable nodogsplash
+sudo systemctl start nodogsplash
+
+# Check status
+sudo systemctl status nodogsplash
+```
+
+### Configuration
+
+```bash
+# Edit configuration file
+sudo nano /etc/nodogsplash/nodogsplash.conf
+
+# Required settings:
+# GatewayInterface wlan0
+# GatewayAddress 192.168.4.1
+# RedirectURL http://192.168.4.1/portal
+```
+
+For complete setup instructions, see `docs/NODOGSPLASH_SETUP.md`.
+
+---
+
 ## Summary
 
 **Commands Summary:**
@@ -300,16 +362,19 @@ Vite
 2. `php artisan breeze:install blade` - Created auth files
 3. `npm install tailwindcss@^4.0.0` - Updated Tailwind version
 4. `npm run build` - Compiled assets
+5. NoDogSplash installation commands (see above)
 
 **Packages Summary:**
 - **Laravel Breeze** - Authentication system
 - **Tailwind CSS** - Styling framework
 - **@tailwindcss/vite** - Build integration
 - **Alpine.js** - Interactive components
+- **NoDogSplash** - Captive portal solution (installed from source)
 
 **Result:**
 - Complete authentication system
 - Custom design matching color palette
 - All assets compiled and ready
+- NoDogSplash captive portal integration
 - Ready for development and production
 

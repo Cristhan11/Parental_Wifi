@@ -237,6 +237,13 @@ class NoDogSplashService
                 'script_output' => $result['output'],
             ]);
 
+            // Enable DNS interception for HTTPS support
+            // This redirects all DNS queries to gateway IP, allowing HTTPS interception
+            // Skip for whitelisted devices (they should never be intercepted)
+            if (!$device->isWhitelisted()) {
+                $this->enableDnsInterception($device);
+            }
+
             // Return true to indicate redirect was configured successfully
             return true;
         } else {
@@ -483,5 +490,134 @@ class NoDogSplashService
         // Return true if device is redirected (exit code 0), false if not redirected (exit code 1)
         // This gives us the actual redirect status from NoDogSplash configuration
         return $isRedirected;
+    }
+
+    /**
+     * Enable DNS interception for a device.
+     * 
+     * This redirects all DNS queries to the gateway IP (192.168.4.1), allowing
+     * HTTPS requests to be intercepted by NoDogSplash. This solves the HTTPS
+     * limitation where HTTPS sites cannot be intercepted directly.
+     * 
+     * What Happens:
+     * 1. Gets device's MAC address
+     * 2. Calls manage_dns_interception.sh script with 'add' action
+     * 3. Script finds device IP from NoDogSplash client list
+     * 4. Script adds DNS interception rule to dnsmasq config
+     * 5. All DNS queries for the device resolve to 192.168.4.1
+     * 6. HTTPS requests go to gateway, where NoDogSplash can intercept them
+     * 
+     * Important:
+     * - Whitelisted devices should NEVER have DNS interception enabled
+     * - This method checks isWhitelisted() before enabling
+     * - DNS interception is global (affects all devices when enabled)
+     * 
+     * @param Device $device The device to enable DNS interception for
+     * @return bool True if DNS interception was enabled, false on error
+     */
+    protected function enableDnsInterception(Device $device): bool
+    {
+        // Never enable DNS interception for whitelisted devices
+        if ($device->isWhitelisted()) {
+            Log::info('Skipping DNS interception for whitelisted device', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $device->mac_address,
+            ]);
+            return false;
+        }
+
+        $macAddress = $device->mac_address;
+        if (empty($macAddress)) {
+            Log::error('Cannot enable DNS interception: MAC address is missing', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+            ]);
+            return false;
+        }
+
+        // Execute manage_dns_interception.sh script with 'add' action
+        $result = $this->scriptExecutor->execute('manage_dns_interception.sh', [
+            $macAddress,
+            'add',
+        ]);
+
+        if ($result['success']) {
+            Log::info('DNS interception enabled for device', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'script_output' => $result['output'],
+            ]);
+            return true;
+        } else {
+            Log::error('Failed to enable DNS interception', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'script_error' => $result['error'],
+                'script_output' => $result['output'],
+                'return_code' => $result['return_code'],
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Disable DNS interception for a device.
+     * 
+     * This removes DNS interception, restoring normal DNS resolution for the device.
+     * After this, the device can access websites normally using real DNS.
+     * 
+     * What Happens:
+     * 1. Gets device's MAC address
+     * 2. Calls manage_dns_interception.sh script with 'remove' action
+     * 3. Script finds device IP from NoDogSplash client list
+     * 4. Script removes DNS interception rule from dnsmasq config
+     * 5. Normal DNS resolution is restored
+     * 
+     * Note: DNS interception is global, so removing it affects all devices.
+     * In a production system, we should check if any other devices still
+     * need interception before removing it completely.
+     * 
+     * @param Device $device The device to disable DNS interception for
+     * @return bool True if DNS interception was disabled, false on error
+     */
+    protected function disableDnsInterception(Device $device): bool
+    {
+        $macAddress = $device->mac_address;
+        if (empty($macAddress)) {
+            Log::error('Cannot disable DNS interception: MAC address is missing', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+            ]);
+            return false;
+        }
+
+        // Execute manage_dns_interception.sh script with 'remove' action
+        $result = $this->scriptExecutor->execute('manage_dns_interception.sh', [
+            $macAddress,
+            'remove',
+        ]);
+
+        if ($result['success']) {
+            Log::info('DNS interception disabled for device', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'script_output' => $result['output'],
+            ]);
+            return true;
+        } else {
+            Log::error('Failed to disable DNS interception', [
+                'device_id' => $device->id,
+                'device_name' => $device->name,
+                'mac_address' => $macAddress,
+                'script_error' => $result['error'],
+                'script_output' => $result['output'],
+                'return_code' => $result['return_code'],
+            ]);
+            return false;
+        }
     }
 }

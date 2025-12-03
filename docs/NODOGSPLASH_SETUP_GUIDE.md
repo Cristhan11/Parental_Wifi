@@ -4,6 +4,8 @@
 
 This guide provides step-by-step instructions for installing and configuring NoDogSplash on your Raspberry Pi 4B running Raspberry Pi OS Lite (64-bit). NoDogSplash is the captive portal software that will intercept HTTP requests and redirect devices to our portal page when their internet time expires.
 
+**Note:** For the complete, verified final setup documentation, see `docs/NODOGSPLASH_SETUP.md`. This guide provides the installation steps, while the setup doc provides the complete working configuration.
+
 ## Prerequisites
 
 Before starting, ensure you have:
@@ -220,22 +222,37 @@ sudo nano /etc/nodogsplash/nodogsplash.conf
 Find and modify these settings in the config file:
 
 ```ini
+# ============================================
+# BASIC CONFIGURATION - REQUIRED SETTINGS
+# ============================================
+
 # Gateway Interface (WiFi interface)
+# Must match your WiFi Access Point interface name
+# Use 'ip addr show' to verify your interface name
 GatewayInterface wlan0
 
 # Gateway Address (Access Point IP)
+# Must match the IP address of your wlan0 interface
+# This is the IP address that NoDogSplash listens on
 GatewayAddress 192.168.4.1
 
-# Gateway Name (SSID)
+# Gateway Name (SSID) - Optional
+# Display name for the captive portal
+# Can be customized to match your SSID
 GatewayName Parental_WiFi
 
 # Max Clients (maximum number of connected devices)
+# Should match your DHCP range capacity
 MaxClients 50
 
 # AuthIdleTimeout (timeout for portal authentication in seconds)
+# How long a device can remain on portal page without action
+# 480 seconds = 8 minutes
 AuthIdleTimeout 480
 
 # ClientIdleTimeout (timeout for client session in seconds)
+# How long an authenticated client can remain idle
+# 480 seconds = 8 minutes
 ClientIdleTimeout 480
 ```
 
@@ -315,18 +332,94 @@ PortalPagesPath /etc/nodogsplash/htdocs
 
 Add this configuration:
 ```ini
-# Redirect authenticated clients to Laravel portal
-# This will be managed by our scripts, but we need basic redirect configuration
+# ============================================
+# REDIRECT CONFIGURATION - CRITICAL
+# ============================================
+
+# Redirect URL - Where Preauthenticated devices are redirected
+# This is where NoDogSplash redirects all HTTP requests from Preauthenticated devices
+# Must use the gateway IP (192.168.4.1) so devices on WiFi network can access it
+# Do NOT use the server's IP address (e.g., 192.168.1.173) - devices on WiFi can't access it
 RedirectURL http://192.168.4.1/portal
 ```
 
+**Important Notes:**
+- The `RedirectURL` must use the gateway IP (`192.168.4.1`), not the server's IP
+- This is the URL that Preauthenticated devices will be redirected to
+- The portal path (`/portal`) must match your Laravel route
+
 ---
 
-## Step 6: Configure Firewall Rules (IPTables Integration)
+## Step 6: Configure Firewall Rules (Prevent Redirect Loop)
+
+**Critical:** You must configure firewall rules to allow Preauthenticated users to access the portal. Without this, accessing the portal will cause an infinite redirect loop.
+
+### 6.1 Configure Preauthenticated Users Firewall Rules
+
+Open the config file:
+```bash
+sudo nano /etc/nodogsplash/nodogsplash.conf
+```
+
+Find the `FirewallRuleSet preauthenticated-users` section and add the portal access rule:
+
+```ini
+FirewallRuleSet preauthenticated-users {
+# For preauthenticated users to resolve IP addresses in their
+# initial request not using the router itself as a DNS server.
+# Leave commented to help prevent DNS tunnelling
+FirewallRule allow tcp port 53
+FirewallRule allow udp port 53
+
+# CRITICAL: Allow access to portal on gateway (prevents redirect loop)
+# This allows Preauthenticated users to access http://192.168.4.1/portal
+# without being redirected again. Without this rule, accessing the portal
+# causes an infinite redirect loop because NoDogSplash intercepts the
+# request and redirects to RedirectURL (which is the same URL).
+# This rule must be added to prevent the redirect loop issue.
+FirewallRule allow tcp port 80 to 192.168.4.1
+
+# For splash page content not hosted on the router, you
+# will want to allow port 80 tcp to the remote host here.
+# Doing so circumvents the usual capture and redirect of
+# any port 80 request to this remote host.
+# Note that the remote host's numerical IP address must be known
+# and used here.
+#  FirewallRule allow tcp port 80 to 123.321.123.321
+}
+```
+
+**Why this is needed:**
+- Without this rule, when a Preauthenticated device tries to access `http://192.168.4.1/portal`, NoDogSplash intercepts it
+- NoDogSplash redirects to `RedirectURL` which is `http://192.168.4.1/portal` (the same URL)
+- This creates an infinite redirect loop
+- The firewall rule allows Preauthenticated users to access port 80 on the gateway IP, bypassing the redirect
+
+### 6.2 Save and Restart
+
+After adding the firewall rule:
+1. Save the file: `Ctrl+O`, `Enter`, `Ctrl+X`
+2. Restart NoDogSplash:
+   ```bash
+   sudo systemctl restart nodogsplash
+   ```
+
+### 6.3 Verify Firewall Rule
+
+Check that the rule was added:
+```bash
+sudo grep -A 5 "preauthenticated-users" /etc/nodogsplash/nodogsplash.conf | grep "192.168.4.1"
+```
+
+**Expected output:** `FirewallRule allow tcp port 80 to 192.168.4.1`
+
+---
+
+## Step 7: Configure Firewall Rules (IPTables Integration)
 
 NoDogSplash needs to work with your existing iptables configuration. It will add its own rules to manage captive portal traffic.
 
-### 6.1 Check Current IPTables Rules
+### 7.1 Check Current IPTables Rules
 
 ```bash
 sudo iptables -L -n -v
@@ -339,7 +432,7 @@ sudo iptables -L -n -v
 
 **Review output:** Note any existing rules for wlan0 and eth0 interfaces
 
-### 6.2 NoDogSplash IPTables Integration
+### 7.2 NoDogSplash IPTables Integration
 
 NoDogSplash automatically adds iptables rules when it starts. It uses these chains:
 - **nodogsplash_authed** - Authenticated clients (allowed through)
@@ -347,7 +440,7 @@ NoDogSplash automatically adds iptables rules when it starts. It uses these chai
 
 **Important:** NoDogSplash must be started AFTER your existing iptables rules are set up, or it may conflict.
 
-### 6.3 Configure IPTables Script Order
+### 7.3 Configure IPTables Script Order
 
 If you have a script that sets up iptables on boot, ensure NoDogSplash starts after it:
 
@@ -359,9 +452,9 @@ Check what NoDogSplash depends on and ensure network is fully configured before 
 
 ---
 
-## Step 7: Test Configuration (Before Starting Service)
+## Step 8: Test Configuration (Before Starting Service)
 
-### 7.1 Validate Configuration File Syntax
+### 8.1 Validate Configuration File Syntax
 
 ```bash
 sudo /usr/bin/nodogsplash -c /etc/nodogsplash/nodogsplash.conf -f -d 3
@@ -387,7 +480,7 @@ sudo /usr/bin/nodogsplash -c /etc/nodogsplash/nodogsplash.conf -f -d 3
 
 **To stop the test:** Press `Ctrl + C`
 
-### 7.2 Check for Port Conflicts
+### 8.2 Check for Port Conflicts
 
 NoDogSplash uses port 2050 by default for its web interface. Check if it's available:
 
@@ -403,9 +496,9 @@ sudo netstat -tulpn | grep 2050
 
 ---
 
-## Step 8: Enable and Start NoDogSplash Service
+## Step 9: Enable and Start NoDogSplash Service
 
-### 8.1 Enable Service
+### 9.1 Enable Service
 
 ```bash
 sudo systemctl enable nodogsplash
@@ -415,7 +508,7 @@ sudo systemctl enable nodogsplash
 - Enables the service to start automatically on boot
 - Creates systemd service links
 
-### 8.2 Start Service
+### 9.2 Start Service
 
 ```bash
 sudo systemctl start nodogsplash
@@ -425,7 +518,7 @@ sudo systemctl start nodogsplash
 - Starts the NoDogSplash service immediately
 - Begins intercepting HTTP requests
 
-### 8.3 Check Service Status
+### 9.3 Check Service Status
 
 ```bash
 sudo systemctl status nodogsplash
@@ -451,7 +544,7 @@ sudo systemctl status nodogsplash
 - Verify config file: `sudo /usr/bin/nodogsplash -c /etc/nodogsplash/nodogsplash.conf -f -d 3`
 - Check for interface issues: `ip addr show wlan0`
 
-### 8.4 View Service Logs
+### 9.4 View Service Logs
 
 ```bash
 sudo journalctl -u nodogsplash -f
@@ -471,11 +564,11 @@ sudo journalctl -u nodogsplash -f
 
 ---
 
-## Step 9: Configure Sudoers for Scripts
+## Step 10: Configure Sudoers for Scripts
 
 Our Laravel scripts need sudo privileges to modify NoDogSplash configuration. Configure sudoers to allow this.
 
-### 9.1 Edit Sudoers File
+### 10.1 Edit Sudoers File
 
 ```bash
 sudo visudo
@@ -483,7 +576,7 @@ sudo visudo
 
 **Important:** Always use `visudo` to edit sudoers file - it validates syntax and prevents configuration errors.
 
-### 9.2 Add Script Permissions
+### 10.2 Add Script Permissions
 
 Add these lines at the end of the file:
 
@@ -500,7 +593,7 @@ www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/check_device_redirec
 - **`NOPASSWD:`** - Run without password prompt
 - **`/path/to/script.sh`** - Full path to script that can be executed
 
-### 9.3 Save and Exit
+### 10.3 Save and Exit
 
 In visudo:
 1. Save: `Ctrl + O`, `Enter`
@@ -510,7 +603,7 @@ In visudo:
 - Visudo will warn you if syntax is invalid
 - It won't save if there are errors
 
-### 9.4 Test Sudo Access
+### 10.4 Test Sudo Access
 
 Test that www-data can run scripts without password:
 
@@ -522,7 +615,7 @@ sudo -u www-data sudo /var/www/parental_wifi/scripts/check_device_redirected.sh 
 
 ---
 
-## Step 10: Make Scripts Executable
+## Step 11: Make Scripts Executable
 
 Ensure our NoDogSplash scripts are executable:
 
@@ -553,7 +646,7 @@ The `x` in `-rwxr-xr-x` indicates executable permission.
 
 ---
 
-## Step 11: Manual Testing Procedures
+## Step 12: Manual Testing Procedures
 
 ### Test 1: Verify NoDogSplash is Running
 
@@ -780,7 +873,7 @@ echo $?
 
 ---
 
-## Step 12: Verify Integration with Existing Services
+## Step 13: Verify Integration with Existing Services
 
 ### Check Service Dependencies
 

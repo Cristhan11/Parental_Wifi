@@ -2,16 +2,17 @@
 
 ## Overview
 
-This document explains how the network control system works, including the shell scripts, PHP services, and how they interact to provide device blocking, unblocking, whitelisting, and monitoring capabilities.
+This document explains how the network control system works, including the shell scripts, PHP services, and how they interact to provide device blocking, unblocking, whitelisting, monitoring, and captive portal redirect capabilities.
 
 ## System Components
 
 The network control system consists of:
 
-1. **Shell Scripts** (in `scripts/` directory): Execute iptables commands to control network traffic
+1. **Shell Scripts** (in `scripts/` directory): Execute iptables commands and NoDogSplash control commands
 2. **ScriptExecutor Service** (PHP): Secure wrapper for executing shell scripts
-3. **NetworkService** (PHP): High-level interface for network operations
-4. **Laravel Application**: Uses NetworkService to control devices
+3. **NetworkService** (PHP): High-level interface for network operations (iptables blocking)
+4. **NoDogSplashService** (PHP): High-level interface for captive portal redirects
+5. **Laravel Application**: Uses both services to control devices
 
 ## Architecture Diagram
 
@@ -23,18 +24,22 @@ The network control system consists of:
                        │
                        │ Calls methods
                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│                   NetworkService (PHP)                       │
-│  - blockDevice()                                            │
-│  - unblockDevice()                                          │
-│  - whitelistDevice()                                         │
-│  - getConnectedDevices()                                    │
-│  - getTrafficStats()                                         │
-│  - isDeviceBlocked()                                         │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       │ Uses ScriptExecutor
-                       ▼
+        ┌──────────────┴──────────────┐
+        │                             │
+        ▼                             ▼
+┌──────────────────────┐   ┌──────────────────────────────┐
+│  NetworkService       │   │  NoDogSplashService          │
+│  (PHP)                │   │  (PHP)                       │
+│  - blockDevice()      │   │  - redirectDeviceToPortal()  │
+│  - unblockDevice()    │   │  - allowDeviceThrough()      │
+│  - whitelistDevice()  │   │  - isDeviceRedirected()      │
+│  - getConnectedDevices│   └──────────────┬───────────────┘
+│  - getTrafficStats()  │                  │
+│  - isDeviceBlocked()  │                  │
+└──────────┬────────────┘                  │
+           │                                │
+           │ Uses ScriptExecutor            │ Uses ScriptExecutor
+           ▼                                ▼
 ┌─────────────────────────────────────────────────────────────┐
 │                ScriptExecutor Service (PHP)                  │
 │  - Validates script whitelist                               │
@@ -46,23 +51,29 @@ The network control system consists of:
                        │
                        │ Executes
                        ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    Shell Scripts (Bash)                     │
-│  - block_device.sh                                          │
-│  - unblock_device.sh                                        │
-│  - whitelist_device.sh                                      │
-│  - get_connected_devices.sh                                 │
-│  - monitor_traffic.sh                                       │
-└──────────────────────┬──────────────────────────────────────┘
-                       │
-                       │ Modifies/Queries
-                       ▼
-┌─────────────────────────────────────────────────────────────┐
-│                    iptables (Linux Firewall)                 │
-│  - INPUT chain (traffic to Pi)                              │
-│  - FORWARD chain (traffic through Pi to internet)           │
-│  - Rules based on MAC addresses                             │
-└─────────────────────────────────────────────────────────────┘
+        ┌──────────────┴──────────────┐
+        │                             │
+        ▼                             ▼
+┌──────────────────────┐   ┌──────────────────────────────┐
+│  Network Scripts      │   │  NoDogSplash Scripts         │
+│  (Bash)               │   │  (Bash)                      │
+│  - block_device.sh    │   │  - redirect_device_portal.sh │
+│  - unblock_device.sh  │   │  - allow_device_through.sh   │
+│  - whitelist_device.sh│   │  - check_device_redirected.sh│
+│  - get_connected_     │   └──────────────┬───────────────┘
+│    devices.sh         │                  │
+│  - monitor_traffic.sh │                  │
+└──────────┬────────────┘                  │
+           │                                │
+           │ Modifies/Queries                │ Controls
+           ▼                                ▼
+┌──────────────────────┐   ┌──────────────────────────────┐
+│  iptables            │   │  NoDogSplash                 │
+│  (Linux Firewall)    │   │  (Captive Portal)            │
+│  - INPUT chain       │   │  - ndsctl auth/deauth        │
+│  - FORWARD chain     │   │  - Client state management   │
+│  - MAC-based rules   │   │  - HTTP request interception│
+└──────────────────────┘   └──────────────────────────────┘
 ```
  
 ## Component Details
@@ -82,11 +93,16 @@ The network control system consists of:
 1. **Whitelist Check**: Verifies script is in allowed list
    ```php
    $allowedScripts = [
+       // Network control scripts (iptables)
        'block_device.sh',
        'unblock_device.sh',
        'whitelist_device.sh',
        'get_connected_devices.sh',
        'monitor_traffic.sh',
+       // NoDogSplash control scripts (captive portal)
+       'redirect_device_portal.sh',
+       'allow_device_through.sh',
+       'check_device_redirected.sh',
    ];
    ```
 
@@ -720,21 +736,115 @@ Get Traffic Statistics
 
 ---
 
+## NoDogSplash Integration
+
+### Overview
+
+NoDogSplash provides the **captive portal redirect layer** of the three-layer blocking system:
+
+1. **Database Layer**: Tracks device state (active/blocked)
+2. **Network Layer**: iptables blocking (physical security)
+3. **Redirect Layer**: NoDogSplash redirects (user experience)
+
+### How NoDogSplash Works
+
+NoDogSplash manages devices in two states:
+- **Preauthenticated**: Device is redirected to portal on HTTP requests
+- **Authenticated**: Device can access internet normally
+
+### NoDogSplash Scripts
+
+#### `redirect_device_portal.sh`
+- **Purpose**: Redirects device to portal by putting it in Preauthenticated state
+- **How**: Uses `ndsctl deauth <token>` to deauthenticate device
+- **Result**: Device's HTTP requests redirect to `RedirectURL` (configured in `/etc/nodogsplash/nodogsplash.conf`)
+
+#### `allow_device_through.sh`
+- **Purpose**: Allows device through by putting it in Authenticated state
+- **How**: Uses `ndsctl auth <token>` to authenticate device
+- **Result**: Device can access internet normally
+
+#### `check_device_redirected.sh`
+- **Purpose**: Checks if device is currently redirected
+- **How**: Queries `ndsctl clients` and checks device state
+- **Returns**: Exit code 0 if Preauthenticated (redirected), 1 if Authenticated (not redirected)
+
+#### `manage_dns_interception.sh`
+- **Purpose**: Manages DNS interception for HTTPS support
+- **How**: Adds/removes `address=/#/192.168.4.1` from dnsmasq config
+- **Result**: All DNS queries resolve to gateway IP, allowing HTTPS interception
+- **Usage**: Called automatically by `NoDogSplashService` when redirecting/allowing devices
+
+### Integration with NetworkService
+
+Both services work together:
+- **NetworkService**: Blocks device at network level (iptables)
+- **NoDogSplashService**: Redirects device to portal (captive portal)
+
+When time expires:
+1. NetworkService blocks device (Layer 2)
+2. NoDogSplashService redirects device (Layer 3)
+
+When time is granted:
+1. NetworkService unblocks device (Layer 2)
+2. NoDogSplashService allows device through (Layer 3)
+
+### DNS Interception for HTTPS Support
+
+**Purpose:** Enable HTTPS request interception by redirecting DNS queries to gateway IP.
+
+**How It Works:**
+- When device is redirected: DNS interception is enabled
+- All DNS queries resolve to `192.168.4.1` (gateway IP)
+- HTTPS requests go to gateway, where NoDogSplash intercepts them
+- When device is authenticated: DNS interception is disabled
+- Normal DNS resolution is restored
+
+**Implementation:**
+- Script: `manage_dns_interception.sh`
+- Config file: `/etc/dnsmasq.d/captive-portal.conf`
+- Managed automatically by `NoDogSplashService`
+
+**Important Notes:**
+- DNS interception is global (affects all devices when enabled)
+- Whitelisted devices never have DNS interception enabled
+- See `docs/DNS_INTERCEPTION_SETUP.md` for setup details
+
+### Configuration
+
+NoDogSplash requires:
+- Configuration file: `/etc/nodogsplash/nodogsplash.conf`
+- Firewall rule: Allow port 80 to gateway IP for Preauthenticated users (prevents redirect loop)
+- Systemd service: `nodogsplash.service`
+- Sudo permissions: `www-data` can execute `ndsctl` commands
+- DNS interception: dnsmasq config directory and script permissions
+
+For complete setup details, see `docs/NODOGSPLASH_SETUP.md` and `docs/DNS_INTERCEPTION_SETUP.md`.
+
+---
+
 ## Summary
 
 The network control system provides a secure, reliable way to control device access to the internet through:
 
-1. **Shell Scripts**: Execute iptables commands to modify firewall rules
+1. **Shell Scripts**: Execute iptables commands and NoDogSplash control commands
 2. **ScriptExecutor**: Provides secure execution with validation and error handling
-3. **NetworkService**: High-level interface for application code
-4. **Laravel Integration**: Seamlessly integrates with the rest of the application
+3. **NetworkService**: High-level interface for network-level blocking (iptables)
+4. **NoDogSplashService**: High-level interface for captive portal redirects
+5. **Laravel Integration**: Seamlessly integrates with the rest of the application
 
 All components work together to provide:
-- Device blocking/unblocking
-- Device whitelisting
+- Device blocking/unblocking (iptables)
+- Device whitelisting (iptables)
 - Connected device discovery
 - Traffic monitoring
+- Captive portal redirects (NoDogSplash)
 - Secure execution with proper error handling
+
+The system uses a **three-layer approach**:
+- **Layer 1 (Database)**: Tracks device state
+- **Layer 2 (Network)**: iptables blocking for physical security
+- **Layer 3 (Redirect)**: NoDogSplash redirects for user experience
 
 The system is designed to be:
 - **Secure**: Multiple layers of validation and sanitization

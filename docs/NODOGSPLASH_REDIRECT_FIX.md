@@ -1,5 +1,7 @@
 # NoDogSplash Redirect Fix - Troubleshooting Guide
 
+**Note:** This document describes the fix that was applied. For the complete, verified final setup documentation, see `docs/NODOGSPLASH_SETUP.md`.
+
 ## Problem
 
 NoDogSplash was not redirecting HTTP requests to the portal. When devices tried to access `http://google.com`, they would see "This site can't be reached" instead of being redirected to the portal.
@@ -165,6 +167,60 @@ The `RedirectURL` in `nodogsplash.conf` is what NoDogSplash uses. Our scripts do
 2. Set `RedirectURL http://192.168.4.1/portal`
 3. Restart NoDogSplash: `sudo systemctl restart nodogsplash`
 
+### Issue: Redirect Loop When Accessing Portal
+
+**Symptoms:**
+- Device tries to access `http://192.168.4.1/portal` but page keeps reloading
+- Browser shows redirect loop error
+- Portal page never loads
+- URL keeps redirecting between `http://192.168.4.1/portal` and `http://192.168.4.1:2050/splash.html`
+
+**Cause:** NoDogSplash is intercepting requests to the portal and redirecting them again, creating an infinite loop. This happens because Preauthenticated users don't have permission to access port 80 on the gateway IP.
+
+**Solution:**
+Add firewall rule to allow Preauthenticated users to access the gateway IP:
+
+```bash
+sudo nano /etc/nodogsplash/nodogsplash.conf
+```
+
+Find `FirewallRuleSet preauthenticated-users` section and add:
+
+```ini
+# CRITICAL: Allow access to portal on gateway (prevents redirect loop)
+# This allows Preauthenticated users to access http://192.168.4.1/portal
+# without being redirected again. Without this rule, accessing the portal
+# causes an infinite redirect loop because NoDogSplash intercepts the
+# request and redirects to RedirectURL (which is the same URL).
+FirewallRule allow tcp port 80 to 192.168.4.1
+```
+
+The complete section should look like:
+
+```ini
+FirewallRuleSet preauthenticated-users {
+FirewallRule allow tcp port 53
+FirewallRule allow udp port 53
+FirewallRule allow tcp port 80 to 192.168.4.1
+}
+```
+
+Then restart NoDogSplash:
+
+```bash
+sudo systemctl restart nodogsplash
+```
+
+**Verify the fix:**
+```bash
+# Check the rule is present
+sudo grep -A 5 "preauthenticated-users" /etc/nodogsplash/nodogsplash.conf | grep "192.168.4.1"
+```
+
+Should show: `FirewallRule allow tcp port 80 to 192.168.4.1`
+
+**Test:** On a device, try accessing `http://192.168.4.1/portal` directly. It should load without looping.
+
 ## How It Works Now
 
 ### When Device Time Expires:
@@ -198,9 +254,10 @@ However, the current fix should work correctly if the configuration is correct.
 The fix changes the approach from using `BlockList` (which blocks) to using `ndsctl` to manage authentication state (which redirects). This is the correct way to use NoDogSplash for captive portal redirects.
 
 **Key Points:**
-- ✅ Use `ndsctl deauthenticate` to redirect devices
-- ✅ Use `ndsctl authenticate` to allow devices through
+- ✅ Use `ndsctl deauth` to redirect devices (put in Preauthenticated state)
+- ✅ Use `ndsctl auth` to allow devices through (put in Authenticated state)
 - ✅ Ensure `RedirectURL` is configured in `nodogsplash.conf`
 - ✅ Remove any `BlockList` entries
 - ✅ Devices must be in NoDogSplash client list (connected to WiFi)
+- ✅ **Firewall rule must allow port 80 to gateway IP for Preauthenticated users** (prevents redirect loop)
 
