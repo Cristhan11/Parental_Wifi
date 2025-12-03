@@ -54,6 +54,24 @@ The following services are required for the WiFi Access Point functionality:
 - ✅ dnsmasq: `active (running)`
 - ✅ dhcpcd: `active (running)`
 
+### Captive Portal Services
+
+The following service is required for the captive portal functionality:
+
+1. **nodogsplash** - NoDogSplash Captive Portal (intercepts HTTP requests and redirects devices to portal)
+
+**Current Status:**
+- ✅ nodogsplash: `active (running)` (when configured)
+
+**NoDogSplash Configuration:**
+- **Config File:** `/etc/nodogsplash/nodogsplash.conf`
+- **Splash Page:** `/etc/nodogsplash/htdocs/splash.html`
+- **Service File:** `/etc/systemd/system/nodogsplash.service`
+- **Gateway Interface:** `wlan0`
+- **Gateway Address:** `192.168.4.1`
+- **RedirectURL:** Commented out (uses splash page instead)
+- **Port:** `2050` (NoDogSplash web server)
+
 **Network Configuration:**
 - **WiFi Interface:** `wlan0`
 - **Access Point IP:** `192.168.4.1/24`
@@ -70,6 +88,9 @@ The following services are required for the WiFi Access Point functionality:
 - **dhcpcd config:** `/etc/dhcpcd.conf`
 - **NetworkManager config:** `/etc/NetworkManager/conf.d/99-unmanaged-devices.conf`
 - **IP forwarding:** `/etc/sysctl.conf`
+- **NoDogSplash config:** `/etc/nodogsplash/nodogsplash.conf`
+- **NoDogSplash splash page:** `/etc/nodogsplash/htdocs/splash.html`
+- **IP forwarding service:** `/etc/systemd/system/ip-forward.service`
 
 **NetworkManager Configuration:**
 - wlan0 is configured as unmanaged by NetworkManager
@@ -118,6 +139,21 @@ dnsmasq: active
 dhcpcd: active
 ```
 
+### Check Captive Portal Services
+
+```bash
+echo "=== Captive Portal Services ==="
+echo "nodogsplash: $(systemctl is-active nodogsplash)"
+echo "ip-forward: $(systemctl is-active ip-forward.service)"
+```
+
+**Expected output when all services are running:**
+```
+=== Captive Portal Services ===
+nodogsplash: active
+ip-forward: active
+```
+
 ### Check Individual Services
 
 ```bash
@@ -150,6 +186,16 @@ systemctl is-active dnsmasq
 sudo systemctl status dhcpcd
 # OR
 systemctl is-active dhcpcd
+
+# Check nodogsplash (Captive Portal)
+sudo systemctl status nodogsplash
+# OR
+systemctl is-active nodogsplash
+
+# Check ip-forward (IP Forwarding Service)
+sudo systemctl status ip-forward.service
+# OR
+systemctl is-active ip-forward.service
 ```
 
 ---
@@ -184,6 +230,18 @@ sudo systemctl start dhcpcd
 
 **Note:** Start dnsmasq before hostapd to ensure DHCP is ready when devices connect.
 
+### Start Captive Portal Services
+
+```bash
+# Start ip-forward service (IP forwarding)
+sudo systemctl start ip-forward.service
+
+# Start nodogsplash (Captive Portal) - start after network services
+sudo systemctl start nodogsplash
+```
+
+**Note:** Start NoDogSplash after network services (hostapd, dnsmasq) are running.
+
 ### Enable Services to Start on Boot
 
 ```bash
@@ -200,6 +258,10 @@ sudo systemctl enable mariadb
 sudo systemctl enable dnsmasq
 sudo systemctl enable hostapd
 sudo systemctl enable dhcpcd
+
+# Enable Captive Portal Services
+sudo systemctl enable ip-forward.service
+sudo systemctl enable nodogsplash
 ```
 
 ---
@@ -220,6 +282,10 @@ sudo systemctl stop mariadb
 sudo systemctl stop hostapd
 sudo systemctl stop dnsmasq
 # Note: Usually don't stop dhcpcd as it manages network interfaces
+
+# Stop Captive Portal Services
+sudo systemctl stop nodogsplash
+# Note: Usually don't stop ip-forward.service as it's needed for routing
 ```
 
 ---
@@ -240,9 +306,13 @@ sudo systemctl restart mariadb
 sudo systemctl restart dnsmasq
 sudo systemctl restart hostapd
 sudo systemctl restart dhcpcd
+
+# Restart Captive Portal Services
+sudo systemctl restart ip-forward.service
+sudo systemctl restart nodogsplash
 ```
 
-**Note:** When restarting access point services, restart dnsmasq first, then hostapd.
+**Note:** When restarting access point services, restart dnsmasq first, then hostapd. Restart NoDogSplash after network services are running.
 
 ---
 
@@ -551,6 +621,14 @@ Before running tests or using the application:
 - [x] IP forwarding is enabled: `cat /proc/sys/net/ipv4/ip_forward` → `1` ✅
 - [x] iptables NAT rules configured: `sudo iptables -t nat -L POSTROUTING` shows MASQUERADE rule ✅
 
+### Captive Portal Services
+- [ ] nodogsplash is running: `systemctl is-active nodogsplash` → `active`
+- [ ] ip-forward service is running: `systemctl is-active ip-forward.service` → `active`
+- [ ] NoDogSplash config exists: `ls -la /etc/nodogsplash/nodogsplash.conf` → file exists
+- [ ] Splash page exists: `ls -la /etc/nodogsplash/htdocs/splash.html` → file exists
+- [ ] RedirectURL is commented out: `sudo grep "^RedirectURL" /etc/nodogsplash/nodogsplash.conf` → returns nothing
+- [ ] Firewall rule allows portal access: `sudo grep -A 5 "preauthenticated-users" /etc/nodogsplash/nodogsplash.conf | grep "192.168.4.1"` → shows firewall rule
+
 ### General
 - [ ] Repository is up to date: `git pull` completed successfully
 - [ ] Laravel is accessible: `curl http://localhost/` returns HTML (not error)
@@ -670,6 +748,57 @@ ping -c 3 8.8.8.8
 sudo netfilter-persistent reload
 ```
 
+### NoDogSplash Not Redirecting Devices
+
+```bash
+# Check NoDogSplash service status
+sudo systemctl status nodogsplash
+
+# Check NoDogSplash logs
+sudo journalctl -u nodogsplash -n 50
+
+# Verify configuration
+sudo grep -E "GatewayInterface|GatewayAddress|^RedirectURL" /etc/nodogsplash/nodogsplash.conf
+
+# Check if RedirectURL is commented out (should be)
+sudo grep "^RedirectURL" /etc/nodogsplash/nodogsplash.conf
+# Should return nothing (RedirectURL should be commented out)
+
+# Check splash page exists
+ls -la /etc/nodogsplash/htdocs/splash.html
+
+# Check firewall rule for portal access
+sudo grep -A 5 "preauthenticated-users" /etc/nodogsplash/nodogsplash.conf | grep "192.168.4.1"
+
+# Check connected clients
+sudo ndsctl clients
+
+# Restart NoDogSplash
+sudo systemctl restart nodogsplash
+
+# Test configuration syntax
+sudo /usr/bin/nodogsplash -c /etc/nodogsplash/nodogsplash.conf -f -d 3
+# (Press Ctrl+C to stop)
+```
+
+### IP Forwarding Resets to 0
+
+```bash
+# Check ip-forward service status
+sudo systemctl status ip-forward.service
+
+# Check if service is enabled
+sudo systemctl is-enabled ip-forward.service
+
+# Enable and start service if needed
+sudo systemctl enable ip-forward.service
+sudo systemctl start ip-forward.service
+
+# Verify IP forwarding is enabled
+cat /proc/sys/net/ipv4/ip_forward
+# Should output: 1
+```
+
 ### hostapd Service is Masked
 
 If you see "Unit hostapd.service is masked":
@@ -696,11 +825,17 @@ systemctl is-active nginx php8.4-fpm mariadb
 # Check all access point services
 systemctl is-active hostapd dnsmasq dhcpcd
 
+# Check all captive portal services
+systemctl is-active nodogsplash ip-forward.service
+
 # Start all web application services
 sudo systemctl start nginx php8.4-fpm mariadb
 
 # Start all access point services (order matters: dnsmasq first, then hostapd)
 sudo systemctl start dnsmasq hostapd dhcpcd
+
+# Start all captive portal services
+sudo systemctl start ip-forward.service nodogsplash
 
 # Enable all web application services
 sudo systemctl enable nginx php8.4-fpm mariadb
@@ -708,11 +843,17 @@ sudo systemctl enable nginx php8.4-fpm mariadb
 # Enable all access point services
 sudo systemctl enable dnsmasq hostapd dhcpcd
 
+# Enable all captive portal services
+sudo systemctl enable ip-forward.service nodogsplash
+
 # Restart all web application services
 sudo systemctl restart nginx php8.4-fpm mariadb
 
 # Restart all access point services
 sudo systemctl restart dnsmasq hostapd dhcpcd
+
+# Restart all captive portal services
+sudo systemctl restart ip-forward.service nodogsplash
 ```
 
 ### Access Point Quick Checks
@@ -733,6 +874,23 @@ cat /var/lib/misc/dnsmasq.leases
 
 # Check WiFi password
 sudo grep "^wpa_passphrase=" /etc/hostapd/hostapd.conf
+```
+
+### Captive Portal Quick Checks
+
+```bash
+# Check NoDogSplash service
+echo "nodogsplash: $(systemctl is-active nodogsplash)"
+echo "ip-forward: $(systemctl is-active ip-forward.service)"
+
+# Check NoDogSplash configuration
+sudo grep -E "GatewayInterface|GatewayAddress|^RedirectURL" /etc/nodogsplash/nodogsplash.conf
+
+# Check connected clients
+sudo ndsctl clients
+
+# Check IP forwarding
+cat /proc/sys/net/ipv4/ip_forward
 ```
 
 ### Git Operations
@@ -789,6 +947,13 @@ This script will check:
   - Gateway/DNS: `192.168.4.1` (the Pi itself)
   - WiFi Password: Stored in `/etc/hostapd/hostapd.conf` (wpa_passphrase)
   - NetworkManager: wlan0 is unmanaged (configured in `/etc/NetworkManager/conf.d/99-unmanaged-devices.conf`)
+- **NoDogSplash Configuration:**
+  - Gateway Interface: `wlan0`
+  - Gateway Address: `192.168.4.1`
+  - RedirectURL: Commented out (uses splash page instead)
+  - Splash Page: `/etc/nodogsplash/htdocs/splash.html` (redirects to portal with token)
+  - Port: `2050` (NoDogSplash web server)
+  - IP Forwarding: Enabled via `ip-forward.service`
 - Always test Nginx configuration before reloading: `sudo nginx -t`
 - All commands assume you're in the project directory: `/var/www/parental_wifi`
 - All services are confirmed active and properly configured
@@ -800,6 +965,9 @@ This script will check:
 ## Related Documentation
 
 - **WiFi Access Point Setup**: `docs/RASPBERRY_PI_ACCESS_POINT_SETUP.md` - Complete guide for setting up the Raspberry Pi as a WiFi access point
+- **NoDogSplash Setup**: `docs/NODOGSPLASH_SETUP.md` - Complete NoDogSplash installation and configuration guide
+- **NoDogSplash Integration**: `docs/NODOGSPLASH_INTEGRATION.md` - Detailed implementation of NoDogSplash integration
+- **Network Control Architecture**: `docs/NETWORK_CONTROL_SYSTEM_ARCHITECTURE.md` - System architecture and how network control works
 - **Video System Testing (Test Phase 3)**: `docs/VIDEO_SYSTEM_TESTING.md`
 - **Test Phase 3 Results**: `docs/TEST_PHASE_3_RESULTS.md`
 - **General Testing Guide**: `docs/TESTING.md`

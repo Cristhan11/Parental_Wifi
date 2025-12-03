@@ -98,7 +98,7 @@ The development of this captive portal-based parental control system is influenc
 
 **Browser Dependency**: The system is designed primarily for web browsers, and compatibility may vary across older browsers or devices with outdated software. This limitation affects the user experience on some devices.
 
-**HTTPS and Encryption Restrictions**: Because most modern websites use HTTPS encryption, the system cannot inspect the actual content of encrypted traffic. The system can only control access at the domain level, which limits the granularity of content filtering.
+**HTTPS and Encryption Restrictions**: Because most modern websites use HTTPS encryption, the system cannot inspect the actual content of encrypted traffic. The system uses HTTP-only interception through the captive portal; HTTPS requests are not intercepted and devices can access HTTPS sites directly. This is an acceptable limitation for the use case, as most browsers attempt HTTP first for captive portal detection, and the system can still redirect devices when they attempt to access HTTP sites. The system can only control access at the domain level, which limits the granularity of content filtering.
 
 ### Software Constraints
 

@@ -254,9 +254,9 @@ protected array $allowedScripts = [
 
 ### Purpose
 
-Deauthenticates a device using `ndsctl deauth`, putting it in Preauthenticated state. This causes NoDogSplash to redirect all HTTP requests from that device to the portal page (configured via `RedirectURL` in `nodogsplash.conf`).
+Deauthenticates a device using `ndsctl deauth`, putting it in Preauthenticated state. This causes NoDogSplash to redirect all HTTP requests from that device to the splash page (`splash.html?tok=TOKEN`), which then redirects to the portal with the token.
 
-**Note:** The system only intercepts HTTP requests. HTTPS requests are not intercepted.
+**Note:** The system only intercepts HTTP requests. HTTPS requests are not intercepted. `RedirectURL` should be commented out in the config to use the splash page flow.
 
 ### Script Structure
 
@@ -499,7 +499,7 @@ deauthenticate_device() {
     
     # Deauthenticate device using ndsctl deauth (not deauthenticate)
     # This puts the device back in Preauthenticated state
-    # NoDogSplash will then redirect all HTTP requests to RedirectURL
+    # NoDogSplash will then redirect all HTTP requests to splash.html?tok=TOKEN
     if sudo "$NDSCTL" deauth "$token" >/dev/null 2>&1; then
         echo "Info: Device deauthenticated successfully (token: $token)" >&2
         return 0
@@ -700,8 +700,10 @@ GatewayInterface wlan0
 # Gateway Address (Access Point IP)
 GatewayAddress 192.168.4.1
 
-# Redirect URL - Where Preauthenticated devices are redirected
-RedirectURL http://192.168.4.1/portal
+# Redirect URL - COMMENTED OUT (we use splash page instead)
+# When RedirectURL is not set, NoDogSplash uses splash.html?tok=TOKEN
+# The splash page then redirects to the portal with the token parameter
+#RedirectURL http://192.168.4.1/portal
 ```
 
 ### Firewall Rules Configuration
@@ -726,22 +728,25 @@ FirewallRule allow tcp port 80 to 192.168.4.1
 }
 ```
 
-**Why this is needed:** Without this rule, when a Preauthenticated device tries to access `http://192.168.4.1/portal`, NoDogSplash intercepts it and redirects to `RedirectURL` (which is the same URL), creating an infinite redirect loop.
+**Why this is needed:** Without this rule, when a Preauthenticated device tries to access `http://192.168.4.1/portal`, NoDogSplash intercepts it and redirects to the splash page again, potentially creating a redirect loop.
 
 ### Important Notes
 
-- **`RedirectURL`** - This is where NoDogSplash redirects all HTTP requests from Preauthenticated devices
+- **`RedirectURL`** - Should be COMMENTED OUT - We use the splash page (`splash.html`) instead, which passes the token parameter to the portal
 - **No `BlockList` entries** - We use `ndsctl` commands to manage device states instead
 - **`InternetInterface`** - NOT a valid option in NoDogSplash version 5.0.2 - Do NOT add this line
 - **Firewall rule for portal access** - Must allow port 80 to gateway IP for Preauthenticated users (prevents redirect loop)
+- **Splash page is required** - The splash page at `/etc/nodogsplash/htdocs/splash.html` must exist and redirect to the portal with token
 
 ### How NoDogSplash Uses It
 
 1. NoDogSplash reads the config file at startup
 2. Devices connecting to WiFi are automatically in **Preauthenticated** state
-3. All HTTP requests from Preauthenticated devices redirect to `RedirectURL`
-4. Devices can be authenticated using `ndsctl auth` to allow internet access
-5. Devices can be deauthenticated using `ndsctl deauth` to redirect them again
+3. All HTTP requests from Preauthenticated devices redirect to `splash.html?tok=TOKEN` (when `RedirectURL` is not set)
+4. The splash page redirects to the portal with the token parameter
+5. Devices can be authenticated using `ndsctl auth` to allow internet access
+6. Devices can be deauthenticated using `ndsctl deauth` to redirect them again
+7. **State changes work immediately** - No need to disconnect/reconnect WiFi
 
 ---
 
@@ -768,11 +773,13 @@ FirewallRule allow tcp port 80 to 192.168.4.1
    ↓
 9. Device is put in Preauthenticated state
    ↓
-10. Device's next HTTP request → NoDogSplash intercepts → Redirects to RedirectURL
+10. Device's next HTTP request → NoDogSplash intercepts → Redirects to splash.html?tok=TOKEN
     ↓
-11. Device sees splash page → Splash page redirects to /portal?tok=TOKEN
+11. Splash page JavaScript extracts token → Redirects to /portal?tok=TOKEN
     ↓
-12. PortalController looks up MAC from token → Shows portal page
+12. PortalController receives token → Looks up MAC from token using multi-line parsing
+    ↓
+13. Portal displays device information
 ```
 
 ### Flow 2: Child Completes Quiz → Allow Device Through

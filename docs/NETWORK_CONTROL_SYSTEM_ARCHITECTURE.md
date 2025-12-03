@@ -757,7 +757,7 @@ NoDogSplash manages devices in two states:
 #### `redirect_device_portal.sh`
 - **Purpose**: Redirects device to portal by putting it in Preauthenticated state
 - **How**: Uses `ndsctl deauth <token>` to deauthenticate device
-- **Result**: Device's HTTP requests redirect to `RedirectURL` (configured in `/etc/nodogsplash/nodogsplash.conf`)
+- **Result**: Device's HTTP requests redirect to `splash.html?tok=TOKEN` (when `RedirectURL` is not set), which then redirects to the portal with token
 
 #### `allow_device_through.sh`
 - **Purpose**: Allows device through by putting it in Authenticated state
@@ -800,10 +800,13 @@ When time is granted:
 ### Configuration
 
 NoDogSplash requires:
-- Configuration file: `/etc/nodogsplash/nodogsplash.conf`
+- Configuration file: `/etc/nodogsplash/nodogsplash.conf` (with `RedirectURL` commented out)
+- Splash page: `/etc/nodogsplash/htdocs/splash.html` (redirects to portal with token)
 - Firewall rule: Allow port 80 to gateway IP for Preauthenticated users (prevents redirect loop)
 - Systemd service: `nodogsplash.service`
-- Sudo permissions: `www-data` can execute `ndsctl` commands
+- Sudo permissions: `www-data` can execute `ndsctl` commands (including `ndsctl clients` for token lookup)
+
+**Important:** `RedirectURL` should be commented out in the config file. When not set, NoDogSplash uses the splash page which passes the token parameter to the portal.
 
 For complete setup details, see `docs/NODOGSPLASH_SETUP.md`.
 

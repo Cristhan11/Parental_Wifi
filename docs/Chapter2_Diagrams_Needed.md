@@ -555,7 +555,7 @@ The Illustrative Design section (2.2.4) demonstrates the user interface design a
 ### Diagram 2.3.2: Hardware Interaction Architecture
 **Type:** Interaction Diagram  
 **Section:** 2.3.2 Hardware Interaction  
-**Purpose:** Show how Laravel interacts with Raspberry Pi hardware and system services, including the network control system architecture  
+**Purpose:** Show how Laravel interacts with Raspberry Pi hardware and system services, including the network control system architecture and captive portal control  
 **Content:**
 ```
 ┌─────────────────────────────────────────────────────────┐
@@ -588,58 +588,73 @@ The Illustrative Design section (2.2.4) demonstrates the user interface design a
 │  └──────────────────────┼───────────────────────────┘  │
 │                          │                               │
 │  ┌───────────────────────▼──────────────────────────┐  │
+│  │  Captive Portal Service Layer                      │  │
+│  │  ┌──────────────────────────────────────────────┐  │  │
+│  │  │  NoDogSplashService (High-Level Interface)     │  │  │
+│  │  │  - redirectDeviceToPortal()                    │  │  │
+│  │  │  - allowDeviceThrough()                       │  │  │
+│  │  │  - checkDeviceRedirected()                     │  │  │
+│  │  └──────────────────┬───────────────────────────┘  │  │
+│  │                      │                               │  │
+│  │  ┌───────────────────▼───────────────────────────┐  │  │
+│  │  │  ScriptExecutor (Secure Wrapper)               │  │  │
+│  │  │  - Same security features as above             │  │  │
+│  │  └──────────────────┬───────────────────────────┘  │  │
+│  └──────────────────────┼───────────────────────────┘  │
+│                          │                               │
+│  ┌───────────────────────▼──────────────────────────┐  │
 │  │  Other Service Layer                               │  │
 │  │  ┌──────────────┐  ┌──────────────┐              │  │
-│  │  │ NoDogSplash │  │ Process      │  │ Media     │  │
-│  │  │ Service     │  │ Monitoring   │  │ Handling │  │
-│  │  └──────────────┘  └──────────────┘  └──────────┘  │  │
+│  │  │ Process      │  │ Media        │  │           │  │
+│  │  │ Monitoring   │  │ Handling     │  │           │  │
+│  │  └──────────────┘  └──────────────┘              │  │
 │  └───────────────────────┬──────────────────────────┘  │
 │                          │                               │
 │        ┌─────────────────┼─────────────────┐          │
 │        │                 │                 │          │
 │  ┌─────▼─────┐  ┌───────▼──────┐  ┌───────▼──────┐  │
-│  │ Shell     │  │ Process      │  │ Media       │  │
-│  │ Scripts   │  │ Monitoring   │  │ Handling    │  │
-│  │ Execution  │  │ Layer        │  │ Layer        │  │
-│  │ Layer      │  │              │  │              │  │
-│  │            │  │              │  │              │  │
-│  │ ┌────────┐ │  │              │  │              │  │
-│  │ │block_  │ │  │              │  │              │  │
-│  │ │device. │ │  │              │  │              │  │
-│  │ │sh      │ │  │              │  │              │  │
-│  │ ├────────┤ │  │              │  │              │  │
-│  │ │unblock_│ │  │              │  │              │  │
-│  │ │device. │ │  │              │  │              │  │
-│  │ │sh      │ │  │              │  │              │  │
-│  │ ├────────┤ │  │              │  │              │  │
-│  │ │whitelist│ │  │              │  │              │  │
-│  │ │_device.│ │  │              │  │              │  │
-│  │ │sh      │ │  │              │  │              │  │
-│  │ ├────────┤ │  │              │  │              │  │
-│  │ │get_    │ │  │              │  │              │  │
-│  │ │connected│ │  │              │  │              │  │
-│  │ │_devices│ │  │              │  │              │  │
-│  │ │.sh     │ │  │              │  │              │  │
-│  │ ├────────┤ │  │              │  │              │  │
-│  │ │monitor_│ │  │              │  │              │  │
-│  │ │traffic.│ │  │              │  │              │  │
-│  │ │sh      │ │  │              │  │              │  │
-│  │ └────────┘ │  │              │  │              │  │
+│  │ Network   │  │ Captive       │  │ Process      │  │
+│  │ Control   │  │ Portal        │  │ Monitoring   │  │
+│  │ Scripts   │  │ Scripts       │  │ Layer        │  │
+│  │           │  │               │  │              │  │
+│  │ ┌────────┐ │  │ ┌──────────┐ │  │              │  │
+│  │ │block_  │ │  │ │redirect_ │ │  │              │  │
+│  │ │device. │ │  │ │device_   │ │  │              │  │
+│  │ │sh      │ │  │ │portal.sh │ │  │              │  │
+│  │ ├────────┤ │  │ ├──────────┤ │  │              │  │
+│  │ │unblock_│ │  │ │allow_    │ │  │              │  │
+│  │ │device. │ │  │ │device_   │ │  │              │  │
+│  │ │sh      │ │  │ │through.sh│ │  │              │  │
+│  │ ├────────┤ │  │ ├──────────┤ │  │              │  │
+│  │ │whitelist│ │  │ │check_    │ │  │              │  │
+│  │ │_device.│ │  │ │device_   │ │  │              │  │
+│  │ │sh      │ │  │ │redirected│ │  │              │  │
+│  │ ├────────┤ │  │ │.sh       │ │  │              │  │
+│  │ │get_    │ │  │ └──────────┘ │  │              │  │
+│  │ │connected│ │  │               │  │              │  │
+│  │ │_devices│ │  │               │  │              │  │
+│  │ │.sh     │ │  │               │  │              │  │
+│  │ ├────────┤ │  │               │  │              │  │
+│  │ │monitor_│ │  │               │  │              │  │
+│  │ │traffic.│ │  │               │  │              │  │
+│  │ │sh      │ │  │               │  │              │  │
+│  │ └────────┘ │  │               │  │              │  │
 │  └─────┬─────┘  └───────┬──────┘  └───────┬──────┘  │
 │        │                 │                 │          │
 │        │                 │                 │          │
 │  ┌─────▼─────────────────▼─────────────────▼──────┐  │
 │  │  System Services & Hardware                     │  │
 │  │  ┌──────────┐  ┌──────────┐  ┌──────────┐     │  │
-│  │  │ iptables │  │ System   │  │ File     │     │  │
-│  │  │ (INPUT   │  │ Logs     │  │ System   │     │  │
-│  │  │  FORWARD │  │ (hostapd │  │ (SSD     │     │  │
-│  │  │  chains)│  │ dnsmasq) │  │ Storage) │     │  │
-│  │  │          │  │          │  │          │     │  │
-│  │  │ MAC-based│  │          │  │          │     │  │
-│  │  │ DROP/    │  │          │  │          │     │  │
-│  │  │ ACCEPT  │  │          │  │          │     │  │
-│  │  │ rules   │  │          │  │          │     │  │
+│  │  │ iptables │  │ NoDogSplash│ │ System   │     │  │
+│  │  │ (INPUT   │  │ (ndsctl   │ │ Logs     │     │  │
+│  │  │  FORWARD │  │ commands: │ │ (hostapd │     │  │
+│  │  │  chains)│  │  deauth,  │ │ dnsmasq) │     │  │
+│  │  │          │  │  auth,    │ │          │     │  │
+│  │  │ MAC-based│  │  clients) │ │          │     │  │
+│  │  │ DROP/    │  │          │ │          │     │  │
+│  │  │ ACCEPT  │  │ Token-    │ │          │     │  │
+│  │  │ rules   │  │ based MAC │ │          │     │  │
+│  │  │          │  │ lookup   │ │          │     │  │
 │  │  └──────────┘  └──────────┘  └──────────┘     │  │
 │  │  ┌──────────┐  ┌──────────┐                    │  │
 │  │  │ Python    │  │ Network  │                    │  │
@@ -655,16 +670,22 @@ The Illustrative Design section (2.2.4) demonstrates the user interface design a
 - Network Control Architecture showing three-tier structure:
   - NetworkService (high-level interface with methods: blockDevice, unblockDevice, whitelistDevice, getConnectedDevices, getTrafficStats, isDeviceBlocked)
   - ScriptExecutor (secure wrapper with whitelist validation, path validation, argument sanitization, sudo execution)
-  - Shell scripts (block_device.sh, unblock_device.sh, whitelist_device.sh, get_connected_devices.sh, monitor_traffic.sh)
-- Three interaction layers: Network Control (via ScriptExecutor), Process Monitoring, Media Handling
+  - Network control shell scripts (block_device.sh, unblock_device.sh, whitelist_device.sh, get_connected_devices.sh, monitor_traffic.sh)
+- Captive Portal Control Architecture showing three-tier structure:
+  - NoDogSplashService (high-level interface with methods: redirectDeviceToPortal, allowDeviceThrough, checkDeviceRedirected)
+  - ScriptExecutor (same secure wrapper)
+  - Captive portal shell scripts (redirect_device_portal.sh, allow_device_through.sh, check_device_redirected.sh)
+- Four interaction layers: Network Control (via ScriptExecutor), Captive Portal Control (via ScriptExecutor), Process Monitoring, Media Handling
 - Service classes that act as security layer (ScriptExecutor, NetworkService, NoDogSplashService)
 - System services and hardware components matching scope.md and NETWORK_CONTROL_SYSTEM_ARCHITECTURE.md:
   - iptables INPUT and FORWARD chains with MAC-based DROP/ACCEPT rules
-  - Shell scripts for network control (executed via ScriptExecutor)
+  - NoDogSplash with ndsctl commands (ndsctl deauth, ndsctl auth, ndsctl clients) for device authentication state management
+  - Token-based MAC address lookup using ndsctl clients output
+  - Shell scripts for network control and captive portal control (executed via ScriptExecutor)
   - Python helper scripts (complex operations)
   - System logs (hostapd, dnsmasq) for process monitoring
   - Systemd service restarts (NoDogSplash, network services)
-- Data flow from Laravel Controllers → NetworkService → ScriptExecutor → Shell Scripts → iptables
+- Data flow from Laravel Controllers → NetworkService/NoDogSplashService → ScriptExecutor → Shell Scripts → iptables/NoDogSplash
 - **Note:** Laravel does NOT directly control hardware - it triggers system-level operations through these mechanisms (as per scope.md)
 - **Security:** Show ScriptExecutor's security features (whitelist, path validation, argument sanitization)
 
@@ -704,6 +725,13 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 │  └──────────────────┬──────────────────────┘ │
 │                     │                        │
 │  ┌──────────────────▼──────────────────────┐ │
+│  │  NoDogSplashService (High-Level Interface)│ │
+│  │  - redirectDeviceToPortal()             │ │
+│  │  - allowDeviceThrough()                  │ │
+│  │  - checkDeviceRedirected()               │ │
+│  └──────────────────┬──────────────────────┘ │
+│                     │                        │
+│  ┌──────────────────▼──────────────────────┐ │
 │  │  ScriptExecutor (Secure Wrapper)         │ │
 │  │  - Whitelist validation                  │ │
 │  │  - Path validation                       │ │
@@ -713,16 +741,24 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 │                     │                        │
 │  ┌──────────────────▼──────────────────────┐ │
 │  │  Shell Scripts (scripts/ directory)      │ │
+│  │  Network Control:                        │ │
 │  │  - block_device.sh                       │ │
 │  │  - unblock_device.sh                     │ │
 │  │  - whitelist_device.sh                   │ │
 │  │  - get_connected_devices.sh              │ │
 │  │  - monitor_traffic.sh                    │ │
+│  │  Captive Portal Control:                 │ │
+│  │  - redirect_device_portal.sh            │ │
+│  │  - allow_device_through.sh               │ │
+│  │  - check_device_redirected.sh           │ │
 │  └──────────────────┬──────────────────────┘ │
 │                     │                        │
 │  ┌──────────────────▼──────────────────────┐ │
-│  │  iptables (INPUT & FORWARD chains)       │ │
-│  │  - MAC-based DROP/ACCEPT rules          │ │
+│  │  System Services                         │ │
+│  │  - iptables (INPUT & FORWARD chains)     │ │
+│  │    MAC-based DROP/ACCEPT rules          │ │
+│  │  - NoDogSplash (ndsctl commands)         │ │
+│  │    ndsctl deauth, auth, clients          │ │
 │  └──────────────────────────────────────────┘ │
 └─────────────────────────────────────────────┘
 ┌─────────────────────────────────────────────┐
@@ -745,14 +781,16 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 
 **Details to Include:**
 - All seven layers clearly labeled
-- Layer 5 (Network Control Layer) expanded to show the three-tier architecture:
-  - NetworkService (high-level interface)
+- Layer 5 (Network Control Layer) expanded to show the multi-tier architecture:
+  - NetworkService (high-level network operations interface)
+  - NoDogSplashService (high-level captive portal operations interface)
   - ScriptExecutor (secure wrapper)
-  - Shell Scripts (actual execution)
-  - iptables (system-level firewall)
+  - Shell Scripts (network control and captive portal control scripts)
+  - System Services (iptables and NoDogSplash with ndsctl commands)
 - Direction of communication (requests flow down, responses flow up)
 - Key technologies in each layer
 - Security features shown in ScriptExecutor layer
+- Captive portal scripts execute ndsctl commands (deauth, auth, clients) for device authentication state management
 
 **Suggested Tool:** Draw.io, PowerPoint, or architecture diagram tools
 
@@ -772,9 +810,9 @@ Both diagrams are needed to fully illustrate the system's schematic design.
                        │ Calls methods
                        ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   NetworkService (PHP)                       │
+│              NetworkService & NoDogSplashService (PHP)       │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  High-Level Network Operations                       │   │
+│  │  NetworkService - High-Level Network Operations      │   │
 │  │  - blockDevice(Device $device): bool                │   │
 │  │  - unblockDevice(Device $device): bool              │   │
 │  │  - whitelistDevice(Device $device): bool             │   │
@@ -782,11 +820,17 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 │  │  - getTrafficStats(?string $macAddress): array      │   │
 │  │  - isDeviceBlocked(Device $device): bool            │   │
 │  │                                                       │   │
+│  │  NoDogSplashService - High-Level Captive Portal Ops  │   │
+│  │  - redirectDeviceToPortal(Device $device): bool     │   │
+│  │  - allowDeviceThrough(Device $device): bool         │   │
+│  │  - checkDeviceRedirected(Device $device): bool      │   │
+│  │                                                       │   │
 │  │  Responsibilities:                                    │   │
 │  │  - Validates device has MAC address                  │   │
 │  │  - Updates database status                           │   │
 │  │  - Logs operations                                   │   │
 │  │  - Handles errors gracefully                         │   │
+│  │  - Token-based MAC address lookup                    │   │
 │  └──────────────────────┬───────────────────────────────┘   │
 └─────────────────────────┼───────────────────────────────────┘
                           │
@@ -805,11 +849,16 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 │  │  - Comprehensive logging (all executions logged)     │   │
 │  │                                                       │   │
 │  │  Allowed Scripts:                                     │   │
+│  │  Network Control:                                    │   │
 │  │  - block_device.sh                                    │   │
 │  │  - unblock_device.sh                                  │   │
 │  │  - whitelist_device.sh                                │   │
 │  │  - get_connected_devices.sh                           │   │
 │  │  - monitor_traffic.sh                                 │   │
+│  │  Captive Portal Control:                              │   │
+│  │  - redirect_device_portal.sh                         │   │
+│  │  - allow_device_through.sh                           │   │
+│  │  - check_device_redirected.sh                        │   │
 │  └──────────────────────┬───────────────────────────────┘   │
 └─────────────────────────┼───────────────────────────────────┘
                           │
@@ -818,93 +867,136 @@ Both diagrams are needed to fully illustrate the system's schematic design.
 ┌─────────────────────────────────────────────────────────────┐
 │                    Shell Scripts (Bash)                     │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  block_device.sh                                      │   │
-│  │  - Validates MAC address format                     │   │
-│  │  - Normalizes MAC address (uppercase, colons)        │   │
-│  │  - Adds DROP rules to INPUT chain                    │   │
-│  │  - Adds DROP rules to FORWARD chain                  │   │
-│  │  - Idempotent (safe to run multiple times)           │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  unblock_device.sh                                    │   │
-│  │  - Validates and normalizes MAC address              │   │
-│  │  - Removes DROP rules from INPUT chain               │   │
-│  │  - Removes DROP rules from FORWARD chain             │   │
-│  │  - Idempotent                                        │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  whitelist_device.sh                                  │   │
-│  │  - Removes any existing DROP rules                   │   │
-│  │  - Adds ACCEPT rule at position 1 in INPUT chain      │   │
-│  │  - Adds ACCEPT rule at position 1 in FORWARD chain   │   │
-│  │  - Position 1 ensures bypass of all DROP rules       │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  get_connected_devices.sh                             │   │
-│  │  - Queries ARP table (ip neigh show dev wlan0)       │   │
-│  │  - Extracts IP and MAC addresses                     │   │
-│  │  - Performs reverse DNS lookup for hostnames         │   │
-│  │  - Outputs JSON array                                │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  monitor_traffic.sh                                   │   │
-│  │  - Queries iptables statistics (iptables -L -v -n -x)│   │
-│  │  - Correlates traffic with MAC addresses             │   │
-│  │  - Outputs JSON with bytes_sent/bytes_received       │   │
+│  │  Network Control Scripts:                             │   │
+│  │  ├─ block_device.sh                                   │   │
+│  │  │  - Validates MAC address format                    │   │
+│  │  │  - Normalizes MAC address (uppercase, colons)      │   │
+│  │  │  - Adds DROP rules to INPUT chain                  │   │
+│  │  │  - Adds DROP rules to FORWARD chain                │   │
+│  │  │  - Idempotent (safe to run multiple times)         │   │
+│  │  ├─ unblock_device.sh                                 │   │
+│  │  │  - Validates and normalizes MAC address            │   │
+│  │  │  - Removes DROP rules from INPUT chain             │   │
+│  │  │  - Removes DROP rules from FORWARD chain            │   │
+│  │  │  - Idempotent                                      │   │
+│  │  ├─ whitelist_device.sh                               │   │
+│  │  │  - Removes any existing DROP rules                 │   │
+│  │  │  - Adds ACCEPT rule at position 1 in INPUT chain   │   │
+│  │  │  - Adds ACCEPT rule at position 1 in FORWARD chain│   │
+│  │  │  - Position 1 ensures bypass of all DROP rules     │   │
+│  │  ├─ get_connected_devices.sh                          │   │
+│  │  │  - Queries ARP table (ip neigh show dev wlan0)     │   │
+│  │  │  - Extracts IP and MAC addresses                   │   │
+│  │  │  - Performs reverse DNS lookup for hostnames       │   │
+│  │  │  - Outputs JSON array                              │   │
+│  │  └─ monitor_traffic.sh                                │   │
+│  │     - Queries iptables statistics                      │   │
+│  │     - Correlates traffic with MAC addresses           │   │
+│  │     - Outputs JSON with bytes_sent/bytes_received     │   │
+│  │                                                       │   │
+│  │  Captive Portal Control Scripts:                      │   │
+│  │  ├─ redirect_device_portal.sh                         │   │
+│  │  │  - Validates device has MAC address                │   │
+│  │  │  - Finds device token using ndsctl clients         │   │
+│  │  │  - Executes ndsctl deauth <token>                  │   │
+│  │  │  - Puts device in Preauthenticated state            │   │
+│  │  ├─ allow_device_through.sh                           │   │
+│  │  │  - Validates device has MAC address                │   │
+│  │  │  - Finds device token using ndsctl clients         │   │
+│  │  │  - Executes ndsctl auth <token>                    │   │
+│  │  │  - Restores normal internet access                  │   │
+│  │  └─ check_device_redirected.sh                        │   │
+│  │     - Validates device has MAC address                │   │
+│  │     - Finds device token using ndsctl clients         │   │
+│  │     - Checks device authentication state              │   │
 │  └──────────────────────┬───────────────────────────────┘   │
 └─────────────────────────┼───────────────────────────────────┘
                           │
                           │ Modifies/Queries
                           ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    iptables (Linux Firewall)                 │
+│              System Services (iptables & NoDogSplash)        │
 │  ┌──────────────────────────────────────────────────────┐   │
-│  │  INPUT Chain                                            │   │
-│  │  - Handles traffic coming TO the Raspberry Pi          │   │
-│  │  - DROP rules block device from accessing Pi services │   │
-│  │  - ACCEPT rules (position 1) bypass all restrictions  │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  FORWARD Chain                                         │   │
-│  │  - Handles traffic being FORWARDED through Pi        │   │
-│  │  - DROP rules block device from accessing internet   │   │
-│  │  - ACCEPT rules (position 1) bypass all restrictions  │   │
-│  ├──────────────────────────────────────────────────────┤   │
-│  │  Rule Format:                                          │   │
-│  │  iptables -A FORWARD -i wlan0 -m mac                  │   │
-│  │           --mac-source AA:BB:CC:DD:EE:FF -j DROP      │   │
-│  │                                                       │   │
-│  │  iptables -I FORWARD 1 -i wlan0 -m mac                │   │
-│  │           --mac-source AA:BB:CC:DD:EE:FF -j ACCEPT   │   │
+│  │  iptables (Linux Firewall)                             │   │
+│  │  ├─ INPUT Chain                                         │   │
+│  │  │  - Handles traffic coming TO the Raspberry Pi      │   │
+│  │  │  - DROP rules block device from accessing Pi        │   │
+│  │  │  - ACCEPT rules (position 1) bypass restrictions    │   │
+│  │  ├─ FORWARD Chain                                       │   │
+│  │  │  - Handles traffic being FORWARDED through Pi       │   │
+│  │  │  - DROP rules block device from accessing internet │   │
+│  │  │  - ACCEPT rules (position 1) bypass restrictions    │   │
+│  │  └─ Rule Format:                                        │   │
+│  │     iptables -A FORWARD -i wlan0 -m mac                │   │
+│  │              --mac-source AA:BB:CC:DD:EE:FF -j DROP     │   │
+│  │                                                         │   │
+│  │  NoDogSplash (Captive Portal)                          │   │
+│  │  ├─ ndsctl deauth <token>                              │   │
+│  │  │  - Deauthenticates device                           │   │
+│  │  │  - Puts device in Preauthenticated state            │   │
+│  │  │  - Intercepts HTTP requests                         │   │
+│  │  │  - Redirects to splash.html?tok=TOKEN               │   │
+│  │  ├─ ndsctl auth <token>                                 │   │
+│  │  │  - Authenticates device                             │   │
+│  │  │  - Restores normal internet access                   │   │
+│  │  └─ ndsctl clients                                      │   │
+│  │     - Lists all connected devices                      │   │
+│  │     - Output includes tokens and MAC addresses         │   │
+│  │     - Used for token-based MAC address lookup          │   │
 │  └──────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
 
-Data Flow Example (Blocking a Device):
+Data Flow Example (Redirecting Device to Portal):
 1. CheckTimeExpiration Job detects time = 0
-2. Calls NetworkService::blockDevice($device)
-3. NetworkService validates MAC address exists
-4. NetworkService calls ScriptExecutor::execute('block_device.sh', [MAC])
+2. Calls NoDogSplashService::redirectDeviceToPortal($device)
+3. NoDogSplashService validates MAC address exists
+4. NoDogSplashService calls ScriptExecutor::execute('redirect_device_portal.sh', [MAC])
 5. ScriptExecutor validates script is whitelisted
 6. ScriptExecutor validates script path (prevents ../ attacks)
 7. ScriptExecutor sanitizes MAC address argument
-8. ScriptExecutor executes: sudo /path/to/block_device.sh 'AA:BB:CC:DD:EE:FF'
-9. block_device.sh validates MAC format
-10. block_device.sh normalizes MAC address
-11. block_device.sh adds iptables DROP rules to INPUT and FORWARD chains
-12. ScriptExecutor captures output and return code
-13. ScriptExecutor logs execution
-14. NetworkService updates database status to 'blocked'
-15. NetworkService logs operation
-16. Device is now blocked at network level
+8. ScriptExecutor executes: sudo /path/to/redirect_device_portal.sh 'AA:BB:CC:DD:EE:FF'
+9. redirect_device_portal.sh validates MAC format
+10. redirect_device_portal.sh executes: ndsctl clients (to find token)
+11. redirect_device_portal.sh parses output to find token matching MAC
+12. redirect_device_portal.sh executes: ndsctl deauth <token>
+13. NoDogSplash intercepts HTTP requests and redirects to splash.html?tok=TOKEN
+14. Splash page redirects to /portal?tok=TOKEN
+15. PortalController uses getMacFromToken() to lookup MAC from token
+16. Device is now in Preauthenticated state and sees portal
+
+Data Flow Example (Allowing Device Through After Quiz/Video):
+1. QuizAttemptController or VideoCompletion validates completion
+2. Calls NoDogSplashService::allowDeviceThrough($device)
+3. NoDogSplashService validates MAC address exists
+4. NoDogSplashService calls ScriptExecutor::execute('allow_device_through.sh', [MAC])
+5. ScriptExecutor validates and sanitizes (same as above)
+6. ScriptExecutor executes: sudo /path/to/allow_device_through.sh 'AA:BB:CC:DD:EE:FF'
+7. allow_device_through.sh finds token using ndsctl clients
+8. allow_device_through.sh executes: ndsctl auth <token>
+9. Device is authenticated and regains internet access
+10. NoDogSplashService updates database status
+11. Real-time notification sent to parent dashboard via WebSocket
 ```
 
 **Details to Include:**
-- Complete three-tier architecture: NetworkService → ScriptExecutor → Shell Scripts → iptables
+- Complete multi-tier architecture: NetworkService/NoDogSplashService → ScriptExecutor → Shell Scripts → System Services (iptables/NoDogSplash)
 - NetworkService methods and responsibilities clearly shown
+- NoDogSplashService methods and responsibilities clearly shown (redirectDeviceToPortal, allowDeviceThrough, checkDeviceRedirected)
 - ScriptExecutor security features (whitelist, path validation, argument sanitization, logging)
-- All five shell scripts with their specific functions
+- All network control shell scripts (5 scripts) with their specific functions
+- All captive portal control shell scripts (3 scripts) with their specific functions
 - iptables INPUT and FORWARD chains with rule examples
+- NoDogSplash ndsctl commands (deauth, auth, clients) with explanations
+- Token-based MAC address lookup mechanism (using ndsctl clients output)
 - MAC address-based rules (DROP for blocking, ACCEPT for whitelisting)
 - Rule priority explanation (position 1 = highest priority)
-- Complete data flow example showing step-by-step blocking process
+- Complete data flow examples showing:
+  - Step-by-step portal redirect process (time expiration → ndsctl deauth → splash page → portal)
+  - Step-by-step device unblocking process (quiz/video completion → ndsctl auth → internet access restored)
 - Security measures at each layer
 - Idempotent operations (scripts safe to run multiple times)
 - JSON output format for query scripts (get_connected_devices.sh, monitor_traffic.sh)
+- Splash page redirect mechanism (splash.html?tok=TOKEN → /portal?tok=TOKEN)
 
 **Suggested Tool:** Draw.io, Lucidchart, or architecture diagram tools
 
@@ -1150,42 +1242,66 @@ The Illustrative Design section provides detailed workflow examples that demonst
           │<──Time Updated──────────│
 
 ┌─────────────────────────────────────────────────────────────────┐
-│ STEP 3: Time Expiration Detection                                │
+│ STEP 3: Time Expiration Detection & Portal Redirect            │
 └─────────────────────────────────────────────────────────────────┘
-    Background Jobs    TimeTrackingService    NetworkService    ScriptExecutor    iptables
+    Background Jobs    TimeTrackingService    NoDogSplashService    ScriptExecutor    NoDogSplash
           │                    │                    │                  │              │
           │──Check Expiration─>│                    │                  │              │
           │                    │                    │                  │              │
           │<──Time = 0─────────│                    │                  │              │
           │                    │                    │                  │              │
-          │──Block Device──────┼──>blockDevice()───>│                  │              │
+          │──Redirect Device───┼──>redirectDevice───>│                  │              │
+          │   to Portal        │   ToPortal()       │                  │              │
           │                    │                    │                  │              │
           │                    │                    │──execute()──────>│              │
-          │                    │                    │  ('block_device.│              │
-          │                    │                    │   sh', [MAC])    │              │
+          │                    │                    │  ('redirect_    │              │
+          │                    │                    │   device_       │              │
+          │                    │                    │   portal.sh',    │              │
+          │                    │                    │   [MAC])        │              │
           │                    │                    │                  │              │
           │                    │                    │                  │──sudo exec──>│
-          │                    │                    │                  │  (adds DROP  │
-          │                    │                    │                  │   rules to    │
-          │                    │                    │                  │   INPUT &     │
-          │                    │                    │                  │   FORWARD)    │
+          │                    │                    │                  │  (ndsctl     │
+          │                    │                    │                  │   clients to │
+          │                    │                    │                  │   find token)│
           │                    │                    │                  │              │
-          │                    │                    │<──Success───────│<──Rules Added│
+          │                    │                    │                  │──ndsctl─────>│
+          │                    │                    │                  │  deauth      │
+          │                    │                    │                  │  <token>     │
           │                    │                    │                  │              │
-          │                    │<──Device Blocked───│                  │              │
+          │                    │                    │<──Success───────│<──Device     │
+          │                    │                    │                  │   Deauth'd   │
+          │                    │<──Device Redirected│                  │              │
+          │                    │                    │                  │              │
+          │                    │                    │                  │──Intercept───>│
+          │                    │                    │                  │  HTTP        │
+          │                    │                    │                  │  Requests    │
+          │                    │                    │                  │              │
+          │                    │                    │                  │<──Redirect───│
+          │                    │                    │                  │  to splash.  │
+          │                    │                    │                  │  html?tok=   │
+          │                    │                    │                  │  TOKEN       │
 
 ┌─────────────────────────────────────────────────────────────────┐
-│ STEP 4: Captive Portal Redirect                                 │
+│ STEP 4: Portal Access & Token Lookup                            │
 └─────────────────────────────────────────────────────────────────┘
-    NoDogSplash          PortalController
-          │                     │
-          │──Intercept HTTP────>│
-          │                     │
-          │<──Redirect Request──│
-          │                     │
-          │──Show Portal────────>│
-          │                     │
-          │<──Portal Displayed───│
+    NoDogSplash          Splash Page          PortalController
+          │                     │                     │
+          │──Redirect to───────>│                     │
+          │   splash.html?tok=  │                     │
+          │   TOKEN             │                     │
+          │                     │                     │
+          │                     │──Auto Redirect─────>│
+          │                     │   to /portal?tok=   │
+          │                     │   TOKEN             │
+          │                     │                     │
+          │                     │                     │──getMacFromToken()─>│
+          │                     │                     │  (ndsctl clients)  │
+          │                     │                     │                     │
+          │                     │                     │<──MAC Address───────│
+          │                     │                     │                     │
+          │                     │<──Portal Page───────│                     │
+          │                     │   (Quiz/Video       │                     │
+          │                     │    Selection)       │                     │
 
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 5: Quiz Selection & Validation                             │
@@ -1211,30 +1327,39 @@ The Illustrative Design section provides detailed workflow examples that demonst
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 6: Time Granting & Device Unblocking                       │
 └─────────────────────────────────────────────────────────────────┘
-    QuizController  TimeGrantingService  NetworkService  ScriptExecutor  iptables  WebSocket
-          │                  │                  │              │            │          │
-          │──Grant Time──────>│                  │              │            │          │
-          │                  │                  │              │            │          │
-          │                  │──unblockDevice()─>│              │            │          │
-          │                  │                  │              │            │          │
-          │                  │                  │──execute()───>│            │          │
-          │                  │                  │  ('unblock_  │            │          │
-          │                  │                  │   device.sh',│            │          │
-          │                  │                  │   [MAC])     │            │          │
-          │                  │                  │              │            │          │
-          │                  │                  │              │──sudo exec>│          │
-          │                  │                  │              │  (removes  │          │
-          │                  │                  │              │   DROP     │          │
-          │                  │                  │              │   rules)   │          │
-          │                  │                  │              │            │          │
-          │                  │                  │<──Success─────│<──Rules    │          │
-          │                  │                  │              │   Removed  │          │
-          │                  │                  │              │            │          │
-          │                  │<──Device Unblocked│              │            │          │
-          │                  │                  │              │            │          │
-          │                  │──Notify Parent───┼──────────────┼───────────>│
-          │                  │                  │              │            │          │
-          │<──Time Granted───│                  │              │            │          │
+    QuizController  TimeGrantingService  NoDogSplashService  ScriptExecutor  NoDogSplash  WebSocket
+          │                  │                  │                  │              │          │
+          │──Grant Time──────>│                  │                  │              │          │
+          │                  │                  │                  │              │          │
+          │                  │──allowDevice─────>│                  │              │          │
+          │                  │   Through()      │                  │              │          │
+          │                  │                  │                  │              │          │
+          │                  │                  │──execute()──────>│              │          │
+          │                  │                  │  ('allow_       │              │          │
+          │                  │                  │   device_      │              │          │
+          │                  │                  │   through.sh', │              │          │
+          │                  │                  │   [MAC])       │              │          │
+          │                  │                  │                  │              │          │
+          │                  │                  │                  │──sudo exec──>│          │
+          │                  │                  │                  │  (ndsctl     │          │
+          │                  │                  │                  │   clients to │          │
+          │                  │                  │                  │   find token)│          │
+          │                  │                  │                  │              │          │
+          │                  │                  │                  │──ndsctl─────>│          │
+          │                  │                  │                  │  auth        │          │
+          │                  │                  │                  │  <token>     │          │
+          │                  │                  │                  │              │          │
+          │                  │                  │                  │<──Device─────│          │
+          │                  │                  │                  │   Authenticated│          │
+          │                  │                  │                  │              │          │
+          │                  │                  │<──Success───────│              │          │
+          │                  │                  │                  │              │          │
+          │                  │<──Device Allowed─│                  │              │          │
+          │                  │   Through        │                  │              │          │
+          │                  │                  │                  │              │          │
+          │                  │──Notify Parent───┼──────────────────┼─────────────>│
+          │                  │                  │                  │              │          │
+          │<──Time Granted───│                  │                  │              │          │
 
 ┌─────────────────────────────────────────────────────────────────┐
 │ STEP 7: Device Regains Internet Access                          │
@@ -1251,11 +1376,11 @@ The Illustrative Design section provides detailed workflow examples that demonst
 **Instruction Text:**
 1. **Device Registration**: Parent registers child device through dashboard. System initializes time allocation (as per scope.md captive portal flow).
 2. **Background Monitoring**: Background jobs (TrackActiveSessions) continuously monitor active sessions and deduct time every minute (as per scope.md).
-3. **Time Expiration**: When time reaches zero, background job (CheckTimeExpiration) triggers firewall to block device and redirects to portal (as per scope.md).
-4. **Captive Portal**: NoDogSplash intercepts HTTP requests and redirects to captive portal (as per scope.md).
+3. **Time Expiration & Portal Redirect**: When time reaches zero, background job (CheckTimeExpiration) calls NoDogSplashService::redirectDeviceToPortal(). The service finds device token using ndsctl clients, executes ndsctl deauth to put device in Preauthenticated state. NoDogSplash intercepts HTTP requests and redirects to splash.html?tok=TOKEN, which auto-redirects to /portal?tok=TOKEN (as per scope.md).
+4. **Token-Based MAC Lookup**: PortalController receives token parameter and uses getMacFromToken() to lookup MAC address by parsing ndsctl clients output, then presents quiz/video selection page (as per scope.md).
 5. **Quiz Activity**: Child selects quiz, answers questions, and system validates responses (as per scope.md quiz flow).
-6. **Time Granting**: Upon successful validation, TimeGrantingService grants time, unblocks device via iptables/nftables, and notifies parent via WebSocket (as per scope.md).
-7. **Internet Access Restored**: Device can now access internet through the Pi's WiFi network.
+6. **Time Granting & Device Unblocking**: Upon successful validation, TimeGrantingService grants time and calls NoDogSplashService::allowDeviceThrough(). The service finds device token using ndsctl clients, executes ndsctl auth to authenticate device and restore internet access. Parent is notified via WebSocket (as per scope.md).
+7. **Internet Access Restored**: Device regains internet access immediately without requiring disconnect/reconnect through the Pi's WiFi network.
 
 **Details to Include:**
 - Simplified step-by-step flow (7 main steps)

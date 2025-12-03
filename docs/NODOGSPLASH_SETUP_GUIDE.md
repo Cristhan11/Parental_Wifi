@@ -328,25 +328,30 @@ PortalPagesPath /etc/nodogsplash/htdocs
 
 **Note:** For our implementation, we'll redirect to Laravel's portal routes rather than using static portal pages. However, we still need to configure the redirect.
 
-### 5.3 Configure Redirect to Laravel Portal
+### 5.3 Configure Splash Page (Do NOT Set RedirectURL)
 
-Add this configuration:
+**Important:** Do NOT set `RedirectURL`. Instead, we use the splash page which passes the token parameter.
+
+**Why:** When `RedirectURL` is not set, NoDogSplash redirects to `splash.html?tok=TOKEN`, which then redirects to the portal with the token. This allows the portal to identify the device.
+
+**Configuration:**
 ```ini
 # ============================================
-# REDIRECT CONFIGURATION - CRITICAL
+# REDIRECT CONFIGURATION - DO NOT SET
 # ============================================
 
-# Redirect URL - Where Preauthenticated devices are redirected
-# This is where NoDogSplash redirects all HTTP requests from Preauthenticated devices
-# Must use the gateway IP (192.168.4.1) so devices on WiFi network can access it
-# Do NOT use the server's IP address (e.g., 192.168.1.173) - devices on WiFi can't access it
-RedirectURL http://192.168.4.1/portal
+# Redirect URL - COMMENTED OUT (we use splash page instead)
+# When RedirectURL is not set, NoDogSplash redirects to splash.html?tok=TOKEN
+# The splash page then redirects to the portal with the token parameter
+# This allows the portal to identify the device using the token
+#RedirectURL http://192.168.4.1/portal
 ```
 
 **Important Notes:**
-- The `RedirectURL` must use the gateway IP (`192.168.4.1`), not the server's IP
-- This is the URL that Preauthenticated devices will be redirected to
-- The portal path (`/portal`) must match your Laravel route
+- **`RedirectURL` should be COMMENTED OUT** - Do not uncomment this line
+- When `RedirectURL` is not set, NoDogSplash uses the default splash page behavior
+- The splash page (`splash.html`) will redirect to the portal with the token parameter
+- This allows the portal to identify devices using token-based MAC address lookup
 
 ---
 
@@ -391,8 +396,7 @@ FirewallRule allow tcp port 80 to 192.168.4.1
 
 **Why this is needed:**
 - Without this rule, when a Preauthenticated device tries to access `http://192.168.4.1/portal`, NoDogSplash intercepts it
-- NoDogSplash redirects to `RedirectURL` which is `http://192.168.4.1/portal` (the same URL)
-- This creates an infinite redirect loop
+- NoDogSplash redirects to the splash page again, potentially creating a redirect loop
 - The firewall rule allows Preauthenticated users to access port 80 on the gateway IP, bypassing the redirect
 
 ### 6.2 Save and Restart

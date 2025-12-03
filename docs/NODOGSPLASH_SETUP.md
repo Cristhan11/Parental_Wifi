@@ -76,8 +76,10 @@ GatewayInterface wlan0
 # Gateway Address (Access Point IP)
 GatewayAddress 192.168.4.1
 
-# Redirect URL - Where Preauthenticated devices are redirected
-RedirectURL http://192.168.4.1/portal
+# Redirect URL - COMMENTED OUT (we use splash page instead)
+# When RedirectURL is not set, NoDogSplash uses the splash page (splash.html)
+# The splash page then redirects to the portal with the token parameter
+#RedirectURL http://192.168.4.1/portal
 ```
 
 ### Firewall Rules Configuration
@@ -121,9 +123,10 @@ sudo systemctl restart nodogsplash
 ### Important Notes
 
 - **`InternetInterface`** is NOT a valid option in NoDogSplash version 5.0.2 - Do NOT add this line
-- **`RedirectURL`** must be set correctly - this is where devices are redirected when in Preauthenticated state
+- **`RedirectURL`** should be COMMENTED OUT - We use the splash page (`splash.html`) instead, which passes the token parameter to the portal
 - **No `BlockList` entries** - We use `ndsctl` commands instead (see below)
 - **Firewall rule for portal access** - Must allow port 80 to gateway IP for Preauthenticated users (prevents redirect loop)
+- **Splash page is required** - The splash page at `/etc/nodogsplash/htdocs/splash.html` must exist and redirect to the portal with token
 
 ### Complete Configuration Example
 
@@ -142,10 +145,11 @@ GatewayInterface wlan0
 # Must match the IP address of your wlan0 interface
 GatewayAddress 192.168.4.1
 
-# Redirect URL - Where Preauthenticated devices are redirected
-# This is where NoDogSplash redirects all HTTP requests from Preauthenticated devices
-# Must use the gateway IP (192.168.4.1) so devices on WiFi network can access it
-RedirectURL http://192.168.4.1/portal
+# Redirect URL - COMMENTED OUT (we use splash page instead)
+# When RedirectURL is not set, NoDogSplash redirects to splash.html?tok=TOKEN
+# The splash page then redirects to the portal with the token parameter
+# This allows the portal to identify the device using the token
+#RedirectURL http://192.168.4.1/portal
 
 # ============================================
 # FIREWALL RULES - CRITICAL FOR PORTAL ACCESS
@@ -184,8 +188,14 @@ sudo grep -A 5 "preauthenticated-users" /etc/nodogsplash/nodogsplash.conf | grep
 ```
 GatewayInterface wlan0
 GatewayAddress 192.168.4.1
-RedirectURL http://192.168.4.1/portal
+#RedirectURL http://192.168.4.1/portal  (commented out - using splash page)
 FirewallRule allow tcp port 80 to 192.168.4.1
+```
+
+**Note:** `RedirectURL` should be commented out. If you see it uncommented, comment it out:
+```bash
+sudo sed -i 's/^RedirectURL/#RedirectURL/' /etc/nodogsplash/nodogsplash.conf
+sudo systemctl restart nodogsplash
 ```
 
 ---
@@ -325,9 +335,14 @@ The splash page redirects devices to the Laravel portal with the token parameter
 ### How It Works
 
 1. NoDogSplash redirects Preauthenticated devices to `http://192.168.4.1:2050/splash.html?tok=TOKEN`
-2. The splash page JavaScript extracts the `tok` parameter
+   - This happens automatically when `RedirectURL` is NOT set in the config
+   - NoDogSplash uses the default splash page behavior
+2. The splash page JavaScript extracts the `tok` parameter from the URL
 3. The splash page redirects to `http://192.168.4.1/portal?tok=TOKEN`
-4. The Laravel portal controller looks up the MAC address from the token using `ndsctl clients`
+4. The Laravel portal controller receives the token and looks up the MAC address using `ndsctl clients`
+5. The portal displays device information based on the MAC address
+
+**Important:** `RedirectURL` must be commented out for this flow to work. If `RedirectURL` is set, NoDogSplash bypasses the splash page and redirects directly to the portal without the token parameter.
 
 ---
 
@@ -417,14 +432,48 @@ protected function getMacFromToken(string $token): ?string
         return null;
     }
     
-    // Parse output to find token and extract MAC
+    // Parse multi-line output to find token and extract MAC
+    // Format:
+    // client_id=0
+    // ip=192.168.4.32
+    // mac=e6:6a:8f:19:be:b1
+    // token=74b99472
+    // state=Preauthenticated
     $lines = explode("\n", trim($output));
     
+    $currentMac = null;
+    $inClientBlock = false;
+    
     foreach ($lines as $line) {
-        if (strpos($line, "token=$token") !== false) {
-            // Extract MAC address using regex
-            if (preg_match('/mac=([a-fA-F0-9:]{17})/', $line, $matches)) {
-                return strtolower($matches[1]);
+        $line = trim($line);
+        
+        // Skip empty lines (end of client block)
+        if (empty($line)) {
+            $inClientBlock = false;
+            $currentMac = null;
+            continue;
+        }
+        
+        // Check if this is the start of a new client block
+        if (strpos($line, 'client_id=') === 0) {
+            $inClientBlock = true;
+            $currentMac = null;
+            continue;
+        }
+        
+        // If we're in a client block, look for MAC and token
+        if ($inClientBlock) {
+            // Extract MAC address (remove "mac=" prefix)
+            if (strpos($line, 'mac=') === 0) {
+                $currentMac = strtolower(substr($line, 4)); // Remove "mac=" prefix
+            }
+            
+            // Check if this line contains the token we're looking for
+            if (strpos($line, "token=$token") === 0) {
+                // Found the token! Return the MAC we collected
+                if ($currentMac) {
+                    return $currentMac;
+                }
             }
         }
     }
@@ -570,7 +619,7 @@ state=Preauthenticated
 sudo ./scripts/redirect_device_portal.sh AA:BB:CC:DD:EE:FF "http://192.168.4.1/portal?mac=AA:BB:CC:DD:EE:FF"
 ```
 
-**Note:** The portal URL parameter is currently not used (we use `RedirectURL` from config), but it's kept for compatibility.
+**Note:** The portal URL parameter is kept for compatibility, but the actual redirect uses the splash page flow (splash.html → portal with token).
 
 ### allow_device_through.sh
 
@@ -626,11 +675,13 @@ echo $?  # 0 = redirected, 1 = not redirected
    ↓
 8. Device is put in Preauthenticated state
    ↓
-9. Device's next HTTP request → NoDogSplash intercepts → Redirects to RedirectURL
+9. Device's next HTTP request → NoDogSplash intercepts → Redirects to splash.html?tok=TOKEN
    ↓
-10. Device sees splash page → Splash page redirects to /portal?tok=TOKEN
-    ↓
-11. PortalController looks up MAC from token → Shows portal page
+10. Splash page JavaScript extracts token → Redirects to /portal?tok=TOKEN
+   ↓
+11. PortalController receives token → Looks up MAC from token using multi-line parsing
+   ↓
+12. Portal displays device information
 ```
 
 ### Flow 2: Child Completes Quiz/Video → Allow Device Through
@@ -792,14 +843,16 @@ var_dump($result);  // Should return true
 ### Issue: Devices Not Redirecting
 
 **Check:**
-1. RedirectURL is configured: `sudo grep RedirectURL /etc/nodogsplash/nodogsplash.conf`
-2. NoDogSplash is running: `sudo systemctl status nodogsplash`
-3. Device is in client list: `sudo ndsctl clients`
-4. Device state is Preauthenticated: `sudo ndsctl clients | grep "state="`
-5. iptables rules: `sudo iptables -t nat -L PREROUTING -n -v | grep nds`
+1. RedirectURL is commented out: `sudo grep "^RedirectURL" /etc/nodogsplash/nodogsplash.conf` (should return nothing)
+2. Splash page exists: `ls -la /etc/nodogsplash/htdocs/splash.html`
+3. NoDogSplash is running: `sudo systemctl status nodogsplash`
+4. Device is in client list: `sudo ndsctl clients`
+5. Device state is Preauthenticated: `sudo ndsctl clients | grep "state="`
+6. iptables rules: `sudo iptables -t nat -L PREROUTING -n -v | grep nds`
 
 **Solution:**
-- Ensure `RedirectURL` is set correctly
+- Ensure `RedirectURL` is commented out (not set) - this allows splash page to be used
+- Verify splash page exists and is configured correctly
 - Restart NoDogSplash: `sudo systemctl restart nodogsplash`
 - Verify device is connected to WiFi
 
@@ -821,11 +874,14 @@ var_dump($result);  // Should return true
 1. Token is being passed: Check URL has `?tok=...` parameter
 2. Sudo permission for `ndsctl clients`: `sudo grep "ndsctl clients" /etc/sudoers.d/*`
 3. Device exists in database: Check device MAC address matches
+4. Token parsing is working: Check Laravel logs for token lookup errors
 
 **Solution:**
-- Verify sudo permission is configured correctly
+- Verify sudo permission is configured correctly: `www-data ALL=(ALL) NOPASSWD: /usr/bin/ndsctl clients`
 - Check device MAC address in database matches NoDogSplash client list
+- Verify token parsing handles multi-line format correctly (see PortalController implementation)
 - Check Laravel logs: `tail -f storage/logs/laravel.log`
+- Test token lookup manually: `sudo -u www-data sudo ndsctl clients | grep -A 10 "token=TOKEN"`
 
 ### Issue: Redirect Loop When Accessing Portal
 
@@ -834,6 +890,8 @@ var_dump($result);  // Should return true
 - Browser shows redirect loop error
 - Portal page never loads
 - URL keeps redirecting between `http://192.168.4.1/portal` and `http://192.168.4.1:2050/splash.html`
+
+**Note:** This should not happen if `RedirectURL` is commented out and the firewall rule is set correctly.
 
 **Cause:** NoDogSplash is intercepting requests to the portal and redirecting them again, creating an infinite loop. This happens because Preauthenticated users don't have permission to access port 80 on the gateway IP.
 
@@ -906,19 +964,21 @@ Use this checklist to verify your setup is complete:
 
 - [ ] NoDogSplash installed (`nodogsplash -version` works)
 - [ ] Configuration file exists and is configured correctly
+- [ ] **RedirectURL is commented out** (not set - using splash page instead)
 - [ ] NoDogSplash service is running (`systemctl status nodogsplash`)
 - [ ] IP forwarding service is enabled and running
-- [ ] Splash page exists at `/etc/nodogsplash/htdocs/splash.html`
+- [ ] Splash page exists at `/etc/nodogsplash/htdocs/splash.html` and redirects with token
 - [ ] Scripts are executable (`ls -la scripts/*.sh` shows `-rwxr-xr-x`)
-- [ ] Sudoers configured (all required permissions present)
+- [ ] Sudoers configured (all required permissions present, including `ndsctl clients`)
 - [ ] Portal config exists (`config/portal.php` with correct URL)
-- [ ] PortalController supports token lookup
+- [ ] PortalController supports token lookup with multi-line parsing
 - [ ] Firewall rule allows portal access (prevents redirect loop)
-- [ ] Redirect script works manually
+- [ ] Redirect script works manually (device goes to splash page, then portal with token)
 - [ ] Check script works manually
 - [ ] Allow through script works manually
-- [ ] Real device redirect test successful
+- [ ] Real device redirect test successful (splash page → portal with token → device identified)
 - [ ] Laravel integration test successful
+- [ ] State changes work without disconnect/reconnect
 - [ ] Service starts on boot (enabled)
 - [ ] Logs show no errors
 
@@ -928,12 +988,13 @@ Use this checklist to verify your setup is complete:
 
 This setup provides a complete NoDogSplash integration that:
 
-1. **Redirects devices** to the portal when their time expires
+1. **Redirects devices** to the portal when their time expires (via splash page with token)
 2. **Allows devices through** after they complete quizzes/videos
-3. **Uses token-based lookup** to identify devices from NoDogSplash
-4. **Intercepts HTTP requests** and redirects to portal (HTTPS requests are not intercepted)
-5. **Persists configuration** across reboots (IP forwarding, services)
-6. **Integrates seamlessly** with Laravel application
+3. **Uses token-based lookup** to identify devices from NoDogSplash (multi-line parsing)
+4. **Intercepts HTTP requests** and redirects to splash page, which redirects to portal with token
+5. **State changes work immediately** without requiring disconnect/reconnect
+6. **Persists configuration** across reboots (IP forwarding, services)
+7. **Integrates seamlessly** with Laravel application
 
 **Key Components:**
 - NoDogSplash service (captive portal)
