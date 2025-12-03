@@ -103,26 +103,48 @@ class PortalController extends Controller
     }
 
     /**
-     * Get device from request (by MAC address or session).
+     * Get device from request (by MAC address, token, or session).
      * 
      * This is a helper method used by all portal methods to identify which
      * child's device is accessing the portal.
      * 
      * How it works:
-     * 1. Tries to get MAC address from URL query parameter (?mac=AA:BB:CC:DD:EE:FF)
-     * 2. If not found, tries form input (POST data)
-     * 3. If not found, tries session (stored from previous request)
-     * 4. Looks up device in database by MAC address
+     * 1. Tries to get NoDogSplash token from URL query parameter (?tok=...)
+     *    - If token found, looks up MAC address from NoDogSplash client list
+     * 2. If no token, tries to get MAC address from URL query parameter (?mac=AA:BB:CC:DD:EE:FF)
+     * 3. If not found, tries form input (POST data)
+     * 4. If not found, tries session (stored from previous request)
+     * 5. Looks up device in database by MAC address
      * 
      * Why MAC address? Each device has a unique MAC address (like a fingerprint).
      * This identifies which child's device is taking the quiz, even without login.
+     * 
+     * Why token support? NoDogSplash passes a token parameter when redirecting
+     * from the splash page. We can look up the MAC address from the token.
      * 
      * @param Request $request The HTTP request
      * @return Device|null The device if found, null if not found
      */
     protected function getDevice(Request $request): ?Device
     {
-        // Try to get MAC address from three possible sources (in order):
+        // First, check if we have a NoDogSplash token parameter
+        // This happens when device is redirected from NoDogSplash splash page
+        $token = $request->query('tok');
+        if ($token) {
+            // Look up MAC address from token using ndsctl
+            $macAddress = $this->getMacFromToken($token);
+            if ($macAddress) {
+                // Store MAC in session for subsequent requests
+                session(['device_mac' => $macAddress]);
+                // Look up device in database
+                $device = Device::where('mac_address', $macAddress)->first();
+                if ($device) {
+                    return $device;
+                }
+            }
+        }
+
+        // Fallback to original method: Try to get MAC address from three possible sources (in order):
         // 1. URL query parameter: ?mac=AA:BB:CC:DD:EE:FF
         // 2. Form input (POST data)
         // 3. Session (stored from previous request)
@@ -139,6 +161,68 @@ class PortalController extends Controller
         // Look up device in database by MAC address
         // ->first() returns the first matching device or null if not found
         return Device::where('mac_address', $macAddress)->first();
+    }
+
+    /**
+     * Get MAC address from NoDogSplash token.
+     * 
+     * NoDogSplash assigns a unique token to each client device. We can use
+     * the `ndsctl clients` command to look up the MAC address associated with
+     * a token.
+     * 
+     * How it works:
+     * 1. Executes `ndsctl clients` command to get list of all connected clients
+     * 2. Parses output to find the line containing the token
+     * 3. Extracts MAC address from that line
+     * 4. Returns MAC address in lowercase format (e.g., "e6:6a:8f:19:be:b1")
+     * 
+     * Output format from ndsctl clients:
+     * client_id=0 ip=192.168.4.32 mac=e6:6a:8f:19:be:b1 ... token=abc123
+     * 
+     * @param string $token The NoDogSplash token
+     * @return string|null The MAC address if found, null if not found
+     */
+    protected function getMacFromToken(string $token): ?string
+    {
+        // Execute ndsctl clients command to get list of all connected clients
+        // This requires sudo, so we use shell_exec with proper error handling
+        $output = @shell_exec("sudo ndsctl clients 2>/dev/null");
+        
+        if (!$output) {
+            // Command failed or no output
+            Log::warning('Failed to execute ndsctl clients', [
+                'token' => $token,
+            ]);
+            return null;
+        }
+        
+        // Parse output to find token and extract MAC
+        // Format: client_id=0 ip=192.168.4.32 mac=e6:6a:8f:19:be:b1 ... token=abc123
+        $lines = explode("\n", trim($output));
+        
+        foreach ($lines as $line) {
+            // Skip empty lines
+            if (empty(trim($line))) {
+                continue;
+            }
+            
+            // Check if this line contains the token we're looking for
+            if (strpos($line, "token=$token") !== false) {
+                // Extract MAC address using regex
+                // MAC format: XX:XX:XX:XX:XX:XX (17 characters)
+                if (preg_match('/mac=([a-fA-F0-9:]{17})/', $line, $matches)) {
+                    // Return MAC address in lowercase for consistency
+                    return strtolower($matches[1]);
+                }
+            }
+        }
+        
+        // Token not found in client list
+        Log::warning('Token not found in NoDogSplash client list', [
+            'token' => $token,
+        ]);
+        
+        return null;
     }
 
     /**
