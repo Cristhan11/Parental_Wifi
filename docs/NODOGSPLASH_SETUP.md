@@ -4,7 +4,7 @@
 
 This document provides the complete, verified setup for NoDogSplash integration in the Parental WiFi Control System. This setup has been tested and confirmed working on Raspberry Pi 4B running Raspberry Pi OS Lite (64-bit).
 
-**Note:** For DNS interception setup (HTTPS support), see `docs/DNS_INTERCEPTION_SETUP.md`.
+**Note:** The system only intercepts HTTP requests. HTTPS requests are not intercepted. This is an acceptable limitation for the current use case.
 
 ## System Configuration
 
@@ -910,11 +910,10 @@ Use this checklist to verify your setup is complete:
 - [ ] IP forwarding service is enabled and running
 - [ ] Splash page exists at `/etc/nodogsplash/htdocs/splash.html`
 - [ ] Scripts are executable (`ls -la scripts/*.sh` shows `-rwxr-xr-x`)
-- [ ] Sudoers configured (all 5 permissions present, including DNS interception)
+- [ ] Sudoers configured (all required permissions present)
 - [ ] Portal config exists (`config/portal.php` with correct URL)
 - [ ] PortalController supports token lookup
 - [ ] Firewall rule allows portal access (prevents redirect loop)
-- [ ] DNS interception configured (dnsmasq conf-dir, script executable, sudoers)
 - [ ] Redirect script works manually
 - [ ] Check script works manually
 - [ ] Allow through script works manually
@@ -932,18 +931,17 @@ This setup provides a complete NoDogSplash integration that:
 1. **Redirects devices** to the portal when their time expires
 2. **Allows devices through** after they complete quizzes/videos
 3. **Uses token-based lookup** to identify devices from NoDogSplash
-4. **Intercepts HTTPS requests** via DNS interception (enables HTTPS support)
+4. **Intercepts HTTP requests** and redirects to portal (HTTPS requests are not intercepted)
 5. **Persists configuration** across reboots (IP forwarding, services)
 6. **Integrates seamlessly** with Laravel application
 
 **Key Components:**
 - NoDogSplash service (captive portal)
-- Bash scripts (device state management, DNS interception)
+- Bash scripts (device state management)
 - Laravel service (NoDogSplashService)
 - Portal controller (token support)
 - Systemd services (IP forwarding, NoDogSplash)
 - Sudoers configuration (script execution)
-- DNS interception (HTTPS support via dnsmasq)
 
 **Key Files:**
 - `/etc/nodogsplash/nodogsplash.conf` - NoDogSplash configuration
@@ -957,47 +955,42 @@ This setup provides a complete NoDogSplash integration that:
 
 ---
 
-## DNS Interception for HTTPS Support
+## HTTP-Only Interception
 
-### Overview
+### Current Limitation
 
-DNS interception enables HTTPS request interception by redirecting all DNS queries to the gateway IP (192.168.4.1). This allows NoDogSplash to intercept HTTPS requests that would otherwise fail.
+The system only intercepts **HTTP requests**. HTTPS requests are not intercepted.
 
-### How It Works
+### What This Means
 
-1. **When device is redirected:**
-   - DNS interception is automatically enabled
-   - All DNS queries resolve to `192.168.4.1` (gateway IP)
-   - HTTPS requests go to gateway, where NoDogSplash intercepts them
+- **HTTP sites** (e.g., `http://google.com`): ✅ Intercepted and redirected to portal
+- **HTTPS sites** (e.g., `https://google.com`): ❌ Not intercepted (devices can access directly)
 
-2. **When device is authenticated:**
-   - DNS interception is automatically disabled
-   - Normal DNS resolution is restored
-   - Device can access websites normally
+### Why This Limitation
 
-### Configuration
+HTTPS interception would require:
+- DNS interception (redirecting all DNS queries to gateway)
+- SSL certificate management
+- More complex configuration
+- Potential security concerns
 
-See `docs/DNS_INTERCEPTION_SETUP.md` for complete setup instructions.
+HTTP interception is sufficient for the use case, as:
+- Most browsers attempt HTTP first for captive portal detection
+- Many sites still support HTTP
+- This keeps the system simple and maintainable
 
-**Quick Setup:**
-1. Add `conf-dir=/etc/dnsmasq.d/,*.conf` to `/etc/dnsmasq.conf`
-2. Create `/etc/dnsmasq.d/` directory
-3. Add sudoers permission for `manage_dns_interception.sh`
-4. Make script executable: `chmod +x scripts/manage_dns_interception.sh`
+### Future Considerations
 
-### Important Notes
-
-- DNS interception is **global** (affects all devices when enabled)
-- Whitelisted devices **never** have DNS interception enabled
-- Managed automatically by `NoDogSplashService`
-- See `docs/DNS_INTERCEPTION_SETUP.md` for details
+If HTTPS interception becomes necessary in the future, the following approaches could be considered:
+1. DNS interception with SSL certificate management
+2. Transparent proxy with SSL termination
+3. Browser-based captive portal detection (using HTTP endpoints)
 
 ## Related Documentation
 
 - **NoDogSplash Integration Details**: `docs/NODOGSPLASH_INTEGRATION.md`
 - **NoDogSplash Setup Guide**: `docs/NODOGSPLASH_SETUP_GUIDE.md`
 - **NoDogSplash Redirect Fix**: `docs/NODOGSPLASH_REDIRECT_FIX.md`
-- **DNS Interception Setup**: `docs/DNS_INTERCEPTION_SETUP.md`
 - **Network Control System**: `docs/NETWORK_CONTROL_SYSTEM_ARCHITECTURE.md`
 - **Raspberry Pi Services Setup**: `docs/RASPBERRY_PI_SERVICES_SETUP.md`
 

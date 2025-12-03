@@ -769,11 +769,6 @@ NoDogSplash manages devices in two states:
 - **How**: Queries `ndsctl clients` and checks device state
 - **Returns**: Exit code 0 if Preauthenticated (redirected), 1 if Authenticated (not redirected)
 
-#### `manage_dns_interception.sh`
-- **Purpose**: Manages DNS interception for HTTPS support
-- **How**: Adds/removes `address=/#/192.168.4.1` from dnsmasq config
-- **Result**: All DNS queries resolve to gateway IP, allowing HTTPS interception
-- **Usage**: Called automatically by `NoDogSplashService` when redirecting/allowing devices
 
 ### Integration with NetworkService
 
@@ -789,26 +784,18 @@ When time is granted:
 1. NetworkService unblocks device (Layer 2)
 2. NoDogSplashService allows device through (Layer 3)
 
-### DNS Interception for HTTPS Support
+### HTTP-Only Interception
 
-**Purpose:** Enable HTTPS request interception by redirecting DNS queries to gateway IP.
+**Current Limitation:** The system only intercepts HTTP requests. HTTPS requests are not intercepted.
 
-**How It Works:**
-- When device is redirected: DNS interception is enabled
-- All DNS queries resolve to `192.168.4.1` (gateway IP)
-- HTTPS requests go to gateway, where NoDogSplash intercepts them
-- When device is authenticated: DNS interception is disabled
-- Normal DNS resolution is restored
+**What This Means:**
+- HTTP sites (e.g., `http://google.com`) are intercepted and redirected to portal ✅
+- HTTPS sites (e.g., `https://google.com`) are NOT intercepted ❌
 
-**Implementation:**
-- Script: `manage_dns_interception.sh`
-- Config file: `/etc/dnsmasq.d/captive-portal.conf`
-- Managed automatically by `NoDogSplashService`
-
-**Important Notes:**
-- DNS interception is global (affects all devices when enabled)
-- Whitelisted devices never have DNS interception enabled
-- See `docs/DNS_INTERCEPTION_SETUP.md` for setup details
+**Why This Limitation:**
+- HTTPS interception would require DNS interception, SSL certificate management, and more complex configuration
+- HTTP interception is sufficient for the use case, as most browsers attempt HTTP first for captive portal detection
+- This keeps the system simple and maintainable
 
 ### Configuration
 
@@ -817,9 +804,8 @@ NoDogSplash requires:
 - Firewall rule: Allow port 80 to gateway IP for Preauthenticated users (prevents redirect loop)
 - Systemd service: `nodogsplash.service`
 - Sudo permissions: `www-data` can execute `ndsctl` commands
-- DNS interception: dnsmasq config directory and script permissions
 
-For complete setup details, see `docs/NODOGSPLASH_SETUP.md` and `docs/DNS_INTERCEPTION_SETUP.md`.
+For complete setup details, see `docs/NODOGSPLASH_SETUP.md`.
 
 ---
 

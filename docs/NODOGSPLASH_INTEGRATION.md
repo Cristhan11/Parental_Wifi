@@ -57,8 +57,7 @@ app/Services/
 scripts/
 ├── redirect_device_portal.sh    # Redirect device to portal
 ├── allow_device_through.sh      # Remove redirect (allow device)
-├── check_device_redirected.sh   # Check redirect status
-└── manage_dns_interception.sh  # Manage DNS interception for HTTPS support
+└── check_device_redirected.sh   # Check redirect status
 ```
 
 ---
@@ -257,7 +256,7 @@ protected array $allowedScripts = [
 
 Deauthenticates a device using `ndsctl deauth`, putting it in Preauthenticated state. This causes NoDogSplash to redirect all HTTP requests from that device to the portal page (configured via `RedirectURL` in `nodogsplash.conf`).
 
-**Note:** DNS interception is handled separately by `manage_dns_interception.sh` and is called automatically by `NoDogSplashService` after deauthentication.
+**Note:** The system only intercepts HTTP requests. HTTPS requests are not intercepted.
 
 ### Script Structure
 

@@ -116,7 +116,6 @@ class ScriptExecutor
         'redirect_device_portal.sh',
         'allow_device_through.sh',
         'check_device_redirected.sh',
-        'manage_dns_interception.sh',  // DNS interception for HTTPS support
     ];
 
     /**
