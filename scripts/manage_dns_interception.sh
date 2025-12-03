@@ -111,16 +111,35 @@ find_device_ip() {
         return 1
     fi
     
-    # Parse output to find IP for this MAC address
-    # Output format: client_id=0 ip=192.168.4.32 mac=e6:6a:8f:19:be:b1 token=abc123
+    # Parse output - ndsctl clients outputs each field on a separate line
+    # Format:
+    # 1
+    # client_id=0
+    # ip=192.168.4.32
+    # mac=e6:6a:8f:19:be:b1
+    # ...
+    # Each client block starts with client_id, then ip, then mac, etc.
+    local current_ip=""
     while IFS= read -r line; do
-        if echo "$line" | grep -qi "mac=$mac"; then
-            # Extract IP address from line
-            local ip=$(echo "$line" | grep -oE "ip=[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+" | cut -d= -f2)
-            if [ -n "$ip" ]; then
-                echo "$ip"
+        # Skip empty lines and the count line (just a number)
+        [ -z "$line" ] && continue
+        echo "$line" | grep -qE "^[0-9]+$" && continue
+        
+        # Check if this line contains an IP address
+        if echo "$line" | grep -qE "^ip=[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$"; then
+            current_ip=$(echo "$line" | cut -d= -f2)
+        fi
+        # Check if this line contains the MAC address we're looking for
+        if echo "$line" | grep -qiE "^mac=$mac$"; then
+            if [ -n "$current_ip" ]; then
+                echo "$current_ip"
                 return 0
             fi
+        fi
+        # Reset IP when we hit a new client (client_id line)
+        # This ensures we only match IP with MAC from the same client
+        if echo "$line" | grep -qE "^client_id="; then
+            current_ip=""
         fi
     done <<< "$client_info"
     
