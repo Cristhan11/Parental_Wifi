@@ -13,7 +13,7 @@
 # 1. Validates the MAC address format
 # 2. Normalizes MAC address to standard format (with colons)
 # 3. Finds the device's token using ndsctl clients
-# 4. Authenticates the device using ndsctl authenticate
+# 4. Authenticates the device using ndsctl auth
 # 5. Returns exit code 0 on success, non-zero on error
 #
 # Exit Codes:
@@ -141,6 +141,63 @@ find_device_token() {
 }
 
 ################################################################################
+# Function: get_device_state
+# 
+# Purpose: Get the current authentication state of a device
+#
+# Input:   MAC address (normalized)
+# Output:  State string (Preauthenticated, Authenticated, or empty if not found)
+################################################################################
+get_device_state() {
+    local mac="$1"
+    local mac_lower=$(echo "$mac" | tr '[:upper:]' '[:lower:]')
+    
+    # Get client list and parse for this MAC
+    set +e
+    local client_info=$(sudo "$NDSCTL" clients 2>/dev/null || echo "")
+    set -e
+    
+    if [ -z "$client_info" ]; then
+        return 1
+    fi
+    
+    # Parse client list to find state for this MAC address
+    local state=""
+    local current_mac=""
+    local in_client_block=false
+    
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^client_id= ]]; then
+            in_client_block=true
+            current_mac=""
+            state=""
+        elif [[ "$line" =~ ^mac= ]]; then
+            current_mac=$(echo "$line" | sed 's/^mac=//' | tr '[:upper:]' '[:lower:]')
+        elif [[ "$line" =~ ^state= ]]; then
+            if [ "$current_mac" = "$mac_lower" ]; then
+                state=$(echo "$line" | sed 's/^state=//')
+            fi
+        elif [ -z "$line" ]; then
+            if [ "$in_client_block" = true ] && [ "$current_mac" = "$mac_lower" ] && [ -n "$state" ]; then
+                echo "$state"
+                return 0
+            fi
+            in_client_block=false
+            current_mac=""
+            state=""
+        fi
+    done <<< "$client_info"
+    
+    # Check last client block
+    if [ "$in_client_block" = true ] && [ "$current_mac" = "$mac_lower" ] && [ -n "$state" ]; then
+        echo "$state"
+        return 0
+    fi
+    
+    return 1
+}
+
+################################################################################
 # Function: authenticate_device
 # 
 # Purpose: Authenticate a device using ndsctl, allowing it to access internet
@@ -156,10 +213,10 @@ authenticate_device() {
         return 1
     fi
     
-    # Authenticate device using ndsctl
+    # Authenticate device using ndsctl auth (not authenticate)
     # This puts the device in Authenticated state
     # Device can now access internet normally
-    if sudo "$NDSCTL" authenticate "$token" >/dev/null 2>&1; then
+    if sudo "$NDSCTL" auth "$token" >/dev/null 2>&1; then
         echo "Info: Device authenticated successfully (token: $token)" >&2
         return 0
     else
@@ -210,7 +267,20 @@ fi
 
 echo "Info: Found device token: $DEVICE_TOKEN" >&2
 
-# Step 2: Authenticate device (allow it to access internet)
+# Step 2: Check device state first (optimization - skip if already Authenticated)
+set +e
+DEVICE_STATE=$(get_device_state "$NORMALIZED_MAC")
+STATE_STATUS=$?
+set -e
+
+if [ $STATE_STATUS -eq 0 ] && [ "$DEVICE_STATE" = "Authenticated" ]; then
+    echo "Info: Device is already in Authenticated state - internet access is active" >&2
+    echo "Device authenticated successfully" >&2
+    echo "Device $NORMALIZED_MAC can now access internet normally" >&2
+    exit 0
+fi
+
+# Step 3: Authenticate device (allow it to access internet)
 if ! authenticate_device "$DEVICE_TOKEN"; then
     echo "Error: Failed to authenticate device" >&2
     exit 3
