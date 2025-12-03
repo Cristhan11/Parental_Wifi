@@ -65,7 +65,7 @@ class PortalController extends Controller
         // Get device from MAC address in request
         // getDevice() looks for MAC in URL query (?mac=...), POST data, or session
         $device = $this->getDevice($request);
-        
+
         // If device not found, show landing page with error message
         // This happens if MAC address doesn't exist in database
         // Child will see friendly error message instead of crash
@@ -75,7 +75,7 @@ class PortalController extends Controller
                 'error' => 'Device not found. Please connect to the network.',
             ]);
         }
-        
+
         // Get available quizzes for this device
         // ->quizzes() gets all quizzes assigned to this device (many-to-many relationship)
         // ->where('is_active', true) filters to only active quizzes (parents can deactivate)
@@ -83,7 +83,7 @@ class PortalController extends Controller
         $quizzes = $device->quizzes()
             ->where('is_active', true)
             ->get();
-        
+
         // Get available videos for this device
         // ->videos() gets all videos assigned to this device (many-to-many relationship)
         // ->where('is_active', true) filters to only active videos
@@ -91,7 +91,7 @@ class PortalController extends Controller
         $videos = $device->videos()
             ->where('is_active', true)
             ->get();
-        
+
         // Return landing page view with data
         // Passes device, quizzes, and videos to the Blade template
         // Template will display them in a user-friendly format
@@ -187,7 +187,7 @@ class PortalController extends Controller
         // Execute ndsctl clients command to get list of all connected clients
         // This requires sudo, so we use shell_exec with proper error handling
         $output = @shell_exec("sudo ndsctl clients 2>/dev/null");
-        
+
         if (!$output) {
             // Command failed or no output
             Log::warning('Failed to execute ndsctl clients', [
@@ -195,33 +195,59 @@ class PortalController extends Controller
             ]);
             return null;
         }
-        
-        // Parse output to find token and extract MAC
-        // Format: client_id=0 ip=192.168.4.32 mac=e6:6a:8f:19:be:b1 ... token=abc123
+
+        // Parse multi-line output to find token and extract MAC
+        // Format:
+        // client_id=0
+        // ip=192.168.4.32
+        // mac=e6:6a:8f:19:be:b1
+        // token=74b99472
+        // state=Preauthenticated
         $lines = explode("\n", trim($output));
-        
+
+        $currentMac = null;
+        $inClientBlock = false;
+
         foreach ($lines as $line) {
-            // Skip empty lines
-            if (empty(trim($line))) {
+            $line = trim($line);
+
+            // Skip empty lines (end of client block)
+            if (empty($line)) {
+                $inClientBlock = false;
+                $currentMac = null;
                 continue;
             }
-            
-            // Check if this line contains the token we're looking for
-            if (strpos($line, "token=$token") !== false) {
-                // Extract MAC address using regex
-                // MAC format: XX:XX:XX:XX:XX:XX (17 characters)
-                if (preg_match('/mac=([a-fA-F0-9:]{17})/', $line, $matches)) {
-                    // Return MAC address in lowercase for consistency
-                    return strtolower($matches[1]);
+
+            // Check if this is the start of a new client block
+            if (strpos($line, 'client_id=') === 0) {
+                $inClientBlock = true;
+                $currentMac = null;
+                continue;
+            }
+
+            // If we're in a client block, look for MAC and token
+            if ($inClientBlock) {
+                // Extract MAC address (remove "mac=" prefix)
+                if (strpos($line, 'mac=') === 0) {
+                    $currentMac = strtolower(substr($line, 4)); // Remove "mac=" prefix
+                }
+
+                // Check if this line contains the token we're looking for
+                if (strpos($line, "token=$token") === 0) {
+                    // Found the token! Return the MAC we collected
+                    if ($currentMac) {
+                        return $currentMac;
+                    }
                 }
             }
         }
-        
+
         // Token not found in client list
         Log::warning('Token not found in NoDogSplash client list', [
             'token' => $token,
+            'output_sample' => substr($output, 0, 200), // Log first 200 chars for debugging
         ]);
-        
+
         return null;
     }
 
@@ -278,7 +304,7 @@ class PortalController extends Controller
         // Questions are stored as: {questions: [{id: 1, question: "...", ...}]}
         // We extract the inner array: [{id: 1, question: "...", ...}]
         $questions = $quiz->questions['questions'] ?? [];
-        
+
         // Store quiz attempt in session for progress tracking
         // Session is temporary storage that persists across page requests
         // This allows us to track which questions child has answered
@@ -345,7 +371,7 @@ class PortalController extends Controller
         // Get quiz and questions from session data
         $quiz = Quiz::findOrFail($quizAttemptData['quiz_id']);
         $questions = $quizAttemptData['questions'];
-        
+
         // Get child's submitted answers from form
         // Form sends answers as array: [0 => 'a', 1 => 'Paris', 2 => 'True']
         $submittedAnswers = $request->input('answers', []);
@@ -363,18 +389,18 @@ class PortalController extends Controller
 
             // Compare answers based on question type
             $isCorrect = false;
-            
+
             if ($question['type'] === 'multiple_choice') {
                 // Multiple Choice: Child selects letter (a, b, c, d)
                 // We need to convert letter to option value and compare
-                
+
                 $submittedLetter = strtolower(trim($submittedAnswer));  // "a" or "b" or "c" or "d"
                 $options = $question['options'] ?? [];  // ["2", "3", "4", "5"]
-                
+
                 // Convert letter to array index: 'a' = 0, 'b' = 1, 'c' = 2, 'd' = 3
                 // ord('a') = 97, ord('b') = 98, so ord('b') - ord('a') = 1
                 $submittedIndex = ord($submittedLetter) - ord('a');
-                
+
                 // Get the option value the child selected
                 if (isset($options[$submittedIndex])) {
                     $submittedOptionValue = strtolower(trim($options[$submittedIndex]));  // e.g., "4"
@@ -401,7 +427,7 @@ class PortalController extends Controller
         // Example: 3 correct out of 5 = (3/5) * 100 = 60%
         // round() rounds to nearest integer (60.5% becomes 61%)
         $score = $totalQuestions > 0 ? round(($correctCount / $totalQuestions) * 100) : 0;
-        
+
         // Check if child passed (score >= passing_score)
         // Example: If passing_score is 70% and score is 60%, passed = false
         $passed = $quiz->isPassingScore($score);
@@ -470,7 +496,7 @@ class PortalController extends Controller
     {
         // Get device that took the quiz
         $device = Device::find($attempt->device_id);
-        
+
         // Validation: Device must exist
         if (!$device) {
             return redirect()->route('portal.landing')
@@ -690,7 +716,7 @@ class PortalController extends Controller
         // Get video that was watched
         // Load video relationship to ensure it's available
         $video = $completion->video;
-        
+
         // Safety check: Video must exist
         if (!$video) {
             Log::error('Video not found for completion', [
@@ -705,7 +731,7 @@ class PortalController extends Controller
         // Form sends words as array or comma-separated string
         // Example: ["adventure", "curious", "discover"] or "adventure, curious, discover"
         $wordsEnteredInput = $request->input('words', '');
-        
+
         // Convert to array if it's a string
         // Handles both array input and comma-separated string input
         if (is_string($wordsEnteredInput)) {
@@ -744,7 +770,7 @@ class PortalController extends Controller
                 // Example: If time_reward_minutes is 15, device gets 15 more minutes
                 // Pass fresh completion to ensure all fields are up-to-date
                 $this->timeGrantingService->grantTimeFromVideo($device, $completion);
-                
+
                 Log::info('Time granted successfully after video completion', [
                     'device_id' => $device->id,
                     'video_completion_id' => $completion->id,
@@ -804,7 +830,7 @@ class PortalController extends Controller
     {
         // Get device that watched the video
         $device = Device::find($completion->device_id);
-        
+
         // Validation: Device must exist
         if (!$device) {
             return redirect()->route('portal.landing')
@@ -839,6 +865,4 @@ class PortalController extends Controller
             'wordsShown' => $wordsShown,  // Show correct words for learning
         ]);
     }
-
 }
-
