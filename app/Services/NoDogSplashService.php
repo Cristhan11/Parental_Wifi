@@ -203,8 +203,11 @@ class NoDogSplashService
         // This is the URL that NoDogSplash will redirect to
         // Example: http://192.168.4.1/portal?mac=AA:BB:CC:DD:EE:FF
         // The MAC address in the URL tells our portal which device is accessing it
-        // route() generates the full URL using Laravel's routing system
-        $portalUrl = route('portal.landing', ['mac' => $macAddress]);
+        // Use WiFi AP IP (192.168.4.1) from config instead of server IP
+        // This ensures devices on WiFi network can access the portal
+        $portalBaseUrl = config('portal.url', 'http://192.168.4.1');
+        $portalPath = route('portal.landing', ['mac' => $macAddress], false);
+        $portalUrl = $portalBaseUrl . $portalPath;
 
         // Execute the redirect_device_portal.sh script via ScriptExecutor
         // This script:
