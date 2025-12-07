@@ -1,6 +1,10 @@
 <?php
 
 use App\Jobs\CheckTimeExpiration;
+use App\Jobs\TrackActiveSessions;
+use App\Jobs\MonitorDeviceConnections;
+use App\Jobs\EnforceSchedules;
+use App\Jobs\ParseNetworkLogs;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
@@ -73,4 +77,177 @@ Artisan::command('inspire', function () {
 Schedule::job(new CheckTimeExpiration)
     ->everyTwoMinutes() // Run every 2 minutes
     ->name('check-time-expiration') // Name for logging and monitoring
+    ->withoutOverlapping(); // Prevent multiple instances running at once
+
+/**
+ * Schedule TrackActiveSessions Job
+ * 
+ * This schedules the TrackActiveSessions job to run every 5 minutes.
+ * The job tracks all active internet sessions and deducts time from devices
+ * based on how long they've been browsing.
+ * 
+ * Why Every 5 Minutes?
+ * - Balance between accuracy and performance
+ * - Too frequent (every 1 minute): Wastes server resources, may cause conflicts
+ * - Too infrequent (every 10 minutes): Time tracking becomes less accurate
+ * - 5 minutes is a good balance: Accurate time tracking without overloading server
+ * 
+ * How It Works:
+ * 1. Scheduler runs every minute (via crontab)
+ * 2. Laravel checks if TrackActiveSessions job is due (every 5 minutes)
+ * 3. If due, dispatches the job to the queue
+ * 4. Queue worker processes the job
+ * 5. Job calls TimeTrackingService::trackActiveSessions() to deduct time
+ * 
+ * What the Job Does:
+ * - Finds all active sessions (sessions that haven't ended)
+ * - For each session, calculates how long it's been running
+ * - Deducts that time from device's remaining_time_minutes
+ * - Updates device's last_seen_at timestamp
+ * - Skips whitelisted devices (they don't have time deducted)
+ * 
+ * Error Handling:
+ * - If job fails, Laravel will retry it (based on queue configuration)
+ * - Errors are logged so we can debug issues
+ * - One failed session doesn't stop processing of other sessions
+ * 
+ * Testing:
+ * - Test manually: php artisan schedule:test
+ * - Or dispatch job directly: TrackActiveSessions::dispatch()
+ * - Check logs: storage/logs/laravel.log
+ */
+Schedule::job(new TrackActiveSessions)
+    ->everyFiveMinutes() // Run every 5 minutes
+    ->name('track-active-sessions') // Name for logging and monitoring
+    ->withoutOverlapping(); // Prevent multiple instances running at once
+
+/**
+ * Schedule MonitorDeviceConnections Job
+ * 
+ * This schedules the MonitorDeviceConnections job to run every 2 minutes.
+ * The job monitors the network to detect new devices connecting to the WiFi
+ * access point and devices that have disconnected.
+ * 
+ * Why Every 2 Minutes?
+ * - Balance between detection speed and performance
+ * - Too frequent (every 30 seconds): Wastes server resources, may cause conflicts
+ * - Too infrequent (every 5 minutes): Device connections/disconnections detected slowly
+ * - 2 minutes is a good balance: Fast detection without overloading server
+ * 
+ * How It Works:
+ * 1. Scheduler runs every minute (via crontab)
+ * 2. Laravel checks if MonitorDeviceConnections job is due (every 2 minutes)
+ * 3. If due, dispatches the job to the queue
+ * 4. Queue worker processes the job
+ * 5. Job gets connected devices from network and compares with database
+ * 
+ * What the Job Does:
+ * - Gets list of currently connected devices from network (via NetworkService)
+ * - Updates device IP addresses when they reconnect
+ * - Updates device last_seen_at timestamps
+ * - Ends active sessions for devices that disconnected
+ * - Logs new device connections for parent review
+ * 
+ * Error Handling:
+ * - If job fails, Laravel will retry it (based on queue configuration)
+ * - Errors are logged so we can debug issues
+ * - One failed device doesn't stop processing of other devices
+ * 
+ * Testing:
+ * - Test manually: php artisan schedule:test
+ * - Or dispatch job directly: MonitorDeviceConnections::dispatch()
+ * - Check logs: storage/logs/laravel.log
+ */
+Schedule::job(new MonitorDeviceConnections)
+    ->everyTwoMinutes() // Run every 2 minutes
+    ->name('monitor-device-connections') // Name for logging and monitoring
+    ->withoutOverlapping(); // Prevent multiple instances running at once
+
+/**
+ * Schedule EnforceSchedules Job
+ * 
+ * This schedules the EnforceSchedules job to run every 1 minute.
+ * The job enforces time-based access rules for devices (e.g., "Internet allowed
+ * Monday-Friday 3PM-9PM") and blocks/unblocks devices accordingly.
+ * 
+ * Why Every 1 Minute?
+ * - Schedules need precise enforcement (e.g., block at exactly 9:00 PM)
+ * - Too infrequent (every 5 minutes): Devices might use extra time before being blocked
+ * - 1 minute ensures schedules are enforced within 1 minute of scheduled time
+ * 
+ * How It Works:
+ * 1. Scheduler runs every minute (via crontab)
+ * 2. Laravel checks if EnforceSchedules job is due (every 1 minute)
+ * 3. If due, dispatches the job to the queue
+ * 4. Queue worker processes the job
+ * 5. Job checks current day and time, finds active schedules, and enforces rules
+ * 
+ * What the Job Does:
+ * - Gets current day of week and time
+ * - Finds all active schedules matching current day
+ * - For each schedule, checks if current time is within allowed time window
+ * - Checks if daily duration limit has been reached
+ * - Blocks/unblocks devices based on schedule rules
+ * - Skips whitelisted devices (they bypass all schedules)
+ * 
+ * Error Handling:
+ * - If job fails, Laravel will retry it (based on queue configuration)
+ * - Errors are logged so we can debug issues
+ * - One failed schedule doesn't stop processing of other schedules
+ * 
+ * Testing:
+ * - Test manually: php artisan schedule:test
+ * - Or dispatch job directly: EnforceSchedules::dispatch()
+ * - Check logs: storage/logs/laravel.log
+ */
+Schedule::job(new EnforceSchedules)
+    ->everyMinute() // Run every 1 minute (precise schedule enforcement)
+    ->name('enforce-schedules') // Name for logging and monitoring
+    ->withoutOverlapping(); // Prevent multiple instances running at once
+
+/**
+ * Schedule ParseNetworkLogs Job
+ * 
+ * This schedules the ParseNetworkLogs job to run every 10 minutes.
+ * The job parses network traffic logs to extract browsing history and create
+ * BrowsingLog records in the database.
+ * 
+ * Why Every 10 Minutes?
+ * - Logs accumulate over time, don't need real-time parsing
+ * - Too frequent (every 1 minute): Wastes server resources
+ * - Too infrequent (every 30 minutes): Browsing history becomes stale
+ * - 10 minutes is a good balance: Recent history without overloading server
+ * 
+ * How It Works:
+ * 1. Scheduler runs every minute (via crontab)
+ * 2. Laravel checks if ParseNetworkLogs job is due (every 10 minutes)
+ * 3. If due, dispatches the job to the queue
+ * 4. Queue worker processes the job
+ * 5. Job reads log file, parses entries, and creates BrowsingLog records
+ * 
+ * What the Job Does:
+ * - Reads network log files (tcpdump or iptables logs)
+ * - Parses log entries to extract HTTP requests
+ * - Extracts URL, domain, IP address, timestamp, and other information
+ * - Matches requests to devices by MAC address
+ * - Creates BrowsingLog records in database
+ * - Handles duplicate prevention (skips entries that already exist)
+ * 
+ * Error Handling:
+ * - If job fails, Laravel will retry it (based on queue configuration)
+ * - Errors are logged so we can debug issues
+ * - One failed entry doesn't stop processing of other entries
+ * 
+ * Testing:
+ * - Test manually: php artisan schedule:test
+ * - Or dispatch job directly: ParseNetworkLogs::dispatch()
+ * - Check logs: storage/logs/laravel.log
+ * 
+ * Configuration:
+ * - Log file path: config('network.log_path', '/var/log/tcpdump/network.log')
+ * - Set in .env: NETWORK_LOG_PATH=/var/log/tcpdump/network.log
+ */
+Schedule::job(new ParseNetworkLogs)
+    ->everyTenMinutes() // Run every 10 minutes
+    ->name('parse-network-logs') // Name for logging and monitoring
     ->withoutOverlapping(); // Prevent multiple instances running at once
