@@ -18,6 +18,12 @@
                     <x-nav-link :href="route('quizzes.index')" :active="request()->routeIs('quizzes.*')">
                         {{ __('Quizzes') }}
                     </x-nav-link>
+                    <x-nav-link :href="route('accounts.index')" :active="request()->routeIs('accounts.*')">
+                        {{ __('Accounts') }}
+                    </x-nav-link>
+                    <x-nav-link :href="route('child_devices.index')" :active="request()->routeIs('child_devices.*')">
+                        {{ __('Child Devices') }}
+                    </x-nav-link>
                 </div>
             </div>
 
@@ -75,6 +81,12 @@
             </x-responsive-nav-link>
             <x-responsive-nav-link :href="route('quizzes.index')" :active="request()->routeIs('quizzes.*')">
                 {{ __('Quizzes') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('accounts.index')" :active="request()->routeIs('accounts.*')">
+                {{ __('Accounts') }}
+            </x-responsive-nav-link>
+            <x-responsive-nav-link :href="route('child_devices.index')" :active="request()->routeIs('child_devices.*')">
+                {{ __('Child Devices') }}
             </x-responsive-nav-link>
         </div>
 

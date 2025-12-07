@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuizController;
@@ -42,6 +43,30 @@ Route::middleware('auth')->group(function () {
         Route::get('/{video}/edit', [VideoController::class, 'edit'])->name('edit'); // Show edit form
         Route::put('/{video}', [VideoController::class, 'update'])->name('update'); // Update video
         Route::delete('/{video}', [VideoController::class, 'destroy'])->name('destroy'); // Delete video
+    });
+
+    // Accounts routes - Device management (main CRUD interface - Image 4)
+    // Route: /accounts (separate from child devices)
+    Route::prefix('accounts')->name('accounts.')->group(function () {
+        Route::get('/', [DeviceController::class, 'accounts'])->name('index'); // Main accounts page
+        Route::get('/blocklist', [DeviceController::class, 'blocklist'])->name('blocklist'); // Blocklist page
+        Route::get('/whitelist', [DeviceController::class, 'whitelist'])->name('whitelist'); // Whitelist page
+        Route::get('/create', [DeviceController::class, 'create'])->name('create'); // Show create form
+        Route::post('/', [DeviceController::class, 'store'])->name('store'); // Save new device
+        Route::get('/{device}/edit', [DeviceController::class, 'edit'])->name('edit'); // Show edit form
+        Route::put('/{device}', [DeviceController::class, 'update'])->name('update'); // Update device
+        Route::delete('/{device}', [DeviceController::class, 'destroy'])->name('destroy'); // Delete device
+        Route::post('/{device}/status', [DeviceController::class, 'updateStatus'])->name('status.update'); // Update device status
+        Route::post('/{device}/time', [DeviceController::class, 'updateTimeAllocation'])->name('time.update'); // Update time allocation
+        Route::post('/{device}/update-role', [DeviceController::class, 'updateRole'])->name('role.update'); // Update device role
+    });
+
+    // Child Devices routes - Statistics and monitoring (Image 3)
+    // Route: /child_devices (separate from accounts)
+    Route::prefix('child_devices')->name('child_devices.')->group(function () {
+        Route::get('/', [DeviceController::class, 'index'])->name('index'); // Show stats for first device or selected device
+        Route::get('/{device}', [DeviceController::class, 'index'])->name('show'); // Show stats for specific device
+        Route::get('/api/connected', [DeviceController::class, 'getConnectedDevices'])->name('api.connected'); // Get real-time connected devices
     });
 });
 

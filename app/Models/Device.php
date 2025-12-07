@@ -33,6 +33,7 @@ class Device extends Model
         'name',
         'mac_address',
         'status',
+        'role',
         'ip_address',
         'remaining_time_minutes',
         'total_time_allocated',
