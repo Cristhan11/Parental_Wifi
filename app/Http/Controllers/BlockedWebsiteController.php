@@ -271,11 +271,22 @@ class BlockedWebsiteController extends Controller
         // Get device before deletion
         $device = $blockedWebsite->device;
         
-        // Remove DNS blocking
-        $this->domainBlockingService->unblockDomainForDevice($blockedWebsite, $device);
-        
-        // Delete blocked website
+        // Delete blocked website from database first
         $blockedWebsite->delete();
+        
+        // Update dnsmasq blocklist to regenerate from database
+        // This ensures the config file matches the database state after deletion
+        // If no domains remain, the config file will be removed or emptied
+        try {
+            $this->domainBlockingService->updateDnsmasqBlocklist($device);
+        } catch (\Exception $e) {
+            // Log error but don't fail the deletion
+            // Database deletion succeeded, DNS update is secondary
+            Log::warning("Failed to update dnsmasq blocklist after deletion", [
+                'device_id' => $device->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
         
         return redirect()->route('blocked-websites.index')
             ->with('success', 'Blocked website removed successfully.');
