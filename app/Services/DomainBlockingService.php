@@ -121,6 +121,18 @@ class DomainBlockingService
             'web-fallback.facebook.com', // Web fallback
             'z-m-gateway.facebook.com',  // Mobile gateway
             'gateway.facebook.com',      // API gateway
+            'gateway-fallback.facebook.com', // Gateway fallback
+            'mobile-fallback.facebook.com', // Mobile fallback
+            'm-fallback.facebook.com',   // Mobile fallback
+            'graph-fallback.facebook.com', // Graph fallback
+            'b-graph-fallback.facebook.com', // B-graph fallback
+            'edge-mqtt-fallback.facebook.com', // MQTT fallback
+            'chat-e2ee-mini.facebook.com', // Chat encryption
+            'chat-e2ee-mini-fallback.facebook.com', // Chat fallback
+            'external.xx.fbcdn.net',     // External CDN
+            'static-fallback.xx.fbcdn.net', // Static CDN fallback
+            'scontent-fallback.xx.fbcdn.net', // Content CDN fallback
+            'traffic-nts-ip-assoc.xy.fbcdn.net', // Traffic association
         ],
         'instagram.com' => [
             'api.instagram.com',
