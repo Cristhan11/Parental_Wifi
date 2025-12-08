@@ -112,6 +112,15 @@ class DomainBlockingService
             'b-api.facebook.com',
             'b-graph.facebook.com',
             'star.c10r.facebook.com',
+            'fbpigeon.com',              // Facebook fallback domain
+            'graph.fbpigeon.com',        // Graph API fallback
+            'lookaside.facebook.com',    // Facebook CDN
+            'lookaside-fallback.facebook.com', // CDN fallback
+            'mobile.facebook.com',       // Mobile site
+            'web.facebook.com',          // Web interface
+            'web-fallback.facebook.com', // Web fallback
+            'z-m-gateway.facebook.com',  // Mobile gateway
+            'gateway.facebook.com',      // API gateway
         ],
         'instagram.com' => [
             'api.instagram.com',
