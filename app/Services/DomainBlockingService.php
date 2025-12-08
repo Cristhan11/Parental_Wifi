@@ -448,15 +448,41 @@ class DomainBlockingService
                 'mac_address' => $device->mac_address,
             ]);
             
-            // Execute update_dnsmasq_blocklist.sh script
+            // Get all blocked websites for this device
+            $blockedWebsites = BlockedWebsite::where('device_id', $device->id)->get();
+            
+            // Format domains for script input: DOMAIN:BLOCK_SUBDOMAINS (one per line)
+            // The script expects format: domain.com:1 (1 = block subdomains, 0 = main domain only)
+            $domainsInput = '';
+            foreach ($blockedWebsites as $blockedWebsite) {
+                $domainsToBlock = $blockedWebsite->getDomainsToBlock();
+                $blockSubdomains = $blockedWebsite->shouldBlockSubdomains() ? '1' : '0';
+                
+                foreach ($domainsToBlock as $domain) {
+                    // Format: DOMAIN:BLOCK_SUBDOMAINS
+                    // Example: facebook.com:0 (blocks only facebook.com)
+                    // Example: facebook.com:1 (blocks facebook.com and *.facebook.com)
+                    $domainsInput .= $domain . ':' . $blockSubdomains . "\n";
+                }
+            }
+            
+            Log::debug("Domains to block for device", [
+                'device_id' => $device->id,
+                'domains_input' => trim($domainsInput),
+                'domain_count' => substr_count($domainsInput, "\n"),
+            ]);
+            
+            // Execute update_dnsmasq_blocklist.sh script with stdin input
+            // The script reads domains from stdin in format: DOMAIN:BLOCK_SUBDOMAINS
             $result = $this->scriptExecutor->execute('update_dnsmasq_blocklist.sh', [
                 $device->mac_address,
-            ]);
+            ], $domainsInput);
             
             if (!$result['success']) {
                 Log::error("Failed to update dnsmasq blocklist for device", [
                     'device_id' => $device->id,
                     'error' => $result['error'] ?? 'Unknown error',
+                    'output' => $result['output'] ?? '',
                 ]);
                 return false;
             }

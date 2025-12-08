@@ -188,6 +188,11 @@ class ScriptExecutor
      * - stderr (standard error) is captured separately
      * - Both are included in the result for debugging
      * 
+     * Stdin Support:
+     * - Optional stdin input can be provided for scripts that read from stdin
+     * - Uses proc_open() for stdin support (more secure than shell piping)
+     * - Stdin is passed directly to the script process
+     * 
      * Return Code:
      * - 0 = Success (script executed successfully)
      * - Non-zero = Error (script failed or validation failed)
@@ -195,6 +200,7 @@ class ScriptExecutor
      * 
      * @param string $script The script name (e.g., 'block_device.sh')
      * @param array $args Array of arguments to pass to the script
+     * @param string|null $stdin Optional stdin input for scripts that read from stdin
      * @return array{
      *     success: bool,
      *     output: string,
@@ -210,6 +216,10 @@ class ScriptExecutor
      * // Execute block_device.sh with MAC address
      * $result = $executor->execute('block_device.sh', ['AA:BB:CC:DD:EE:FF']);
      * 
+     * // Execute script with stdin input
+     * $stdin = "facebook.com:0\napi.facebook.com:1\n";
+     * $result = $executor->execute('update_dnsmasq_blocklist.sh', ['AA:BB:CC:DD:EE:FF'], $stdin);
+     * 
      * if ($result['success']) {
      *     // Script executed successfully
      *     Log::info('Device blocked', ['output' => $result['output']]);
@@ -222,7 +232,7 @@ class ScriptExecutor
      * }
      * ```
      */
-    public function execute(string $script, array $args = []): array
+    public function execute(string $script, array $args = [], ?string $stdin = null): array
     {
         // Step 1: Check if script is in whitelist (security check)
         // This prevents execution of arbitrary scripts
@@ -308,12 +318,17 @@ class ScriptExecutor
         }
 
         // Step 6: Execute the script and capture output
-        // We use exec() with output array and return code
+        // If stdin is provided, use proc_open() for stdin support
+        // Otherwise, use exec() for simpler execution
         // 
-        // exec() parameters:
-        // - $command: The command to execute
-        // - $output: Array to store output lines (passed by reference)
-        // - $returnCode: Variable to store return code (passed by reference)
+        // Why proc_open() for stdin?
+        // - Allows passing stdin input to scripts
+        // - More secure than shell piping (echo | sudo script)
+        // - Better control over process I/O
+        // 
+        // Why exec() when no stdin?
+        // - Simpler and more efficient when stdin not needed
+        // - Works for most scripts that don't need stdin
         // 
         // Why capture output?
         // - Scripts may output useful information (success messages, errors)
@@ -327,11 +342,61 @@ class ScriptExecutor
         $output = [];
         $returnCode = 0;
         
-        // Execute the command
-        // exec() returns the last line of output (or false on failure)
-        // All output lines are stored in $output array
-        // Return code is stored in $returnCode
-        $lastLine = exec($command, $output, $returnCode);
+        if ($stdin !== null) {
+            // Use proc_open() for stdin support
+            $descriptorspec = [
+                0 => ['pipe', 'r'],  // stdin
+                1 => ['pipe', 'w'],  // stdout
+                2 => ['pipe', 'w'],  // stderr
+            ];
+            
+            $process = proc_open($command, $descriptorspec, $pipes);
+            
+            if (is_resource($process)) {
+                // Write stdin to the process
+                fwrite($pipes[0], $stdin);
+                fclose($pipes[0]);
+                
+                // Read stdout
+                $stdout = stream_get_contents($pipes[1]);
+                fclose($pipes[1]);
+                
+                // Read stderr
+                $stderr = stream_get_contents($pipes[2]);
+                fclose($pipes[2]);
+                
+                // Get return code
+                $returnCode = proc_close($process);
+                
+                // Process output
+                $output = $stdout ? explode("\n", trim($stdout)) : [];
+                
+                // Include stderr in output if present (for error messages)
+                if ($stderr) {
+                    $output[] = trim($stderr);
+                }
+            } else {
+                // Failed to open process
+                Log::error('Failed to open process for script execution', [
+                    'script' => $script,
+                    'command' => $command,
+                ]);
+                
+                return [
+                    'success' => false,
+                    'output' => '',
+                    'error' => "Failed to execute script '{$script}'",
+                    'return_code' => 1,
+                    'command' => $command,
+                ];
+            }
+        } else {
+            // Use exec() when no stdin needed (simpler and more efficient)
+            // exec() returns the last line of output (or false on failure)
+            // All output lines are stored in $output array
+            // Return code is stored in $returnCode
+            $lastLine = exec($command, $output, $returnCode);
+        }
 
         // Step 7: Combine output lines into a single string
         // Scripts may output multiple lines (especially JSON output)
