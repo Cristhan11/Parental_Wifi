@@ -97,6 +97,7 @@ class DomainBlockingService
      * @var array<string, array<string>>
      */
     protected array $appDomainMappings = [
+        // Facebook family
         'facebook.com' => [
             'api.facebook.com',
             'graph.facebook.com',
@@ -105,42 +106,77 @@ class DomainBlockingService
             'www.facebook.com',
             'static.xx.fbcdn.net',
             'fbcdn.net',
+            'video.xx.fbcdn.net',
+            'scontent.xx.fbcdn.net',
+            'edge-mqtt.facebook.com',
+            'b-api.facebook.com',
+            'b-graph.facebook.com',
+            'star.c10r.facebook.com',
         ],
         'instagram.com' => [
             'api.instagram.com',
             'i.instagram.com',
             'www.instagram.com',
             'graph.instagram.com',
+            'scontent.xx.fbcdn.net',   // shared CDN with Facebook/Instagram
+            'cdninstagram.com',        // image/video CDN
         ],
+        'whatsapp.com' => [
+            'web.whatsapp.com',
+            'api.whatsapp.com',
+            'mmg.whatsapp.net',
+            'static.whatsapp.net',
+        ],
+
+        // TikTok
         'tiktok.com' => [
             'api.tiktok.com',
             'www.tiktok.com',
             'm.tiktok.com',
             'log.tiktok.com',
             'mon.tiktok.com',
+            'v16.muscdn.com',
+            'p16-sign-va.tiktokcdn.com',
+            'p16-va.tiktokcdn.com',
+            'tiktokcdn.com',
         ],
+
+        // YouTube / Google video delivery
         'youtube.com' => [
             'www.youtube.com',
             'm.youtube.com',
             'i.ytimg.com',
             'yt3.ggpht.com',
             'googlevideo.com',
+            'ytimg.com',
+            'youtubei.googleapis.com',
         ],
+
+        // Twitter / X
         'twitter.com' => [
             'api.twitter.com',
             'mobile.twitter.com',
             't.co',
             'twimg.com',
+            'pbs.twimg.com',
+            'video.twimg.com',
         ],
+
+        // Snapchat
         'snapchat.com' => [
             'api.snapchat.com',
             'app.snapchat.com',
             'www.snapchat.com',
+            'sc-cdn.net',
+            'sc-prod.net',
         ],
+
+        // Discord
         'discord.com' => [
             'api.discord.com',
             'cdn.discordapp.com',
             'media.discordapp.net',
+            'gateway.discord.gg',
         ],
     ];
 
