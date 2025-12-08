@@ -194,9 +194,12 @@ else
     echo "Generated blocklist with $DOMAIN_COUNT domain(s) for device ${NORMALIZED_MAC}"
 fi
 
-# Reload dnsmasq service to apply changes (prefer reload, fallback to restart)
+# Restart dnsmasq service to apply changes
+# Note: We use restart instead of reload because dnsmasq's reload (HUP signal)
+# doesn't reliably re-read config files in /etc/dnsmasq.d/ when they're added/modified.
+# A full restart ensures the new config is loaded.
 # Includes protection against systemd start-limit-hit
-reload_dnsmasq() {
+restart_dnsmasq() {
     # Reset start-limit if service is in failed state (prevents start-limit-hit errors)
     if systemctl is-failed --quiet dnsmasq 2>/dev/null; then
         echo "Resetting dnsmasq start-limit..." >&2
@@ -204,12 +207,8 @@ reload_dnsmasq() {
         sleep 1  # Brief delay to allow systemd to reset
     fi
     
-    # Try reload first (preferred - doesn't interrupt active connections)
-    if sudo systemctl reload dnsmasq 2>/dev/null; then
-        return 0
-    fi
-    
-    # If reload fails, try restart with delay to avoid start-limit
+    # Use restart (not reload) to ensure config files are re-read
+    # Add delay to prevent rapid restart attempts (avoids start-limit-hit)
     sleep 2  # Delay to prevent rapid restart attempts
     if sudo systemctl restart dnsmasq 2>/dev/null; then
         return 0
@@ -218,45 +217,45 @@ reload_dnsmasq() {
     return 1
 }
 
-# Retry reload with exponential backoff if it fails
+# Retry restart with exponential backoff if it fails
 MAX_RETRIES=3
 RETRY_DELAY=2
-RELOAD_SUCCESS=0
+RESTART_SUCCESS=0
 for i in $(seq 1 $MAX_RETRIES); do
-    if reload_dnsmasq; then
-        RELOAD_SUCCESS=1
+    if restart_dnsmasq; then
+        RESTART_SUCCESS=1
         break
     fi
     
     if [ $i -eq $MAX_RETRIES ]; then
-        # If we removed the file (no domains), consider it success even if reload fails
-        # The file removal is the important part - reload is just to apply the change
+        # If we removed the file (no domains), consider it success even if restart fails
+        # The file removal is the important part - restart is just to apply the change
         if [ $FILE_REMOVED -eq 1 ]; then
-            echo "Warning: Failed to reload/restart dnsmasq service after $MAX_RETRIES attempts, but file was removed successfully" >&2
+            echo "Warning: Failed to restart dnsmasq service after $MAX_RETRIES attempts, but file was removed successfully" >&2
             echo "The blocklist file has been removed. You may need to manually restart dnsmasq: sudo systemctl restart dnsmasq" >&2
             exit 0  # Success - file removal is what matters
         else
-            echo "Error: Failed to reload/restart dnsmasq service after $MAX_RETRIES attempts" >&2
+            echo "Error: Failed to restart dnsmasq service after $MAX_RETRIES attempts" >&2
             exit 2
         fi
     fi
     
-    echo "Retrying dnsmasq reload (attempt $i/$MAX_RETRIES)..." >&2
+    echo "Retrying dnsmasq restart (attempt $i/$MAX_RETRIES)..." >&2
     sleep $RETRY_DELAY
     RETRY_DELAY=$((RETRY_DELAY * 2))  # Exponential backoff
 done
 
-# Verify dnsmasq is running (only if reload succeeded)
-if [ $RELOAD_SUCCESS -eq 1 ]; then
+# Verify dnsmasq is running (only if restart succeeded)
+if [ $RESTART_SUCCESS -eq 1 ]; then
     sleep 1  # Brief delay to allow service to fully start
     if ! systemctl is-active --quiet dnsmasq; then
         # If we removed the file (no domains), consider it success even if service check fails
         if [ $FILE_REMOVED -eq 1 ]; then
-            echo "Warning: dnsmasq service is not running after reload/restart, but file was removed successfully" >&2
+            echo "Warning: dnsmasq service is not running after restart, but file was removed successfully" >&2
             echo "The blocklist file has been removed. You may need to manually restart dnsmasq: sudo systemctl restart dnsmasq" >&2
             exit 0  # Success - file removal is what matters
         else
-            echo "Error: dnsmasq service is not running after reload/restart" >&2
+            echo "Error: dnsmasq service is not running after restart" >&2
             exit 2
         fi
     fi
