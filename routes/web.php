@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\BlockedWebsiteController;
 use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\FlaggedWebsiteController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuizController;
@@ -67,6 +69,31 @@ Route::middleware('auth')->group(function () {
         Route::get('/', [DeviceController::class, 'index'])->name('index'); // Show stats for first device or selected device
         Route::get('/{device}', [DeviceController::class, 'index'])->name('show'); // Show stats for specific device
         Route::get('/api/connected', [DeviceController::class, 'getConnectedDevices'])->name('api.connected'); // Get real-time connected devices
+    });
+
+    // Blocked websites routes - Website blocking management
+    // Route: /blocked-websites
+    Route::prefix('blocked-websites')->name('blocked-websites.')->group(function () {
+        Route::get('/', [BlockedWebsiteController::class, 'index'])->name('index'); // List all blocked websites
+        Route::get('/create', [BlockedWebsiteController::class, 'create'])->name('create'); // Show create form
+        Route::post('/', [BlockedWebsiteController::class, 'store'])->name('store'); // Save new blocked website
+        Route::get('/{blockedWebsite}/edit', [BlockedWebsiteController::class, 'edit'])->name('edit'); // Show edit form
+        Route::put('/{blockedWebsite}', [BlockedWebsiteController::class, 'update'])->name('update'); // Update blocked website
+        Route::delete('/{blockedWebsite}', [BlockedWebsiteController::class, 'destroy'])->name('destroy'); // Delete blocked website
+        Route::post('/suggest-domains', [BlockedWebsiteController::class, 'suggestRelatedDomains'])->name('suggest-domains'); // AJAX: Suggest related domains
+        Route::post('/bulk-import', [BlockedWebsiteController::class, 'bulkImport'])->name('bulk-import'); // Bulk import from file
+        Route::get('/export', [BlockedWebsiteController::class, 'bulkExport'])->name('export'); // Export to CSV/JSON
+    });
+
+    // Flagged websites routes - Website monitoring (not blocking)
+    // Route: /flagged-websites
+    Route::prefix('flagged-websites')->name('flagged-websites.')->group(function () {
+        Route::get('/', [FlaggedWebsiteController::class, 'index'])->name('index'); // List all flagged websites
+        Route::get('/create', [FlaggedWebsiteController::class, 'create'])->name('create'); // Show create form
+        Route::post('/', [FlaggedWebsiteController::class, 'store'])->name('store'); // Save new flagged website
+        Route::get('/{flaggedWebsite}/edit', [FlaggedWebsiteController::class, 'edit'])->name('edit'); // Show edit form
+        Route::put('/{flaggedWebsite}', [FlaggedWebsiteController::class, 'update'])->name('update'); // Update flagged website
+        Route::delete('/{flaggedWebsite}', [FlaggedWebsiteController::class, 'destroy'])->name('destroy'); // Delete flagged website
     });
 });
 

@@ -8,7 +8,7 @@ The system aids parents in monitoring and controlling their child's device on a 
 
 ### System Capabilities
 
-1. Monitor visited websites, manually flag, and block selected websites of assigned child devices
+1. Monitor visited websites, manually flag, and block selected websites of assigned child devices (supports URL-level, domain-level, and app-level blocking with DNS enforcement for mobile apps)
 2. Redirect the assigned child device to take a quiz or watch a selected educational video that should be passed or completed for continuation of the internet connection
 3. Define the schedules and duration for internet use in the assigned child devices through the parent device
 4. Notify in real-time to the parent's device if the usage time limit of the assigned child device has been reached, if the flag website was visited, an attempt is made to access blocked websites, or if new devices are connected to the system
@@ -156,7 +156,7 @@ The captive portal is the **core focus** of this project. The logic works as fol
 - **dictionary_words**: Store dictionary words pool (word, definition, difficulty_level) - educational word database
 - **video_word_displays**: Track which words were shown during a video viewing session (video_completion_id, dictionary_word_id, displayed_at_timestamp, word_text)
 - **video_completions**: Track video viewing completion (device_id, video_id, completed_at, watched_duration, **words_shown_count**, **words_entered**, **words_correct**, **passed_validation**, **attempt_number**)
-- **blocked_websites**: Websites to block for specific devices
+- **blocked_websites**: Websites to block for specific devices (supports URL, domain, and app-level blocking with subdomain support)
 - **flagged_websites**: Websites to monitor/flag when visited
 - **device_schedules**: Time-based internet access rules (day, start_time, end_time, duration_limit)
 - **browsing_logs**: Track visited websites, timestamps, device association
@@ -192,7 +192,7 @@ The captive portal is the **core focus** of this project. The logic works as fol
 - **DictionaryWord**: Educational word database (word, definition, difficulty level)
 - **VideoWordDisplay**: Track which words were shown during video playback (timestamp, word shown)
 - **VideoCompletion**: Track video viewing completion with word validation (words shown, words entered, validation status, attempt number)
-- **BlockedWebsite**: Blocked site management
+- **BlockedWebsite**: Blocked site management with support for URL-level, domain-level, and app-level blocking (block_type, block_subdomains, related_domains)
 - **FlaggedWebsite**: Flagged site monitoring
 - **DeviceSchedule**: Time-based access control
 - **BrowsingLog**: Website visit tracking
@@ -209,6 +209,12 @@ The captive portal is the **core focus** of this project. The logic works as fol
   - Configure captive portal
   - Manage authentication tokens
   - Handle redirects
+- **DomainBlockingService**: Domain and app-level blocking
+  - DNS-based blocking via dnsmasq (redirect blocked domains to 127.0.0.1)
+  - Manage `/etc/dnsmasq.d/blocked-domains.conf` configuration
+  - Block/unblock domains for specific devices
+  - Support wildcard domain blocking (`*.domain.com`)
+  - Auto-detect and block related domains for apps
 - **ScriptExecutor**: Secure wrapper for executing shell scripts with validation
 
 ### 4. Authentication & Authorization
@@ -226,10 +232,25 @@ The captive portal is the **core focus** of this project. The logic works as fol
 
 ### 6. Website Management
 - **BlockedWebsiteController**: Manage blocked websites per device
+  - URL-level blocking (block specific URLs)
+  - Domain-level blocking (block entire domain + subdomains, e.g., `facebook.com` blocks `*.facebook.com`)
+  - App-level blocking (block app with all related domains, e.g., Facebook app blocks `facebook.com`, `api.facebook.com`, `graph.facebook.com`, etc.)
+  - Related domain detection and suggestion
+  - Bulk import/export
 - **FlaggedWebsiteController**: Manage flagged websites per device
-- URL validation and normalization
-- Bulk import/export
-- Views: blocked sites list, flagged sites list
+  - URL validation and normalization
+  - Domain extraction and tracking
+  - Bulk import/export
+- **DomainBlockingService**: Service for domain/app blocking logic
+  - Detect related domains when blocking apps (e.g., Facebook → suggest all Facebook domains)
+  - Support wildcard domain blocking (`*.facebook.com`)
+  - Manage domain lists per device
+  - DNS-based blocking via dnsmasq integration
+- **Views**: 
+  - Blocked sites list (with domain/app type indicators)
+  - Flagged sites list
+  - Create/edit forms with blocking type selection (URL/Domain/App)
+  - Related domains suggestion UI
 
 ### 7. Scheduling System
 - **DeviceScheduleController**: Create/edit schedules
@@ -541,6 +562,7 @@ app/
 ├── Services/
 │   ├── NetworkService.php
 │   ├── NoDogSplashService.php
+│   ├── DomainBlockingService.php
 │   └── ScriptExecutor.php
 ├── Http/Controllers/
 │   ├── DeviceController.php
@@ -560,6 +582,7 @@ app/
 │   ├── VideoWordService.php (random word selection, timestamp generation, validation)
 │   ├── NetworkService.php
 │   ├── NoDogSplashService.php
+│   ├── DomainBlockingService.php
 │   └── ScriptExecutor.php
 ├── Jobs/
 │   ├── ParseNetworkLogs.php
@@ -585,7 +608,7 @@ database/migrations/
 ├── create_dictionary_words_table.php
 ├── create_video_word_displays_table.php
 ├── create_video_completions_table.php (with word validation fields)
-├── create_blocked_websites_table.php
+├── create_blocked_websites_table.php (with block_type, block_subdomains, related_domains fields)
 ├── create_flagged_websites_table.php
 ├── create_device_schedules_table.php
 ├── create_browsing_logs_table.php
@@ -617,9 +640,13 @@ resources/views/
 │   ├── index.blade.php
 │   └── create.blade.php
 ├── blocked-websites/
-│   └── index.blade.php
+│   ├── index.blade.php (list with domain/app type indicators)
+│   ├── create.blade.php (with blocking type selection: URL/Domain/App)
+│   └── edit.blade.php (with related domains suggestion)
 ├── flagged-websites/
-│   └── index.blade.php
+│   ├── index.blade.php
+│   ├── create.blade.php
+│   └── edit.blade.php
 ├── schedules/
 │   └── index.blade.php
 └── logs/
@@ -631,7 +658,10 @@ scripts/
 ├── unblock_device.sh
 ├── whitelist_device.sh
 ├── get_connected_devices.sh
-└── monitor_traffic.sh
+├── monitor_traffic.sh
+├── block_domain.sh (block domain for specific device via DNS)
+├── unblock_domain.sh (unblock domain for specific device)
+└── update_dnsmasq_blocklist.sh (update dnsmasq config with all blocked domains)
 ```
 
 ## Key Implementation Details
@@ -648,6 +678,18 @@ scripts/
 - Manage `/etc/nodogsplash/nodogsplash.conf`
 - Custom portal pages in `public/portal/`
 - Integration with Laravel auth for portal access
+
+### Domain-Level Blocking (DNS-Based)
+- **DNS-based blocking via dnsmasq**: Redirect blocked domains to `127.0.0.1`
+- **Configuration file**: `/etc/dnsmasq.d/blocked-domains.conf` (auto-generated)
+- **Block types**:
+  - **URL-level**: Block specific URLs (e.g., `https://facebook.com/page`)
+  - **Domain-level**: Block entire domain + subdomains (e.g., `facebook.com` blocks `*.facebook.com`)
+  - **App-level**: Block app with all related domains (e.g., Facebook app blocks `facebook.com`, `api.facebook.com`, `graph.facebook.com`, `m.facebook.com`, etc.)
+- **Related domain detection**: Auto-suggest related domains when blocking apps (e.g., blocking Facebook suggests all Facebook API domains)
+- **dnsmasq integration**: Automatically update dnsmasq config and restart service when domains are added/removed
+- **Per-device blocking**: Each device can have different blocked domains
+- **Wildcard support**: Support for `*.domain.com` patterns to block all subdomains
 
 ### Real-time Updates
 - Use Laravel Broadcasting with WebSockets
@@ -677,7 +719,7 @@ scripts/
 - Complete captive portal frontend (from Figma design)
 - NoDogSplash integration with automatic redirects
 - Device management (add, edit, block, whitelist, time allocation)
-- Website blocking and flagging
+- Website blocking and flagging (URL-level, domain-level, and app-level blocking with DNS enforcement)
 - Basic scheduling (time windows)
 - Real-time device monitoring
 - Browsing log capture
@@ -694,7 +736,7 @@ scripts/
 
 ## Implementation Todos
 
-1. **db-schema**: Create MariaDB migrations for all core tables including time tracking (devices with time fields, device_time_grants), quiz system (quizzes, quiz_attempts), video system (videos, video_completions), plus blocked_websites, flagged_websites, device_schedules, browsing_logs, access_attempts, device_sessions with proper relationships and indexes
+1. **db-schema**: Create MariaDB migrations for all core tables including time tracking (devices with time fields, device_time_grants), quiz system (quizzes, quiz_attempts), video system (videos, video_completions), plus blocked_websites (with block_type enum: 'url'/'domain'/'app', block_subdomains boolean, related_domains JSON), flagged_websites, device_schedules, browsing_logs, access_attempts, device_sessions with proper relationships and indexes
 2. **models**: Create Eloquent models with relationships: Device (with time tracking methods), DeviceTimeGrant, Quiz, QuizAttempt, Video, VideoCompletion, BlockedWebsite, FlaggedWebsite, DeviceSchedule, BrowsingLog, AccessAttempt, DeviceSession
 3. **auth**: Set up Laravel authentication system for parent login with role management
 4. **test-phase-1-2**: Test basic Laravel setup and database connectivity on Raspberry Pi OS Lite after authentication is complete. Verify Laravel installation, PHP compatibility, web server configuration, routing, environment setup, and model/database operations. See TESTING.md for detailed procedures.
@@ -712,7 +754,7 @@ scripts/
 16. **background-jobs**: ✅ **COMPLETE** - All 5 background jobs created and functional: CheckTimeExpiration (every 2 min - checks and redirects expired devices), TrackActiveSessions (every 5 min - monitors and deducts time), MonitorDeviceConnections (every 2 min - detects new/disconnected devices), EnforceSchedules (every 1 min - enforces time-based access rules), ParseNetworkLogs (every 10 min - parses network traffic logs). All jobs scheduled in routes/console.php with withoutOverlapping(). Queue system configured with database driver. Queue worker service configured as systemd service (parental-wifi-queue.service) with auto-restart. Crontab scheduler configured. All jobs executing successfully. See `docs/BACKGROUND_JOBS_OVERVIEW.md` and individual job documentation files.
 17. **test-phase-5**: ✅ **COMPLETE** - Test background jobs and queue system on Raspberry Pi completed successfully (December 7, 2025). All tests passed: queue configuration verified (database driver), all 5 job classes exist and are loadable, all jobs scheduled correctly, queue worker running as systemd service, crontab configured, all jobs executing successfully with excellent performance (milliseconds execution time, 58MB memory usage). Test results: 31/33 tests passed (2 false negatives - PHP-FPM detection and schedule:test interactive command). System is production-ready. See `docs/TEST_PHASE_5_RESULTS.md` for complete test results and `docs/TEST_PHASE_5_QUICK_REFERENCE.md` for quick reference guide.
 18. **device-management**: ✅ **COMPLETE** - DeviceController built with full CRUD operations, MAC address validation, time allocation management, status management (active/blocked/whitelisted), role management (child/guest/parent), and comprehensive views (accounts, create, edit, blocklist, whitelist, child devices stats). DeviceService created for MAC address normalization, validation, and device statistics. All form requests (StoreDeviceRequest, UpdateDeviceRequest) with validation rules. DevicePolicy for authorization. Comprehensive test suite created: 45 tests (29 feature tests, 16 unit tests) with 110 assertions - all passing. Tests compatible with both SQLite (testing) and MariaDB (production). See `docs/TEST_DEVICE_MANAGEMENT_RESULTS.md` for complete test results.
-19. **website-management**: Build BlockedWebsiteController and FlaggedWebsiteController with URL validation and management views
+19. **website-management**: Build BlockedWebsiteController and FlaggedWebsiteController with URL validation and management views. Include domain-level and app-level blocking: (1) Update blocked_websites migration to add block_type (url/domain/app), block_subdomains (boolean), and related_domains (JSON) fields, (2) Build DomainBlockingService for DNS-based blocking via dnsmasq, related domain detection, and wildcard domain support, (3) Create shell scripts (block_domain.sh, unblock_domain.sh, update_dnsmasq_blocklist.sh) for DNS enforcement, (4) Build BlockedWebsiteController with blocking type selection (URL/Domain/App), related domains suggestion UI, and bulk import/export, (5) Build FlaggedWebsiteController with URL validation and domain extraction, (6) Create views with blocking type indicators and related domains display
 20. **scheduling**: Build DeviceScheduleController for time-based access control with schedule enforcement logic
 21. **monitoring**: Build BrowsingLogController and AccessAttemptController with log parsing and display views
 22. **websockets**: Set up Laravel Broadcasting with WebSockets, create events (DeviceConnected, BlockedWebsiteAccessed, TimeExpired, TimeGranted, etc.), configure frontend with Laravel Echo

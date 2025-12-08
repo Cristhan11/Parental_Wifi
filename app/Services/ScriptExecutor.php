@@ -116,6 +116,9 @@ class ScriptExecutor
         'redirect_device_portal.sh',
         'allow_device_through.sh',
         'check_device_redirected.sh',
+        'block_domain.sh',
+        'unblock_domain.sh',
+        'update_dnsmasq_blocklist.sh',
     ];
 
     /**
