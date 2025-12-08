@@ -214,25 +214,13 @@ else
     echo "Blocked domain $DOMAIN for device ${NORMALIZED_MAC}"
 fi
 
-# Reload dnsmasq service to apply changes (prefer reload, fallback to restart)
-reload_dnsmasq() {
-    if sudo systemctl reload dnsmasq 2>/dev/null; then
-        return 0
-    fi
-    sudo systemctl restart dnsmasq
-}
-
-if ! reload_dnsmasq; then
-    echo "Error: Failed to reload/restart dnsmasq service" >&2
-    exit 2
-fi
-
-# Verify dnsmasq is running
-if ! systemctl is-active --quiet dnsmasq; then
-    echo "Error: dnsmasq service is not running after reload/restart" >&2
-    exit 2
-fi
+# Note: We do NOT reload dnsmasq here because:
+# 1. block_domain.sh is called multiple times for app-level blocking (one per domain)
+# 2. Reloading after each domain causes rapid restarts that hit systemd start-limit
+# 3. update_dnsmasq_blocklist.sh will reload dnsmasq once at the end after all domains are added
+# This prevents "start-limit-hit" errors when blocking apps with many domains
 
 echo "Successfully blocked domain $DOMAIN for device ${NORMALIZED_MAC}"
+echo "Note: dnsmasq will be reloaded after all domains are processed"
 exit 0
 

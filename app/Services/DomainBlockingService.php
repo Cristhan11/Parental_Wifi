@@ -297,28 +297,15 @@ class DomainBlockingService
                 'block_subdomains' => $blockedWebsite->shouldBlockSubdomains(),
             ]);
             
-            // Block each domain
-            foreach ($domainsToBlock as $domain) {
-                $blockSubdomains = $blockedWebsite->shouldBlockSubdomains() ? '1' : '0';
-                
-                // Execute block_domain.sh script
-                $result = $this->scriptExecutor->execute('block_domain.sh', [
-                    $domain,
-                    $device->mac_address,
-                    $blockSubdomains,
-                ]);
-                
-                if (!$result['success']) {
-                    Log::error("Failed to block domain for device", [
-                        'domain' => $domain,
-                        'device_id' => $device->id,
-                        'error' => $result['error'] ?? 'Unknown error',
-                    ]);
-                    return false;
-                }
-            }
+            // Optimized: Skip calling block_domain.sh for each domain since
+            // updateDnsmasqBlocklist() regenerates the entire config from the database anyway.
+            // This prevents multiple dnsmasq reloads and start-limit-hit errors.
+            // The updateDnsmasqBlocklist() method will:
+            // 1. Read all blocked websites for the device from database
+            // 2. Generate complete config file with all domains
+            // 3. Reload dnsmasq once (with proper error handling)
             
-            // Update dnsmasq blocklist to ensure consistency
+            // Update dnsmasq blocklist (regenerates from database, reloads once)
             return $this->updateDnsmasqBlocklist($device);
             
         } catch (\Exception $e) {
@@ -372,25 +359,14 @@ class DomainBlockingService
                 'domains' => $domainsToUnblock,
             ]);
             
-            // Unblock each domain
-            foreach ($domainsToUnblock as $domain) {
-                // Execute unblock_domain.sh script
-                $result = $this->scriptExecutor->execute('unblock_domain.sh', [
-                    $domain,
-                    $device->mac_address,
-                ]);
-                
-                if (!$result['success']) {
-                    Log::error("Failed to unblock domain for device", [
-                        'domain' => $domain,
-                        'device_id' => $device->id,
-                        'error' => $result['error'] ?? 'Unknown error',
-                    ]);
-                    return false;
-                }
-            }
+            // Optimized: Skip calling unblock_domain.sh for each domain since
+            // updateDnsmasqBlocklist() regenerates the entire config from the database anyway.
+            // This prevents multiple dnsmasq reloads and start-limit-hit errors.
+            // Note: The database record should already be deleted before this method is called
+            // (see BlockedWebsiteController::destroy()), so updateDnsmasqBlocklist() will
+            // regenerate the config without the deleted domains.
             
-            // Update dnsmasq blocklist to ensure consistency
+            // Update dnsmasq blocklist (regenerates from database, reloads once)
             return $this->updateDnsmasqBlocklist($device);
             
         } catch (\Exception $e) {

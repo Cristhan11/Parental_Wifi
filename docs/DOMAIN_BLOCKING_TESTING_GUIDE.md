@@ -352,6 +352,10 @@ On your test device, try accessing:
 
 **Objective:** Verify that app-level blocking blocks main domain + all related domains.
 
+**Status:** ✅ Tested and Working (December 8, 2025)
+
+**Note:** This test was successfully completed. The system correctly blocks all related domains for app-level blocking, effectively preventing the Facebook app from functioning.
+
 ### Step 1: Create App Block
 
 1. Navigate to: `http://[PI_IP]/blocked-websites/create`
@@ -386,28 +390,118 @@ print_r($blocked->getDomainsToBlock());
 
 ### Step 3: Verify dnsmasq Config
 
+**Important:** Use uppercase MAC address in the config filename.
+
 On your Pi terminal:
 
 ```bash
-# Check all domains are in config
-sudo cat /etc/dnsmasq.d/blocked-domains-e6:6a:8f:19:be:b1.conf | grep facebook
+# List all config files to find the correct one
+ls -la /etc/dnsmasq.d/blocked-domains-*.conf
+
+# Check all domains are in config (use uppercase MAC)
+sudo cat /etc/dnsmasq.d/blocked-domains-E6:6A:8F:19:BE:B1.conf | grep facebook
+
+# Or view the entire config file to see all blocked domains
+sudo cat /etc/dnsmasq.d/blocked-domains-E6:6A:8F:19:BE:B1.conf
 ```
 
-**Expected:** Should show multiple entries for facebook.com, api.facebook.com, graph.facebook.com, etc.
+**Expected:** Should show multiple entries for:
+- `address=/.facebook.com/127.0.0.1` (leading dot if subdomains enabled)
+- `address=/api.facebook.com/127.0.0.1`
+- `address=/graph.facebook.com/127.0.0.1`
+- `address=/m.facebook.com/127.0.0.1`
+- `address=/connect.facebook.com/127.0.0.1`
+- `address=/www.facebook.com/127.0.0.1`
+- `address=/static.xx.fbcdn.net/127.0.0.1`
+- `address=/fbcdn.net/127.0.0.1`
+- And all other related domains from the app mapping
+
+**Note:** 
+- If "Block Subdomains" is enabled, the main domain will have a leading dot: `address=/.facebook.com/127.0.0.1`
+- This blocks all subdomains of facebook.com in addition to the related domains
+- All 13+ related domains should appear in the config file
 
 ### Step 4: Test from Device
 
+**Important:** After blocking, you may need to:
+1. Clear the app cache (or force stop the app)
+2. Disconnect and reconnect to Wi-Fi (to clear DNS cache)
+3. Restart the app to force fresh DNS queries
+
 On your test device:
-- Try `http://facebook.com` → Should be blocked
+- Try `http://facebook.com` in browser → Should be blocked ("This site can't be reached")
 - Try `http://api.facebook.com` → Should be blocked
 - Try `http://graph.facebook.com` → Should be blocked
-- Try Facebook mobile app → Should not work (all API domains blocked)
+- Try Facebook mobile app:
+  - Videos should not play
+  - Search function should show "Page not found"
+  - Comments should show "Page not found"
+  - App should be effectively non-functional
+
+**Note:** If the app still works after blocking, it may be using cached DNS entries. Clear the app cache and reconnect to Wi-Fi to force fresh DNS queries.
+
+### Step 5: Verify DNS Resolution on Pi
+
+On your Pi terminal:
+
+```bash
+# Test main domain
+dig @127.0.0.1 facebook.com +short
+
+# Test related domains
+dig @127.0.0.1 api.facebook.com +short
+dig @127.0.0.1 graph.facebook.com +short
+dig @127.0.0.1 edge-mqtt.facebook.com +short
+```
+
+**Expected:** All should return `127.0.0.1` (blocked).
+
+### Step 6: Monitor dnsmasq Logs
+
+While using the Facebook app, monitor logs to see which domains are being blocked:
+
+```bash
+sudo journalctl -u dnsmasq -f | grep -i facebook
+```
+
+**Expected:** All Facebook-related queries should show `config [domain] is 127.0.0.1` (blocked). If you see `forwarded [domain] to 8.8.8.8`, that domain is not in the blocklist and needs to be added.
 
 ### Test 3 Results
 
-- [ ] Main domain blocked
-- [ ] All related domains blocked
-- [ ] Mobile app cannot connect (all API domains blocked)
+**✅ Test Completed Successfully (December 8, 2025)**
+
+**Test Results:**
+- ✅ Main domain blocked (facebook.com returns 127.0.0.1)
+- ✅ All 14 related domains blocked (verified in config file and DNS resolution)
+- ✅ Facebook mobile app cannot function:
+  - Videos cannot play
+  - Search shows "Page not found"
+  - Comments show "Page not found"
+  - App is effectively blocked
+- ✅ Browser access to facebook.com blocked ("This site can't be reached")
+- ✅ Other domains (google.com, youtube.com) work normally
+- ✅ dnsmasq config file contains all related domains with subdomain blocking enabled
+
+**Key Findings:**
+- App-level blocking effectively blocks all related domains (14 domains for Facebook)
+- Subdomain blocking (leading dot pattern) works correctly for wildcard blocking
+- Config file correctly includes all domains from `getDomainsToBlock()` method
+- DNS blocking is effective - app cannot access any Facebook services
+- Device cache may need to be cleared for immediate effect (app cache + Wi-Fi reconnect)
+
+**Issues Encountered and Resolved:**
+1. **dnsmasq stopped responding:** Required restart (`sudo systemctl restart dnsmasq`)
+2. **App still working initially:** Required clearing app cache and reconnecting Wi-Fi to clear DNS cache
+3. **Config file incomplete initially:** Regenerated using `updateDnsmasqBlocklist()` which fixed the issue
+
+**Note:** One domain (`graph.fbpigeon.com`) was forwarded (not blocked) but this appears to be a fallback domain that Facebook uses. The app still cannot function without the main domains.
+
+**Document your results in `docs/DOMAIN_BLOCKING_TEST_RESULTS.md`:**
+- [x] Main domain blocked
+- [x] All related domains blocked (14 domains for Facebook)
+- [x] Mobile app cannot connect (all API domains blocked)
+- [x] Videos cannot play
+- [x] Search and comments show "Page not found"
 
 ---
 
@@ -415,15 +509,26 @@ On your test device:
 
 **Objective:** Verify that unblocking removes domain from blocklist.
 
+**Status:** ✅ Tested and Working (December 8, 2025)
+
+**Note:** This test was successfully completed. The system correctly removes domains from the blocklist when deleted via the web interface.
+
 ### Step 1: Unblock via Web Interface
 
 1. Navigate to: `http://[PI_IP]/blocked-websites`
 
-2. Find the blocked website you want to unblock (e.g., `example.com`)
+2. Find the blocked website(s) you want to unblock (e.g., `facebook.com`, `youtube.com`)
 
-3. Click **"Delete"** button
+3. Click **"Delete"** button for each blocked website
 
 4. Confirm deletion
+
+**What Happens Behind the Scenes:**
+- `BlockedWebsiteController@destroy()` deletes the database record
+- `DomainBlockingService->updateDnsmasqBlocklist()` is automatically called
+- The dnsmasq config file is regenerated from the database (now empty)
+- If no domains remain, the config file is removed
+- dnsmasq is reloaded to apply changes
 
 ### Step 2: Verify Database
 

@@ -191,19 +191,49 @@ else
 fi
 
 # Reload dnsmasq service to apply changes (prefer reload, fallback to restart)
+# Includes protection against systemd start-limit-hit
 reload_dnsmasq() {
+    # Reset start-limit if service is in failed state (prevents start-limit-hit errors)
+    if systemctl is-failed --quiet dnsmasq 2>/dev/null; then
+        echo "Resetting dnsmasq start-limit..." >&2
+        sudo systemctl reset-failed dnsmasq 2>/dev/null || true
+        sleep 1  # Brief delay to allow systemd to reset
+    fi
+    
+    # Try reload first (preferred - doesn't interrupt active connections)
     if sudo systemctl reload dnsmasq 2>/dev/null; then
         return 0
     fi
-    sudo systemctl restart dnsmasq
+    
+    # If reload fails, try restart with delay to avoid start-limit
+    sleep 2  # Delay to prevent rapid restart attempts
+    if sudo systemctl restart dnsmasq 2>/dev/null; then
+        return 0
+    fi
+    
+    return 1
 }
 
-if ! reload_dnsmasq; then
-    echo "Error: Failed to reload/restart dnsmasq service" >&2
-    exit 2
-fi
+# Retry reload with exponential backoff if it fails
+MAX_RETRIES=3
+RETRY_DELAY=2
+for i in $(seq 1 $MAX_RETRIES); do
+    if reload_dnsmasq; then
+        break
+    fi
+    
+    if [ $i -eq $MAX_RETRIES ]; then
+        echo "Error: Failed to reload/restart dnsmasq service after $MAX_RETRIES attempts" >&2
+        exit 2
+    fi
+    
+    echo "Retrying dnsmasq reload (attempt $i/$MAX_RETRIES)..." >&2
+    sleep $RETRY_DELAY
+    RETRY_DELAY=$((RETRY_DELAY * 2))  # Exponential backoff
+done
 
 # Verify dnsmasq is running
+sleep 1  # Brief delay to allow service to fully start
 if ! systemctl is-active --quiet dnsmasq; then
     echo "Error: dnsmasq service is not running after reload/restart" >&2
     exit 2
