@@ -164,15 +164,22 @@ if [ -f "$CONFIG_FILE" ] && [ $(grep -v '^#' "$CONFIG_FILE" | grep -v '^$' | wc 
     echo "Removed empty blocklist file for device ${NORMALIZED_MAC}"
 fi
 
-# Restart dnsmasq service to apply changes
-if ! sudo systemctl restart dnsmasq; then
-    echo "Error: Failed to restart dnsmasq service" >&2
+# Reload dnsmasq service to apply changes (prefer reload, fallback to restart)
+reload_dnsmasq() {
+    if sudo systemctl reload dnsmasq 2>/dev/null; then
+        return 0
+    fi
+    sudo systemctl restart dnsmasq
+}
+
+if ! reload_dnsmasq; then
+    echo "Error: Failed to reload/restart dnsmasq service" >&2
     exit 2
 fi
 
 # Verify dnsmasq is running
 if ! systemctl is-active --quiet dnsmasq; then
-    echo "Error: dnsmasq service is not running after restart" >&2
+    echo "Error: dnsmasq service is not running after reload/restart" >&2
     exit 2
 fi
 
