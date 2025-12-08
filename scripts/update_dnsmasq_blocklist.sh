@@ -175,10 +175,14 @@ while IFS= read -r line || [ -n "$line" ]; do
     DOMAIN_COUNT=$((DOMAIN_COUNT + 1))
 done
 
+# Track if we removed the file (no domains case)
+FILE_REMOVED=0
+
 # If no domains, create empty file (or remove existing)
 if [ $DOMAIN_COUNT -eq 0 ]; then
     if [ -f "$CONFIG_FILE" ]; then
         sudo rm "$CONFIG_FILE"
+        FILE_REMOVED=1
         echo "Removed blocklist file for device ${NORMALIZED_MAC} (no domains to block)"
     else
         echo "No domains to block for device ${NORMALIZED_MAC}"
@@ -217,14 +221,24 @@ reload_dnsmasq() {
 # Retry reload with exponential backoff if it fails
 MAX_RETRIES=3
 RETRY_DELAY=2
+RELOAD_SUCCESS=0
 for i in $(seq 1 $MAX_RETRIES); do
     if reload_dnsmasq; then
+        RELOAD_SUCCESS=1
         break
     fi
     
     if [ $i -eq $MAX_RETRIES ]; then
-        echo "Error: Failed to reload/restart dnsmasq service after $MAX_RETRIES attempts" >&2
-        exit 2
+        # If we removed the file (no domains), consider it success even if reload fails
+        # The file removal is the important part - reload is just to apply the change
+        if [ $FILE_REMOVED -eq 1 ]; then
+            echo "Warning: Failed to reload/restart dnsmasq service after $MAX_RETRIES attempts, but file was removed successfully" >&2
+            echo "The blocklist file has been removed. You may need to manually restart dnsmasq: sudo systemctl restart dnsmasq" >&2
+            exit 0  # Success - file removal is what matters
+        else
+            echo "Error: Failed to reload/restart dnsmasq service after $MAX_RETRIES attempts" >&2
+            exit 2
+        fi
     fi
     
     echo "Retrying dnsmasq reload (attempt $i/$MAX_RETRIES)..." >&2
@@ -232,11 +246,20 @@ for i in $(seq 1 $MAX_RETRIES); do
     RETRY_DELAY=$((RETRY_DELAY * 2))  # Exponential backoff
 done
 
-# Verify dnsmasq is running
-sleep 1  # Brief delay to allow service to fully start
-if ! systemctl is-active --quiet dnsmasq; then
-    echo "Error: dnsmasq service is not running after reload/restart" >&2
-    exit 2
+# Verify dnsmasq is running (only if reload succeeded)
+if [ $RELOAD_SUCCESS -eq 1 ]; then
+    sleep 1  # Brief delay to allow service to fully start
+    if ! systemctl is-active --quiet dnsmasq; then
+        # If we removed the file (no domains), consider it success even if service check fails
+        if [ $FILE_REMOVED -eq 1 ]; then
+            echo "Warning: dnsmasq service is not running after reload/restart, but file was removed successfully" >&2
+            echo "The blocklist file has been removed. You may need to manually restart dnsmasq: sudo systemctl restart dnsmasq" >&2
+            exit 0  # Success - file removal is what matters
+        else
+            echo "Error: dnsmasq service is not running after reload/restart" >&2
+            exit 2
+        fi
+    fi
 fi
 
 echo "Successfully updated dnsmasq blocklist for device ${NORMALIZED_MAC}"
