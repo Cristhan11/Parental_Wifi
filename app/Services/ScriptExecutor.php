@@ -616,13 +616,28 @@ class ScriptExecutor
         // is_executable() checks if the file has execute permission
         // Scripts must be executable to run
         if (!is_executable($resolvedPath)) {
-            // Script file is not executable
-            Log::debug('Script file is not executable', [
+            // Script file is not executable - try to fix it automatically
+            // This can happen after git pulls since git doesn't preserve executable permissions by default
+            Log::debug('Script file is not executable, attempting to fix permissions', [
                 'script' => $script,
                 'resolved_path' => $resolvedPath,
             ]);
-
-            return false; // File is not executable
+            
+            // Try to make the script executable
+            if (chmod($resolvedPath, 0755)) {
+                Log::info('Fixed script executable permissions', [
+                    'script' => $script,
+                    'resolved_path' => $resolvedPath,
+                ]);
+            } else {
+                // Failed to fix permissions
+                Log::error('Script file is not executable and could not be fixed', [
+                    'script' => $script,
+                    'resolved_path' => $resolvedPath,
+                ]);
+                
+                return false; // File is not executable and couldn't be fixed
+            }
         }
 
         // All validation checks passed
