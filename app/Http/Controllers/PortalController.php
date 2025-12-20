@@ -144,7 +144,29 @@ class PortalController extends Controller
             }
         }
 
-        // Fallback to original method: Try to get MAC address from three possible sources (in order):
+        // Fallback 1: Try to get MAC address from IP address (for direct portal access)
+        // This handles cases where Android's captive portal detection accesses
+        // the portal directly without going through splash.html (no token)
+        $clientIp = $request->ip();
+        if ($clientIp && $clientIp !== '127.0.0.1' && $clientIp !== '::1') {
+            $macAddress = $this->getMacFromIp($clientIp);
+            if ($macAddress) {
+                // Store MAC in session for subsequent requests
+                session(['device_mac' => $macAddress]);
+                // Look up device in database
+                $device = Device::where('mac_address', $macAddress)->first();
+                if ($device) {
+                    Log::info('Device identified by IP address (no token)', [
+                        'ip' => $clientIp,
+                        'mac' => $macAddress,
+                        'device_id' => $device->id,
+                    ]);
+                    return $device;
+                }
+            }
+        }
+
+        // Fallback 2: Try to get MAC address from three possible sources (in order):
         // 1. URL query parameter: ?mac=AA:BB:CC:DD:EE:FF
         // 2. Form input (POST data)
         // 3. Session (stored from previous request)
@@ -155,6 +177,11 @@ class PortalController extends Controller
 
         // If no MAC address found, return null (device not found)
         if (!$macAddress) {
+            Log::warning('Device not found - no token, IP lookup failed, and no MAC in request', [
+                'ip' => $clientIp ?? 'unknown',
+                'token' => $token ?? 'none',
+                'url' => $request->fullUrl(),
+            ]);
             return null;
         }
 
@@ -246,6 +273,116 @@ class PortalController extends Controller
         Log::warning('Token not found in NoDogSplash client list', [
             'token' => $token,
             'output_sample' => substr($output, 0, 200), // Log first 200 chars for debugging
+        ]);
+
+        return null;
+    }
+
+    /**
+     * Get MAC address from IP address using NoDogSplash client list.
+     * 
+     * This method looks up the MAC address associated with a given IP address
+     * by querying NoDogSplash's client list. This is useful when devices access
+     * the portal directly (e.g., Android captive portal detection) without
+     * going through the splash page (no token available).
+     * 
+     * How it works:
+     * 1. Executes `ndsctl clients` command to get list of all connected clients
+     * 2. Parses output to find the client with matching IP address
+     * 3. Extracts MAC address from that client block
+     * 4. Returns MAC address in lowercase format (e.g., "e6:6a:8f:19:be:b1")
+     * 
+     * Output format from ndsctl clients:
+     * client_id=0
+     * ip=192.168.4.31
+     * mac=e6:6a:8f:19:be:b1
+     * token=f7fadfb9
+     * state=Preauthenticated
+     * 
+     * @param string $ipAddress The IP address to look up
+     * @return string|null The MAC address if found, null if not found
+     */
+    protected function getMacFromIp(string $ipAddress): ?string
+    {
+        // Execute ndsctl clients command to get list of all connected clients
+        // This requires sudo, so we use shell_exec with proper error handling
+        $output = @shell_exec("sudo ndsctl clients 2>/dev/null");
+
+        if (!$output) {
+            // Command failed or no output
+            Log::warning('Failed to execute ndsctl clients for IP lookup', [
+                'ip' => $ipAddress,
+            ]);
+            return null;
+        }
+
+        // Parse multi-line output to find IP and extract MAC
+        // Format:
+        // client_id=0
+        // ip=192.168.4.31
+        // mac=e6:6a:8f:19:be:b1
+        // token=f7fadfb9
+        // state=Preauthenticated
+        $lines = explode("\n", trim($output));
+
+        $currentMac = null;
+        $currentIp = null;
+        $inClientBlock = false;
+
+        foreach ($lines as $line) {
+            $line = trim($line);
+
+            // Skip empty lines (end of client block)
+            if (empty($line)) {
+                // Check if we found our IP before moving to next block
+                if ($inClientBlock && $currentIp === $ipAddress && $currentMac) {
+                    return strtolower($currentMac);
+                }
+                $inClientBlock = false;
+                $currentMac = null;
+                $currentIp = null;
+                continue;
+            }
+
+            // Check if this is the start of a new client block
+            if (strpos($line, 'client_id=') === 0) {
+                // Check previous block before starting new one
+                if ($inClientBlock && $currentIp === $ipAddress && $currentMac) {
+                    return strtolower($currentMac);
+                }
+                $inClientBlock = true;
+                $currentMac = null;
+                $currentIp = null;
+                continue;
+            }
+
+            // If we're in a client block, look for IP and MAC
+            if ($inClientBlock) {
+                // Extract IP address (remove "ip=" prefix)
+                if (strpos($line, 'ip=') === 0) {
+                    $currentIp = substr($line, 3); // Remove "ip=" prefix
+                }
+
+                // Extract MAC address (remove "mac=" prefix)
+                if (strpos($line, 'mac=') === 0) {
+                    $currentMac = substr($line, 4); // Remove "mac=" prefix
+                }
+
+                // If we have both IP and MAC, and IP matches, return immediately
+                if ($currentIp === $ipAddress && $currentMac) {
+                    return strtolower($currentMac);
+                }
+            }
+        }
+
+        // Check last client block if file doesn't end with newline
+        if ($inClientBlock && $currentIp === $ipAddress && $currentMac) {
+            return strtolower($currentMac);
+        }
+
+        // IP not found in client list
+        Log::debug('IP address not found in NoDogSplash client list', [
+            'ip' => $ipAddress,
         ]);
 
         return null;
