@@ -223,10 +223,56 @@ class CheckTimeExpiration implements ShouldQueue
             }
         }
 
+        // Step 3: Authenticate devices with time remaining that are still blocked
+        // This handles the case where devices have time but are still in Preauthenticated state
+        // (e.g., device just connected, or was previously blocked but time was granted)
+        // 
+        // How it works:
+        // - Get all active devices (not blocked, not whitelisted) with time remaining
+        // - For each device, try to authenticate it in NoDogSplash
+        // - allowDeviceThrough() is idempotent - safe to call multiple times
+        // - If device is already authenticated, it will skip (no harm done)
+        $activeDevicesWithTime = Device::where('status', 'active')
+            ->where('remaining_time_minutes', '>', 0)
+            ->get();
+
+        $authenticatedCount = 0;
+        foreach ($activeDevicesWithTime as $device) {
+            // Skip whitelisted devices (handled by MonitorDeviceConnections)
+            if ($device->isWhitelisted()) {
+                continue;
+            }
+
+            // Authenticate device in NoDogSplash (allows internet access)
+            // This is idempotent - if already authenticated, it will skip
+            try {
+                $authenticated = $noDogSplashService->allowDeviceThrough($device);
+                if ($authenticated) {
+                    $authenticatedCount++;
+                    Log::debug('Authenticated device with time remaining', [
+                        'device_id' => $device->id,
+                        'device_name' => $device->name,
+                        'mac_address' => $device->mac_address,
+                        'remaining_time_minutes' => $device->remaining_time_minutes,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                // Log error but continue processing other devices
+                // This can happen if device is not yet in NoDogSplash client list
+                Log::debug('Could not authenticate device with time (may not be in NoDogSplash yet)', [
+                    'device_id' => $device->id ?? 'unknown',
+                    'mac_address' => $device->mac_address ?? 'unknown',
+                    'error' => $e->getMessage(),
+                ]);
+                continue;
+            }
+        }
+
         // Log that the job completed successfully
         // This helps us track job execution and verify it's running correctly
         Log::info('CheckTimeExpiration job completed', [
             'expired_devices_processed' => $expiredDevices->count(),
+            'devices_authenticated' => $authenticatedCount,
         ]);
     }
 }
