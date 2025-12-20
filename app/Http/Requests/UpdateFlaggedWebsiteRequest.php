@@ -3,6 +3,8 @@
 namespace App\Http\Requests;
 
 use App\Models\Device;
+use App\Models\FlaggedWebsite;
+use App\Services\DomainBlockingService;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
@@ -42,7 +44,8 @@ class UpdateFlaggedWebsiteRequest extends FormRequest
                 function ($attribute, $value, $fail) {
                     // Check if user owns the device
                     $device = Device::find($value);
-                    if ($device && $device->user_id !== $this->user()->id) {
+                    $user = $this->user();
+                    if ($device && $user && $device->user_id !== $user->id) {
                         $fail('You can only flag websites for your own devices.');
                     }
                 },
@@ -54,6 +57,32 @@ class UpdateFlaggedWebsiteRequest extends FormRequest
                 'string',
                 'url',
                 'max:500',
+                function ($attribute, $value, $fail) {
+                    // Check for unique domain constraint (excluding current record)
+                    try {
+                        $domainBlockingService = app(DomainBlockingService::class);
+                        $domain = $domainBlockingService->normalizeDomain($value);
+                        
+                        $deviceId = $this->input('device_id');
+                        $flaggedWebsiteId = $this->route('flaggedWebsite')->id ?? null;
+                        
+                        if ($deviceId) {
+                            $exists = FlaggedWebsite::where('device_id', $deviceId)
+                                ->where('domain', $domain)
+                                ->when($flaggedWebsiteId, function ($query) use ($flaggedWebsiteId) {
+                                    return $query->where('id', '!=', $flaggedWebsiteId);
+                                })
+                                ->exists();
+                            
+                            if ($exists) {
+                                $fail('This domain is already flagged for this device.');
+                            }
+                        }
+                    } catch (\Exception $e) {
+                        // Ignore errors during validation (e.g., invalid URL format)
+                        // The 'url' rule will catch invalid URLs
+                    }
+                },
             ],
 
             // Reason - optional, string, max 500 characters

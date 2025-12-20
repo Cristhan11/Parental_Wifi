@@ -4616,9 +4616,14 @@ maintenance. We don't need network connectivity for these tasks.
         Figure 4.1-1 Hardware Components Flowchart
 
 
-All the hardware components work together to create a complete, self-contained system. We need minimal external dependencies. The Raspberry Pi 4B acts as the central processing unit. The SSD stores 
-all system data and media files reliably. The dual-mode network configuration gives us both internet connectivity and WiFi access 
-point functionality. This integrated hardware design supports all software functions while keeping power consumption and operating costs low. 
+All the hardware components work together to create a complete, 
+self-contained system. We need minimal external dependencies. The 
+Raspberry Pi 4B acts as the central processing unit. The SSD stores 
+all system data and media files reliably. The dual-mode network 
+configuration gives us both internet connectivity and WiFi access 
+point functionality. This integrated hardware design supports all 
+software functions while keeping power consumption and operating costs 
+low. 
 
 
 

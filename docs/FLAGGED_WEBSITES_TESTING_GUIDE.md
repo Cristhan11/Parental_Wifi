@@ -1,8 +1,17 @@
-# Flagged Websites Testing Guide
+# Flagged Websites Manual Testing Guide
 
-**Date:** December 8, 2025  
+**Date:** December 20, 2025  
 **System:** Parental WiFi Control System  
-**Feature:** Flagged Website Management (Monitoring, Not Blocking)
+**Feature:** Flagged Website Management (Monitoring, Not Blocking)  
+**Status:** ✅ Fully Implemented & Tested
+
+---
+
+## Quick Start
+
+1. **Access the application**: `http://[PI_IP]/flagged-websites`
+2. **Create a flagged website**: Click "Flag Website" → Fill form → Submit
+3. **Verify it works**: Check database, test access from device
 
 ---
 
@@ -10,13 +19,26 @@
 
 This guide provides step-by-step instructions to manually test flagged website functionality. **Flagged websites are different from blocked websites:**
 
-- **Blocked Websites**: Prevented from accessing (DNS blocking via dnsmasq)
-- **Flagged Websites**: **Allowed but monitored** - access is permitted but logged for parent review
+- **Blocked Websites**: ❌ Prevented from accessing (DNS blocking via dnsmasq)
+- **Flagged Websites**: ✅ **Allowed but monitored** - access is permitted but logged for parent review
 
 **Key Difference:**
 - Flagged websites should be **accessible** (not blocked)
 - Visits to flagged websites should be **logged** (monitoring functionality - part of TODO21)
 - No DNS blocking is applied to flagged websites
+
+---
+
+## Prerequisites Checklist
+
+Before testing, ensure:
+
+- [ ] Laravel application running on Raspberry Pi
+- [ ] Database migrations run successfully (`php artisan migrate`)
+- [ ] At least one child device registered in database
+- [ ] User authenticated as parent (logged in)
+- [ ] Web browser accessible to Pi's IP address
+- [ ] Terminal/SSH access to Raspberry Pi (for database checks)
 
 ---
 
@@ -34,53 +56,108 @@ This guide provides step-by-step instructions to manually test flagged website f
 
 **Objective:** Verify that creating a flagged website works correctly and domain is extracted properly.
 
-### Step 1: Create Flagged Website via Web Interface
+### Step 1: Access Create Form
 
-1. Navigate to: `http://[PI_IP]/flagged-websites/create`
-   - Replace `[PI_IP]` with your Pi's IP address
+1. **Log in** to the application as a parent user
+2. Navigate to: `http://[PI_IP]/flagged-websites`
+   - Replace `[PI_IP]` with your Pi's IP address (e.g., `192.168.1.100`)
+   - Or use `http://localhost/flagged-websites` if testing locally
 
-2. Fill in the form:
-   - **Device:** Select a child device (e.g., `CP_ChildDev01`)
-   - **URL:** Enter `https://example.com/page` (or any test URL)
-   - **Reason (optional):** Enter "Test monitoring"
+3. Click the **"Flag Website"** button (red button in top right)
 
-3. Click **"Flag Website"** button
+### Step 2: Fill in the Form
 
-4. You should see a success message: "Website flagged successfully."
+1. **Device:** Select a child device from dropdown (e.g., `CP_ChildDev01`)
+   - If no devices appear, create one first via `/accounts/create`
 
-### Step 2: Verify Database Record
+2. **URL:** Enter a test URL:
+   - Example: `https://example.com/page`
+   - Or: `https://www.facebook.com`
+   - Or: `http://test-site.com/some-page`
+
+3. **Reason (optional):** Enter a reason:
+   - Example: "Test monitoring"
+   - Or leave blank (reason is optional)
+
+### Step 3: Submit and Verify
+
+1. Click **"Flag Website"** button
+
+2. **Expected Result:**
+   - ✅ Redirected to flagged websites list page
+   - ✅ Green success message: "Website flagged successfully."
+   - ✅ New flagged website appears in the list
+
+3. **Verify in List:**
+   - URL should be displayed
+   - Domain should be extracted (e.g., `example.com` from `https://example.com/page`)
+   - Device name should be shown
+   - Reason should be displayed (or "-" if empty)
+
+### Step 4: Verify Database Record
+
+**Option A: Using Tinker (Recommended)**
 
 On your Pi terminal, run:
 
 ```bash
-cd /var/www/parental_wifi
+cd /var/www/parental_wifi  # or your project path
 php artisan tinker
 ```
 
 Then in tinker, run:
 
 ```php
+// Get the latest flagged website
 $flagged = App\Models\FlaggedWebsite::latest()->first();
+
+// Display information
+echo "ID: " . $flagged->id . "\n";
 echo "URL: " . $flagged->url . "\n";
 echo "Domain: " . $flagged->domain . "\n";
 echo "Device: " . $flagged->device->name . "\n";
+echo "Device MAC: " . $flagged->device->mac_address . "\n";
 echo "Reason: " . ($flagged->reason ?? 'None') . "\n";
+echo "Created: " . $flagged->created_at . "\n";
 ```
 
 **Expected Output:**
 ```
+ID: 1
 URL: https://example.com/page
 Domain: example.com
 Device: CP_ChildDev01
+Device MAC: AA:BB:CC:DD:EE:FF
 Reason: Test monitoring
+Created: 2025-12-20 19:30:00
 ```
 
 **Key Verification:**
 - ✅ Domain is correctly extracted from URL (`example.com` from `https://example.com/page`)
 - ✅ Database record created successfully
-- ✅ Device relationship works
+- ✅ Device relationship works (can access `$flagged->device`)
 
 Type `exit` to leave tinker.
+
+**Option B: Using MySQL/MariaDB directly**
+
+```bash
+mysql -u root -p parental_wifi
+```
+
+```sql
+SELECT 
+    fw.id,
+    fw.url,
+    fw.domain,
+    d.name AS device_name,
+    fw.reason,
+    fw.created_at
+FROM flagged_websites fw
+JOIN devices d ON fw.device_id = d.id
+ORDER BY fw.created_at DESC
+LIMIT 5;
+```
 
 ### Step 3: Verify Website is NOT Blocked
 

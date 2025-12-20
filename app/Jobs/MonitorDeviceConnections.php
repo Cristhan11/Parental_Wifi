@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Device;
 use App\Services\NetworkService;
+use App\Services\NoDogSplashService;
 use App\Services\TimeTrackingService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -127,7 +128,8 @@ class MonitorDeviceConnections implements ShouldQueue
      */
     public function handle(
         NetworkService $networkService,
-        TimeTrackingService $timeTrackingService
+        TimeTrackingService $timeTrackingService,
+        NoDogSplashService $noDogSplashService
     ): void {
         // Log that the job started running
         // This helps us track when the job executes and debug any issues
@@ -228,6 +230,36 @@ class MonitorDeviceConnections implements ShouldQueue
                         // Update last_seen_at timestamp
                         // This tracks when device was last seen online
                         $device->update(['last_seen_at' => now()]);
+
+                        // Auto-authenticate whitelisted devices in NoDogSplash
+                        // Whitelisted devices (parent devices, etc.) should bypass portal redirect
+                        // This ensures they can access internet immediately without being redirected
+                        // The allowDeviceThrough() method is idempotent - safe to call multiple times
+                        // It checks if device is already authenticated and skips if so
+                        if ($device->isWhitelisted()) {
+                            try {
+                                // Authenticate device in NoDogSplash (allows internet access)
+                                // This puts device in Authenticated state, bypassing portal redirect
+                                $noDogSplashService->allowDeviceThrough($device);
+                                
+                                Log::debug('Auto-authenticated whitelisted device in NoDogSplash', [
+                                    'device_id' => $device->id,
+                                    'device_name' => $device->name,
+                                    'mac_address' => $macAddress,
+                                    'status' => $device->status,
+                                    'role' => $device->role,
+                                ]);
+                            } catch (\Exception $e) {
+                                // Log error but don't fail the job
+                                // Device will still be updated, just NoDogSplash auth might have failed
+                                // This can happen if device is not yet in NoDogSplash client list
+                                Log::debug('Could not auto-authenticate whitelisted device (may not be in NoDogSplash yet)', [
+                                    'device_id' => $device->id,
+                                    'mac_address' => $macAddress,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        }
 
                         $connectedCount++;
 
