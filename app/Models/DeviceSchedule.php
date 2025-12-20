@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -63,6 +64,58 @@ class DeviceSchedule extends Model
     public function device(): BelongsTo
     {
         return $this->belongsTo(Device::class);
+    }
+
+    /**
+     * Get start_time as Carbon instance.
+     * 
+     * TIME columns return strings, so we convert to Carbon for easier manipulation.
+     * This allows us to use ->format() in views and jobs.
+     * 
+     * @param mixed $value The raw value from database (string like "15:00:00" or null)
+     * @return Carbon Carbon instance representing the time
+     */
+    public function getStartTimeAttribute($value)
+    {
+        if ($value instanceof Carbon) {
+            return $value;
+        }
+        if (empty($value)) {
+            return Carbon::createFromTime(0, 0, 0);
+        }
+        // TIME column returns string like "15:00:00", convert to Carbon
+        // Handle both "H:i:s" and "H:i" formats
+        try {
+            return Carbon::createFromFormat('H:i:s', $value);
+        } catch (\Exception $e) {
+            return Carbon::createFromFormat('H:i', $value);
+        }
+    }
+
+    /**
+     * Get end_time as Carbon instance.
+     * 
+     * TIME columns return strings, so we convert to Carbon for easier manipulation.
+     * This allows us to use ->format() in views and jobs.
+     * 
+     * @param mixed $value The raw value from database (string like "21:00:00" or null)
+     * @return Carbon Carbon instance representing the time
+     */
+    public function getEndTimeAttribute($value)
+    {
+        if ($value instanceof Carbon) {
+            return $value;
+        }
+        if (empty($value)) {
+            return Carbon::createFromTime(0, 0, 0);
+        }
+        // TIME column returns string like "21:00:00", convert to Carbon
+        // Handle both "H:i:s" and "H:i" formats
+        try {
+            return Carbon::createFromFormat('H:i:s', $value);
+        } catch (\Exception $e) {
+            return Carbon::createFromFormat('H:i', $value);
+        }
     }
 }
 

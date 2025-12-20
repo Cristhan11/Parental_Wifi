@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\BlockedWebsiteController;
 use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\DeviceScheduleController;
 use App\Http\Controllers\FlaggedWebsiteController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProfileController;
@@ -94,6 +95,17 @@ Route::middleware('auth')->group(function () {
         Route::get('/{flaggedWebsite}/edit', [FlaggedWebsiteController::class, 'edit'])->name('edit'); // Show edit form
         Route::put('/{flaggedWebsite}', [FlaggedWebsiteController::class, 'update'])->name('update'); // Update flagged website
         Route::delete('/{flaggedWebsite}', [FlaggedWebsiteController::class, 'destroy'])->name('destroy'); // Delete flagged website
+    });
+
+    // Device schedules routes - Time-based access control
+    // Route: /schedules
+    Route::prefix('schedules')->name('schedules.')->group(function () {
+        Route::get('/', [DeviceScheduleController::class, 'index'])->name('index'); // List all schedules
+        Route::get('/create', [DeviceScheduleController::class, 'create'])->name('create'); // Show create form
+        Route::post('/', [DeviceScheduleController::class, 'store'])->name('store'); // Save new schedule
+        Route::get('/{schedule}/edit', [DeviceScheduleController::class, 'edit'])->name('edit'); // Show edit form
+        Route::put('/{schedule}', [DeviceScheduleController::class, 'update'])->name('update'); // Update schedule
+        Route::delete('/{schedule}', [DeviceScheduleController::class, 'destroy'])->name('destroy'); // Delete schedule
     });
 });
 
