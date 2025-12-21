@@ -34,21 +34,23 @@ use Illuminate\Support\Facades\Storage;
  * 
  * How It Works:
  * 1. Job runs automatically every 10 minutes (via Laravel scheduler)
- * 2. Reads network log files (tcpdump or iptables logs)
- * 3. Parses log entries to extract HTTP/HTTPS requests
- * 4. For HTTP: Extracts URLs from plain text traffic
- * 5. For HTTPS: Extracts domains from SNI (Server Name Indication) in TLS handshakes
- * 6. Extracts URL, domain, IP address, and other information
- * 7. Matches requests to devices by MAC address
- * 8. Creates BrowsingLog records in database
- * 9. Handles log rotation (marks processed logs)
+ * 2. Reads network log files (DNS logs, tcpdump, or iptables logs)
+ * 3. Parses log entries to extract domain/URL information
+ * 4. For DNS logs: Extracts domains from DNS queries (most reliable for HTTPS)
+ * 5. For tcpdump HTTP: Extracts URLs from plain text traffic
+ * 6. For tcpdump HTTPS: Extracts domains from SNI (Server Name Indication) in TLS handshakes
+ * 7. Extracts URL, domain, IP address, and other information
+ * 8. Matches requests to devices by MAC address (tcpdump) or IP address (DNS logs)
+ * 9. Creates BrowsingLog records in database
+ * 10. Handles log rotation (marks processed logs)
  * 
  * What Information is Extracted:
  * - URL: Full website URL visited (e.g., "https://example.com" or "http://example.com/page")
  * - Domain: Website domain (e.g., "example.com", "youtube.com", "google.com")
+ *   - For DNS logs: Extracted from DNS query (most reliable, works for all sites)
  *   - For HTTP: Extracted from plain text URLs
  *   - For HTTPS: Extracted from SNI (Server Name Indication) in TLS handshake
- * - IP Address: Server IP address
+ * - IP Address: Server IP address (if available)
  * - User Agent: Browser information (if available in HTTP traffic)
  * - Timestamp: When the request was made
  * - Bandwidth: Bytes sent and received (if available)
@@ -205,6 +207,10 @@ class ParseNetworkLogs implements ShouldQueue
             return strtoupper(str_replace(['-', '_'], ':', $device->mac_address));
         });
 
+        // For DNS logs, we also need to index devices by IP address
+        // DNS logs contain IP addresses, not MAC addresses directly
+        $devicesByIp = Device::whereNotNull('ip_address')->get()->keyBy('ip_address');
+
         // Step 4: Process each log entry
         foreach ($logLines as $lineNumber => $line) {
             // Skip empty lines
@@ -226,18 +232,32 @@ class ParseNetworkLogs implements ShouldQueue
                     continue; // Continue with next entry
                 }
 
-                // Step 5: Match request to device by MAC address
-                // We need to find which device made this request
-                // MAC address is the unique identifier for each device
-                $macAddress = strtoupper(str_replace(['-', '_'], ':', $parsedEntry['mac_address'] ?? ''));
+                // Step 5: Match request to device by MAC address or IP address
+                // DNS logs use IP addresses, tcpdump logs use MAC addresses
+                $device = null;
+                
+                if (!empty($parsedEntry['is_dns_log']) && !empty($parsedEntry['source_ip'])) {
+                    // DNS log: Match by IP address
+                    $sourceIp = $parsedEntry['source_ip'];
+                    if (isset($devicesByIp[$sourceIp])) {
+                        $device = $devicesByIp[$sourceIp];
+                    } else {
+                        // Try to find device by current IP address from database
+                        $device = Device::where('ip_address', $sourceIp)->first();
+                    }
+                } else {
+                    // tcpdump/iptables log: Match by MAC address
+                    $macAddress = strtoupper(str_replace(['-', '_'], ':', $parsedEntry['mac_address'] ?? ''));
+                    if (!empty($macAddress) && isset($devices[$macAddress])) {
+                        $device = $devices[$macAddress];
+                    }
+                }
 
-                // If MAC address is missing or device not found, skip this entry
-                if (empty($macAddress) || !isset($devices[$macAddress])) {
+                // If device not found, skip this entry
+                if (!$device) {
                     $entriesSkipped++;
                     continue; // Continue with next entry
                 }
-
-                $device = $devices[$macAddress];
 
                 // Step 6: Check if browsing log already exists (avoid duplicates)
                 // We check if a BrowsingLog with same URL and timestamp already exists
@@ -331,23 +351,64 @@ class ParseNetworkLogs implements ShouldQueue
      */
     private function parseLogEntry(string $line): ?array
     {
-        // This is a simplified parser - in production, you would implement
-        // a more robust parser based on your specific log format
-        // 
-        // Example log formats:
-        // - tcpdump: "2024-01-15 15:30:00 IP 192.168.4.5.54321 > 93.184.216.34.80: GET /page HTTP/1.1 Host: example.com"
-        // - iptables: "Jan 15 15:30:00 kernel: IN=wlan0 OUT=eth0 MAC=AA:BB:CC:DD:EE:FF SRC=192.168.4.5 DST=93.184.216.34"
-        // 
-        // For now, we'll implement a basic parser that extracts common patterns
-        // In production, you would customize this based on your log format
+        // This parser supports multiple log formats:
+        // 1. DNS logs (dnsmasq): "Dec 22 04:30:15 dnsmasq[1234]: query[A] google.com from 192.168.4.31"
+        // 2. tcpdump: "2024-01-15 15:30:00 IP 192.168.4.5.54321 > 93.184.216.34.80: GET /page HTTP/1.1 Host: example.com"
+        // 3. iptables: "Jan 15 15:30:00 kernel: IN=wlan0 OUT=eth0 MAC=AA:BB:CC:DD:EE:FF SRC=192.168.4.5 DST=93.184.216.34"
 
-        // Extract MAC address from log line
+        $macAddress = null;
+        $sourceIp = null;
+        $isDnsLog = false;
+
+        // Step 1: Detect DNS log format (dnsmasq)
+        // Format: "Dec 22 04:30:15 dnsmasq[1234]: query[A] google.com from 192.168.4.31"
+        if (preg_match('/dnsmasq\[.*?\]:\s*query\[.*?\]\s+([^\s]+)\s+from\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/', $line, $dnsMatches)) {
+            $isDnsLog = true;
+            $domain = $dnsMatches[1];
+            $sourceIp = $dnsMatches[2];
+            
+            // DNS logs don't have MAC addresses directly - we'll match by IP later
+            // For now, set macAddress to null - we'll resolve it in handle() method
+            $macAddress = null; // Will be resolved from IP address
+            
+            // Construct URL (assume HTTPS for DNS queries, as most modern sites use HTTPS)
+            $url = 'https://' . $domain;
+            
+            // Extract timestamp from DNS log format: "Dec 22 04:30:15"
+            $visitedAt = now();
+            if (preg_match('/([A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/', $line, $timeMatches)) {
+                try {
+                    // Parse format: "Dec 22 04:30:15"
+                    $timeStr = $timeMatches[1];
+                    $currentYear = now()->year;
+                    $visitedAt = \Carbon\Carbon::createFromFormat('M j H:i:s', $timeStr);
+                    $visitedAt->setYear($currentYear);
+                } catch (\Exception $e) {
+                    // Parsing failed, use default (now())
+                }
+            }
+            
+            // Return DNS log entry (mac_address will be resolved in handle() method)
+            return [
+                'mac_address' => null, // Will be resolved from IP
+                'source_ip' => $sourceIp, // IP address for matching to device
+                'url' => $url,
+                'domain' => $domain,
+                'ip_address' => null, // Server IP not available in DNS logs
+                'user_agent' => null,
+                'bytes_sent' => 0,
+                'bytes_received' => 0,
+                'visited_at' => $visitedAt,
+                'is_dns_log' => true,
+            ];
+        }
+
+        // Step 2: Extract MAC address from log line (for tcpdump/iptables logs)
         // MAC address format: XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX
-        // Pattern: Look for MAC address pattern in log line
         if (preg_match('/([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})/', $line, $macMatches)) {
             $macAddress = $macMatches[0];
         } else {
-            // MAC address not found, can't match to device
+            // MAC address not found, can't match to device (unless it's a DNS log)
             return null;
         }
 
