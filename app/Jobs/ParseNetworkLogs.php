@@ -35,17 +35,21 @@ use Illuminate\Support\Facades\Storage;
  * How It Works:
  * 1. Job runs automatically every 10 minutes (via Laravel scheduler)
  * 2. Reads network log files (tcpdump or iptables logs)
- * 3. Parses log entries to extract HTTP requests
- * 4. Extracts URL, domain, IP address, and other information
- * 5. Matches requests to devices by MAC address
- * 6. Creates BrowsingLog records in database
- * 7. Handles log rotation (marks processed logs)
+ * 3. Parses log entries to extract HTTP/HTTPS requests
+ * 4. For HTTP: Extracts URLs from plain text traffic
+ * 5. For HTTPS: Extracts domains from SNI (Server Name Indication) in TLS handshakes
+ * 6. Extracts URL, domain, IP address, and other information
+ * 7. Matches requests to devices by MAC address
+ * 8. Creates BrowsingLog records in database
+ * 9. Handles log rotation (marks processed logs)
  * 
  * What Information is Extracted:
- * - URL: Full website URL visited (e.g., "https://example.com/page")
- * - Domain: Website domain (e.g., "example.com")
+ * - URL: Full website URL visited (e.g., "https://example.com" or "http://example.com/page")
+ * - Domain: Website domain (e.g., "example.com", "youtube.com", "google.com")
+ *   - For HTTP: Extracted from plain text URLs
+ *   - For HTTPS: Extracted from SNI (Server Name Indication) in TLS handshake
  * - IP Address: Server IP address
- * - User Agent: Browser information
+ * - User Agent: Browser information (if available in HTTP traffic)
  * - Timestamp: When the request was made
  * - Bandwidth: Bytes sent and received (if available)
  * 
@@ -296,20 +300,27 @@ class ParseNetworkLogs implements ShouldQueue
     }
 
     /**
-     * Parse a single log entry to extract HTTP request information.
+     * Parse a single log entry to extract HTTP/HTTPS request information.
      * 
      * This method parses a log line to extract:
      * - MAC address (to match to device)
      * - URL (website visited)
      * - Domain (website domain)
+     *   - For HTTP: Extracted from plain text URLs in traffic
+     *   - For HTTPS: Extracted from SNI (Server Name Indication) in TLS handshake
      * - IP address (server IP)
      * - Timestamp (when request was made)
-     * - User agent (browser information, if available)
+     * - User agent (browser information, if available in HTTP traffic)
      * - Bandwidth (bytes sent/received, if available)
      * 
-     * This is a simplified parser - in production, you would use
-     * a more robust parsing library or regex patterns based on your
-     * specific log format (tcpdump, iptables, etc.).
+     * HTTPS Domain Extraction:
+     * - Uses SNI (Server Name Indication) from TLS ClientHello packets
+     * - SNI contains the domain name in plain text before encryption
+     * - Works with tcpdump -A flag output which shows readable packet content
+     * - Extracts domains like "google.com", "youtube.com", "facebook.com"
+     * 
+     * This parser handles both HTTP (plain text) and HTTPS (SNI extraction)
+     * traffic to provide accurate domain capture for parental monitoring.
      * 
      * @param string $line The log line to parse
      * @return array|null Parsed entry data or null if parsing failed
@@ -340,27 +351,84 @@ class ParseNetworkLogs implements ShouldQueue
             return null;
         }
 
-        // Extract URL from log line
-        // Look for HTTP/HTTPS URLs in log line
-        // Pattern: http:// or https:// followed by domain and path
+        // Extract URL and domain from log line
+        // Supports both HTTP (plain text) and HTTPS (SNI extraction from TLS handshake)
         $url = null;
         $domain = null;
-        if (preg_match('/https?:\/\/([^\s]+)/', $line, $urlMatches)) {
+        $isHttps = false;
+        
+        // Step 1: Try to extract HTTP/HTTPS URLs (works for HTTP traffic)
+        if (preg_match('/https?:\/\/([^\s\/]+)/', $line, $urlMatches)) {
             $url = $urlMatches[0];
+            $isHttps = strpos($url, 'https://') === 0;
             // Extract domain from URL
-            if (preg_match('/https?:\/\/([^\/]+)/', $url, $domainMatches)) {
+            if (preg_match('/https?:\/\/([^\/\s]+)/', $url, $domainMatches)) {
                 $domain = $domainMatches[1];
+                // Remove port numbers if present
+                $domain = preg_replace('/:\d+$/', '', $domain);
             }
-        } else {
-            // If no full URL found, try to extract domain
-            // Pattern: Look for domain-like patterns (e.g., example.com)
-            if (preg_match('/([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}/', $line, $domainMatches)) {
+        }
+        // Step 2: Extract SNI (Server Name Indication) from TLS handshake for HTTPS
+        // SNI appears in TLS ClientHello packets before encryption
+        // Check if this is HTTPS traffic (port 443)
+        elseif (preg_match('/\.443[^:>]*?[>:]/', $line) || preg_match('/:443[^>]*?[>:]/', $line)) {
+            $isHttps = true;
+            
+            // SNI extraction: Look for domain names in TLS handshake context
+            // SNI domain appears as readable text in TLS ClientHello with -A flag
+            // Pattern 1: Look for domain patterns near port 443 connections
+            // Pattern 2: Look for SNI extension format (domain appears after TLS handshake data)
+            
+            // Extract domain from TLS handshake - look for readable domain strings
+            // Domains in SNI are often visible in tcpdump -A output
+            if (preg_match('/([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}/', $line, $domainMatches)) {
                 $domain = $domainMatches[0];
-                $url = 'http://' . $domain; // Construct URL from domain
-            } else {
-                // No URL or domain found, can't create browsing log
-                return null;
+                
+                // Filter out common false positives (IP addresses, MAC addresses, etc.)
+                // Valid domain should not start with numbers and should have proper TLD
+                if (!preg_match('/^\d+\./', $domain) && 
+                    !preg_match('/^[0-9A-Fa-f]{2}[:-]/', $domain) &&
+                    preg_match('/\.[a-zA-Z]{2,}$/', $domain)) {
+                    // Clean domain: remove common prefixes that might be false positives
+                    $domain = preg_replace('/^(www|api|cdn|static|img|images|media|m|mobile|www2|www3)\./', '', $domain);
+                    $url = 'https://' . $domain;
+                } else {
+                    $domain = null;
+                }
             }
+            
+            // If domain extraction failed, try alternative SNI patterns
+            if (!$domain) {
+                // Look for SNI in TLS extension format
+                // SNI extension type is 0x0000, followed by length, then domain
+                // In ASCII output, this might appear as readable domain strings
+                if (preg_match('/\x00\x00[^\x00]{0,50}?([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}/', $line, $sniMatches)) {
+                    $domain = $sniMatches[1];
+                    $url = 'https://' . $domain;
+                }
+            }
+        }
+        // Step 3: Fallback - try to extract any domain-like pattern
+        // This catches domains that might appear in other contexts
+        elseif (preg_match('/([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}/', $line, $domainMatches)) {
+            $domain = $domainMatches[0];
+            
+            // Determine if HTTPS based on port 443 in the line
+            $isHttps = (strpos($line, '.443') !== false || strpos($line, ':443') !== false);
+            
+            // Filter out false positives
+            if (!preg_match('/^\d+\./', $domain) && 
+                !preg_match('/^[0-9A-Fa-f]{2}[:-]/', $domain) &&
+                preg_match('/\.[a-zA-Z]{2,}$/', $domain)) {
+                $url = ($isHttps ? 'https://' : 'http://') . $domain;
+            } else {
+                $domain = null;
+            }
+        }
+        
+        // If no domain found after all attempts, can't create browsing log
+        if (!$domain || !$url) {
+            return null;
         }
 
         // Extract IP address from log line
@@ -373,12 +441,32 @@ class ParseNetworkLogs implements ShouldQueue
         // Extract timestamp from log line
         // Try to parse various timestamp formats
         // Common formats:
-        // - "2024-01-15 15:30:00"
-        // - "Jan 15 15:30:00"
+        // - tcpdump: "03:53:05.851696" (time only, use today's date)
+        // - "2024-01-15 15:30:00" (full date and time)
+        // - "Jan 15 15:30:00" (month name format)
         $visitedAt = now(); // Default to current time if can't parse
 
+        // Try to parse tcpdump timestamp format: "03:53:05.851696"
+        if (preg_match('/(\d{2}:\d{2}:\d{2}\.\d+)/', $line, $timeMatches)) {
+            try {
+                // Parse time with microseconds
+                $timeStr = $timeMatches[1];
+                $visitedAt = \Carbon\Carbon::createFromFormat('H:i:s.u', $timeStr);
+                // Set to today's date (tcpdump only shows time, not date)
+                $visitedAt->setDate(now()->year, now()->month, now()->day);
+            } catch (\Exception $e) {
+                // Try without microseconds
+                try {
+                    $timeStr = preg_replace('/\.\d+$/', '', $timeMatches[1]);
+                    $visitedAt = \Carbon\Carbon::createFromFormat('H:i:s', $timeStr);
+                    $visitedAt->setDate(now()->year, now()->month, now()->day);
+                } catch (\Exception $e2) {
+                    // Parsing failed, use default (now())
+                }
+            }
+        }
         // Try to parse ISO format: "2024-01-15 15:30:00"
-        if (preg_match('/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/', $line, $timeMatches)) {
+        elseif (preg_match('/(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})/', $line, $timeMatches)) {
             try {
                 $visitedAt = \Carbon\Carbon::parse($timeMatches[1]);
             } catch (\Exception $e) {
@@ -394,9 +482,18 @@ class ParseNetworkLogs implements ShouldQueue
         }
 
         // Extract bandwidth information (if available)
-        // Bandwidth format: "bytes_sent=1234 bytes_received=5678"
+        // tcpdump shows packet length in "length X" format
         $bytesSent = 0;
         $bytesReceived = 0;
+        
+        // Try tcpdump format: "length 1234"
+        if (preg_match('/length\s+(\d+)/', $line, $lengthMatches)) {
+            // For outbound packets (device -> server), this is bytes sent
+            // For inbound packets (server -> device), this is bytes received
+            // We'll treat it as bytes received (most common case)
+            $bytesReceived = (int) $lengthMatches[1];
+        }
+        // Try explicit format: "bytes_sent=1234 bytes_received=5678"
         if (preg_match('/bytes_sent=(\d+)/', $line, $sentMatches)) {
             $bytesSent = (int) $sentMatches[1];
         }
