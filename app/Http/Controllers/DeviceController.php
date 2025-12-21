@@ -202,7 +202,7 @@ class DeviceController extends Controller
             $deviceId = $request->input('device');
             $device = Auth::user()->devices()->find($deviceId);
         }
-        
+
         // If device is provided via route parameter (e.g., /child_devices/1), it's already loaded
         // Route model binding automatically resolves Device from route {device} parameter
 
@@ -672,7 +672,7 @@ class DeviceController extends Controller
         // selectRaw() calculates total hours per month
         // Use database-agnostic approach for month extraction
         $driver = DB::connection()->getDriverName();
-        
+
         if (in_array($driver, ['mysql', 'mariadb'])) {
             // MySQL/MariaDB: Use MONTH() function
             $sessions = DB::table('device_sessions')
@@ -770,34 +770,38 @@ class DeviceController extends Controller
      * Get website history for a device.
      * 
      * This is a helper method used by index() to get recently visited websites.
+     * It queries the BrowsingLog table to get actual browsing history records.
      * 
      * What It Does:
      * 1. Queries BrowsingLog table for this device
-     * 2. Gets unique domains (no duplicates)
-     * 3. Orders by most recent visit
-     * 4. Returns array with domain names
+     * 2. Gets the most recent browsing logs (limit 10-15)
+     * 3. Orders by visited_at DESC (newest first)
+     * 4. Returns collection of BrowsingLog models (not just domain strings)
+     * 
+     * Why Limit to 10-15 Records?
+     * - The Child Devices page shows a summary view, not full history
+     * - Too many records would clutter the UI
+     * - Full history is available via the "Browsing History" button
+     * - Improves page load performance
      * 
      * @param Device $device The device to get website history for
-     * @return array<string> Array of unique domain names
+     * @return \Illuminate\Database\Eloquent\Collection Collection of BrowsingLog models
      * 
      * Usage:
-     * Called internally by index() method to populate website history list.
+     * Called internally by index() method to populate website history section.
+     * The view will display these logs with domain, URL, and visited_at timestamp.
      */
-    protected function getWebsiteHistory(Device $device): array
+    protected function getWebsiteHistory(Device $device)
     {
         // Query BrowsingLog table for this device
-        // select('domain') only gets domain column (not full URL)
-        // distinct() removes duplicates (same domain visited multiple times)
         // orderBy('visited_at', 'desc') orders by most recent first
-        // limit(20) only gets top 20 most recent domains
-        // pluck('domain') extracts domain values into array
+        // limit(15) only gets top 15 most recent browsing logs
+        // get() returns a collection of BrowsingLog models
+        // This allows the view to access full log data (URL, domain, visited_at, etc.)
         return $device->browsingLogs()
-            ->select('domain')
-            ->distinct()
             ->orderBy('visited_at', 'desc')
-            ->limit(20)
-            ->pluck('domain')
-            ->toArray();
+            ->limit(15)
+            ->get();
     }
 
     /**
@@ -871,4 +875,3 @@ class DeviceController extends Controller
             ->with('success', 'Device role updated successfully.');
     }
 }
-

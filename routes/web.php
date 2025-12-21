@@ -1,6 +1,8 @@
 <?php
 
+use App\Http\Controllers\AccessAttemptController;
 use App\Http\Controllers\BlockedWebsiteController;
+use App\Http\Controllers\BrowsingLogController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DeviceScheduleController;
 use App\Http\Controllers\FlaggedWebsiteController;
@@ -106,6 +108,22 @@ Route::middleware('auth')->group(function () {
         Route::get('/{schedule}/edit', [DeviceScheduleController::class, 'edit'])->name('edit'); // Show edit form
         Route::put('/{schedule}', [DeviceScheduleController::class, 'update'])->name('update'); // Update schedule
         Route::delete('/{schedule}', [DeviceScheduleController::class, 'destroy'])->name('destroy'); // Delete schedule
+    });
+
+    // Browsing logs routes - View browsing history for devices
+    // Route: /browsing-logs
+    // These routes allow parents to view browsing history (website visits) for their devices
+    // Logs are automatically created by the ParseNetworkLogs background job
+    Route::prefix('browsing-logs')->name('browsing-logs.')->group(function () {
+        Route::get('/', [BrowsingLogController::class, 'index'])->name('index'); // List browsing logs with filtering
+    });
+
+    // Access attempts routes - View security events (blocked/flagged website attempts)
+    // Route: /access-attempts
+    // These routes allow parents to view security events when children interact with blocked/flagged websites
+    // Attempts are automatically created when children try to access blocked sites or visit flagged sites
+    Route::prefix('access-attempts')->name('access-attempts.')->group(function () {
+        Route::get('/', [AccessAttemptController::class, 'index'])->name('index'); // List access attempts with filtering
     });
 });
 

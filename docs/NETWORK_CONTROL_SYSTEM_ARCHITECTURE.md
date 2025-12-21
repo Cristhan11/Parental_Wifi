@@ -2,17 +2,18 @@
 
 ## Overview
 
-This document explains how the network control system works, including the shell scripts, PHP services, and how they interact to provide device blocking, unblocking, whitelisting, monitoring, and captive portal redirect capabilities.
+This document explains how the network control system works, including the shell scripts, PHP services, and how they interact to provide device blocking, unblocking, whitelisting, monitoring, captive portal redirects, and domain blocking capabilities.
 
 ## System Components
 
 The network control system consists of:
 
-1. **Shell Scripts** (in `scripts/` directory): Execute iptables commands and NoDogSplash control commands
+1. **Shell Scripts** (in `scripts/` directory): Execute iptables commands, NoDogSplash control commands, and dnsmasq domain blocking
 2. **ScriptExecutor Service** (PHP): Secure wrapper for executing shell scripts
 3. **NetworkService** (PHP): High-level interface for network operations (iptables blocking)
 4. **NoDogSplashService** (PHP): High-level interface for captive portal redirects
-5. **Laravel Application**: Uses both services to control devices
+5. **DomainBlockingService** (PHP): High-level interface for domain/app-level blocking using DNS (dnsmasq)
+6. **Laravel Application**: Uses all services to control devices
 
 ## Architecture Diagram
 
@@ -24,56 +25,56 @@ The network control system consists of:
                        │
                        │ Calls methods
                        ▼
-        ┌──────────────┴──────────────┐
-        │                             │
-        ▼                             ▼
-┌──────────────────────┐   ┌──────────────────────────────┐
-│  NetworkService       │   │  NoDogSplashService          │
-│  (PHP)                │   │  (PHP)                       │
-│  - blockDevice()      │   │  - redirectDeviceToPortal()  │
-│  - unblockDevice()    │   │  - allowDeviceThrough()      │
-│  - whitelistDevice()  │   │  - isDeviceRedirected()      │
-│  - getConnectedDevices│   └──────────────┬───────────────┘
-│  - getTrafficStats()  │                  │
-│  - isDeviceBlocked()  │                  │
-└──────────┬────────────┘                  │
-           │                                │
-           │ Uses ScriptExecutor            │ Uses ScriptExecutor
-           ▼                                ▼
-┌─────────────────────────────────────────────────────────────┐
-│                ScriptExecutor Service (PHP)                  │
-│  - Validates script whitelist                               │
-│  - Validates script paths                                   │
-│  - Sanitizes arguments                                      │
-│  - Executes scripts with sudo                               │
-│  - Captures output and return codes                         │
-└──────────────────────┬──────────────────────────────────────┘
+        ┌──────────────┴──────────────┬──────────────────────────────────────────┐
+        │                             │                                          │
+        ▼                             ▼                                          ▼
+┌──────────────────────┐   ┌──────────────────────────────┐   ┌──────────────────────────────┐
+│  NetworkService       │   │  NoDogSplashService          │   │  DomainBlockingService       │
+│  (PHP)                │   │  (PHP)                       │   │  (PHP)                       │
+│  - blockDevice()      │   │  - redirectDeviceToPortal()  │   │  - blockDomainForDevice()    │
+│  - unblockDevice()    │   │  - allowDeviceThrough()      │   │  - unblockDomainForDevice()  │
+│  - whitelistDevice()  │   │  - isDeviceRedirected()      │   │  - updateDnsmasqBlocklist()  │
+│  - getConnectedDevices│   └──────────────┬───────────────┘   │  - detectRelatedDomains()   │
+│  - getTrafficStats()  │                  │                   │  - getBlockedDomainsForDevice│
+│  - isDeviceBlocked()  │                  │                   └──────────────┬───────────────┘
+└──────────┬────────────┘                  │                                  │
+           │                               │                                  │
+           │ Uses ScriptExecutor           │ Uses ScriptExecutor              │ Uses ScriptExecutor
+           ▼                               ▼                                  ▼
+┌─────────────────────────────────────────────────────────────────────────────────────────────┐
+│                ScriptExecutor Service (PHP)                                                 │
+│  Step 1: Validates script whitelist                                                        │
+│  Step 2: Validates script paths                                                            │
+│  Step 3: Sanitizes arguments                                                               │
+│  Step 4: Executes scripts with sudo (only after validation)                                │
+│  Step 5: Captures output and return codes                                                  │
+└──────────────────────┬──────────────────────────────────────────────────────────────────────┘
                        │
-                       │ Executes
+                       │ Executes (only after validation passes)
                        ▼
-        ┌──────────────┴──────────────┐
-        │                             │
-        ▼                             ▼
-┌──────────────────────┐   ┌──────────────────────────────┐
-│  Network Scripts      │   │  NoDogSplash Scripts         │
-│  (Bash)               │   │  (Bash)                      │
-│  - block_device.sh    │   │  - redirect_device_portal.sh │
-│  - unblock_device.sh  │   │  - allow_device_through.sh   │
-│  - whitelist_device.sh│   │  - check_device_redirected.sh│
-│  - get_connected_     │   └──────────────┬───────────────┘
-│    devices.sh         │                  │
-│  - monitor_traffic.sh │                  │
-└──────────┬────────────┘                  │
-           │                                │
-           │ Modifies/Queries                │ Controls
-           ▼                                ▼
-┌──────────────────────┐   ┌──────────────────────────────┐
-│  iptables            │   │  NoDogSplash                 │
-│  (Linux Firewall)    │   │  (Captive Portal)            │
-│  - INPUT chain       │   │  - ndsctl auth/deauth        │
-│  - FORWARD chain     │   │  - Client state management   │
-│  - MAC-based rules   │   │  - HTTP request interception│
-└──────────────────────┘   └──────────────────────────────┘
+        ┌──────────────┴──────────────┬──────────────────────────────┐
+        │                             │                              │
+        ▼                             ▼                              ▼
+┌──────────────────────┐   ┌──────────────────────────────┐   ┌──────────────────────────────┐
+│  Network Scripts      │   │  NoDogSplash Scripts         │   │  Domain Blocking Scripts      │
+│  (Bash)               │   │  (Bash)                      │   │  (Bash)                      │
+│  - block_device.sh    │   │  - redirect_device_portal.sh │   │  - block_domain.sh            │
+│  - unblock_device.sh  │   │  - allow_device_through.sh   │   │  - unblock_domain.sh          │
+│  - whitelist_device.sh│   │  - check_device_redirected.sh│   │  - update_dnsmasq_blocklist.sh│
+│  - get_connected_     │   └──────────────┬───────────────┘   └──────────────┬───────────────┘
+│    devices.sh         │                  │                                  │
+│  - monitor_traffic.sh │                  │                                  │
+└──────────┬────────────┘                  │                                  │
+           │                                │                                  │
+           │ Modifies/Queries                │ Controls                         │ Modifies
+           ▼                                ▼                                  ▼
+┌──────────────────────┐   ┌──────────────────────────────┐   ┌──────────────────────────────┐
+│  iptables            │   │  NoDogSplash                 │   │  dnsmasq                      │
+│  (Linux Firewall)    │   │  (Captive Portal)            │   │  (DNS Server)                 │
+│  - INPUT chain       │   │  - ndsctl auth/deauth        │   │  - DNS query interception    │
+│  - FORWARD chain     │   │  - Client state management   │   │  - Domain blocklist config    │
+│  - MAC-based rules   │   │  - HTTP request interception│   │  - 127.0.0.1 redirect         │
+└──────────────────────┘   └──────────────────────────────┘   └──────────────────────────────┘
 ```
  
 ## Component Details
@@ -103,6 +104,10 @@ The network control system consists of:
        'redirect_device_portal.sh',
        'allow_device_through.sh',
        'check_device_redirected.sh',
+       // Domain blocking scripts (dnsmasq)
+       'block_domain.sh',
+       'unblock_domain.sh',
+       'update_dnsmasq_blocklist.sh',
    ];
    ```
 
@@ -118,7 +123,9 @@ The network control system consists of:
 
 4. **Execution**:
    - Builds command: `sudo /full/path/to/script.sh 'arg1' 'arg2'`
-   - Executes via `exec()` and captures output
+   - Executes via `exec()` or `proc_open()` (for stdin support)
+   - Supports stdin input for scripts that read from standard input
+   - Captures stdout, stderr, and return codes
    - Returns structured result array
 
 **Security Features**:
@@ -423,6 +430,104 @@ sudo iptables -L FORWARD -v -n -x
 
 ---
 
+#### `block_domain.sh`
+
+**Purpose**: Block a domain for a specific device using dnsmasq DNS blocking.
+
+**What It Does**:
+1. **Validates Domain and MAC Address**: Checks format of both inputs
+2. **Normalizes MAC Address**: Converts to uppercase with colons
+3. **Adds Domain to Blocklist**: 
+   - Creates or updates per-device config file: `/etc/dnsmasq.d/blocked-domains-{MAC}.conf`
+   - Adds `address=/domain.com/127.0.0.1` entry
+   - If subdomains should be blocked, adds `address=/.domain.com/127.0.0.1` (note leading dot)
+4. **Restarts dnsmasq**: Applies changes immediately
+5. **Idempotent**: Safe to run multiple times (won't create duplicates)
+
+**dnsmasq Configuration Format**:
+```bash
+# Block domain only
+address=/facebook.com/127.0.0.1
+
+# Block domain and all subdomains (note leading dot)
+address=/.facebook.com/127.0.0.1
+```
+
+**How DNS Blocking Works**:
+- Device tries to access facebook.com
+- Device queries DNS: "What's the IP for facebook.com?"
+- dnsmasq intercepts the query
+- dnsmasq checks blocklist and finds facebook.com is blocked
+- dnsmasq returns 127.0.0.1 instead of real IP
+- Device tries to connect to 127.0.0.1 (localhost) - connection fails
+- Works for both web browsers AND mobile apps
+
+**Exit Codes**:
+- `0`: Success (domain blocked)
+- `1`: Validation error (invalid domain or MAC address)
+- `2`: dnsmasq error (failed to update config or restart service)
+
+---
+
+#### `unblock_domain.sh`
+
+**Purpose**: Remove domain blocking for a specific device.
+
+**What It Does**:
+1. **Validates Domain and MAC Address**: Same validation as block_domain.sh
+2. **Normalizes MAC Address**: Converts to standard format
+3. **Removes Domain from Blocklist**:
+   - Reads per-device config file: `/etc/dnsmasq.d/blocked-domains-{MAC}.conf`
+   - Removes domain entries (both with and without subdomain blocking)
+   - Saves updated config file
+4. **Restarts dnsmasq**: Applies changes immediately
+5. **Idempotent**: Safe to run even if domain not blocked
+
+**Exit Codes**:
+- `0`: Success (domain unblocked, or already unblocked)
+- `1`: Validation error
+- `2`: dnsmasq error
+
+---
+
+#### `update_dnsmasq_blocklist.sh`
+
+**Purpose**: Update dnsmasq blocklist for a device with all currently blocked domains.
+
+**What It Does**:
+1. **Validates MAC Address**: Checks format
+2. **Reads Domain List from stdin**: Accepts domain list in format `domain:block_subdomains` (one per line)
+   - Example stdin:
+     ```
+     facebook.com:1
+     instagram.com:0
+     tiktok.com:1
+     ```
+3. **Generates dnsmasq Configuration**:
+   - Creates config file: `/etc/dnsmasq.d/blocked-domains-{MAC}.conf`
+   - Adds `address=/domain.com/127.0.0.1` for each domain
+   - Adds `address=/.domain.com/127.0.0.1` if subdomains should be blocked
+4. **Restarts dnsmasq**: Applies changes immediately
+5. **Replaces Entire Blocklist**: Overwrites existing config (not append)
+
+**Why This Script?**:
+- More efficient than calling block_domain.sh for each domain
+- Ensures blocklist is in sync with database
+- Single dnsmasq restart instead of multiple restarts
+
+**Usage**:
+```bash
+# Update blocklist for device with stdin input
+echo -e "facebook.com:1\ninstagram.com:0" | sudo ./update_dnsmasq_blocklist.sh AA:BB:CC:DD:EE:FF
+```
+
+**Exit Codes**:
+- `0`: Success (blocklist updated)
+- `1`: Validation error (invalid MAC address)
+- `2`: dnsmasq error (failed to write config or restart service)
+
+---
+
 ## Complete Flow Examples
 
 ### Example 1: Blocking a Device When Time Expires
@@ -671,6 +776,17 @@ Get Traffic Statistics
         → Returns JSON array with bytes sent/received
 ```
 
+### Domain Blocking Flow
+```
+Block Domain for Device
+  → DomainBlockingService::blockDomainForDevice()
+    → DomainBlockingService::updateDnsmasqBlocklist()
+      → ScriptExecutor::execute('update_dnsmasq_blocklist.sh', [MAC], stdin)
+        → update_dnsmasq_blocklist.sh writes dnsmasq config
+          → dnsmasq redirects domain DNS queries to 127.0.0.1
+            → Device cannot access blocked domain
+```
+
 ---
 
 ## Key Concepts
@@ -733,6 +849,71 @@ Get Traffic Statistics
 2. Check www-data user can execute scripts
 3. Verify script ownership and permissions
 4. Test with: `sudo -u www-data sudo scripts/block_device.sh AA:BB:CC:DD:EE:FF`
+
+---
+
+### 4. DomainBlockingService (`app/Services/DomainBlockingService.php`)
+
+**Purpose**: High-level interface for domain-level and app-level blocking using DNS (dnsmasq). Provides methods to block/unblock domains for specific devices.
+
+**Key Methods**:
+
+#### `blockDomainForDevice(BlockedWebsite $blockedWebsite, Device $device): bool`
+- **Purpose**: Block a domain for a specific device using DNS blocking
+- **Flow**:
+  1. Validates device has MAC address
+  2. Detects related domains if app-level blocking is requested
+  3. Calls ScriptExecutor to run `update_dnsmasq_blocklist.sh` with device MAC and domain list
+  4. Script updates dnsmasq configuration to redirect domain to 127.0.0.1
+  5. Restarts dnsmasq service to apply changes
+  6. Logs operation
+  7. Returns true if successful, false otherwise
+
+#### `unblockDomainForDevice(BlockedWebsite $blockedWebsite, Device $device): bool`
+- **Purpose**: Remove domain blocking for a device
+- **Flow**:
+  1. Validates device has MAC address
+  2. Calls ScriptExecutor to run `update_dnsmasq_blocklist.sh` to remove domain
+  3. Script updates dnsmasq configuration
+  4. Restarts dnsmasq service
+  5. Logs operation
+  6. Returns success status
+
+#### `updateDnsmasqBlocklist(Device $device): bool`
+- **Purpose**: Update dnsmasq blocklist for a device with all currently blocked domains
+- **Flow**:
+  1. Gets all blocked domains for device from database
+  2. Generates dnsmasq configuration with all blocked domains
+  3. Calls ScriptExecutor to run `update_dnsmasq_blocklist.sh` with stdin input
+  4. Script writes configuration to `/etc/dnsmasq.d/blocked-domains-{MAC}.conf`
+  5. Restarts dnsmasq service
+  6. Returns success status
+
+#### `detectRelatedDomains(string $domain, ?string $appName = null): array`
+- **Purpose**: Detect related domains for app-level blocking
+- **Flow**:
+  1. Looks up domain in predefined app domain mappings
+  2. Returns array of related domains that should also be blocked
+  3. Example: Blocking Facebook app returns api.facebook.com, graph.facebook.com, etc.
+
+#### `getBlockedDomainsForDevice(Device $device): array`
+- **Purpose**: Get list of all domains currently blocked for a device
+- **Flow**:
+  1. Queries database for blocked websites for device
+  2. Extracts domains and related domains
+  3. Returns array of blocked domains
+
+**How DNS Blocking Works**:
+- dnsmasq intercepts DNS queries from devices
+- When device asks "What's the IP for facebook.com?", dnsmasq checks blocklist
+- If domain is blocked, dnsmasq returns 127.0.0.1 instead of real IP
+- Device can't connect because 127.0.0.1 is not the real server
+- Works for both web browsers AND mobile apps (apps also use DNS)
+
+**Error Handling**:
+- All methods handle errors gracefully
+- Detailed error logging for debugging
+- System continues to function even if domain blocking fails
 
 ---
 
@@ -816,11 +997,12 @@ For complete setup details, see `docs/NODOGSPLASH_SETUP.md`.
 
 The network control system provides a secure, reliable way to control device access to the internet through:
 
-1. **Shell Scripts**: Execute iptables commands and NoDogSplash control commands
+1. **Shell Scripts**: Execute iptables commands, NoDogSplash control commands, and dnsmasq domain blocking
 2. **ScriptExecutor**: Provides secure execution with validation and error handling
 3. **NetworkService**: High-level interface for network-level blocking (iptables)
 4. **NoDogSplashService**: High-level interface for captive portal redirects
-5. **Laravel Integration**: Seamlessly integrates with the rest of the application
+5. **DomainBlockingService**: High-level interface for domain/app-level blocking (dnsmasq)
+6. **Laravel Integration**: Seamlessly integrates with the rest of the application
 
 All components work together to provide:
 - Device blocking/unblocking (iptables)
@@ -828,12 +1010,14 @@ All components work together to provide:
 - Connected device discovery
 - Traffic monitoring
 - Captive portal redirects (NoDogSplash)
+- Domain and app-level blocking (dnsmasq)
 - Secure execution with proper error handling
 
-The system uses a **three-layer approach**:
-- **Layer 1 (Database)**: Tracks device state
+The system uses a **multi-layer approach**:
+- **Layer 1 (Database)**: Tracks device state and blocked websites
 - **Layer 2 (Network)**: iptables blocking for physical security
 - **Layer 3 (Redirect)**: NoDogSplash redirects for user experience
+- **Layer 4 (DNS)**: dnsmasq domain blocking for website/app restrictions
 
 The system is designed to be:
 - **Secure**: Multiple layers of validation and sanitization

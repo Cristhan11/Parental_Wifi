@@ -204,7 +204,6 @@ class CheckTimeExpiration implements ShouldQueue
                     'network_blocked' => $networkBlocked,
                     'redirect_configured' => $redirectConfigured,
                 ]);
-
             } catch (\Exception $e) {
                 // If an error occurs while processing a device, catch it here
                 // Log the error but continue processing other devices
@@ -225,25 +224,47 @@ class CheckTimeExpiration implements ShouldQueue
 
         // Step 3: Authenticate devices with time remaining that are still blocked
         // This handles the case where devices have time but are still in Preauthenticated state
-        // (e.g., device just connected, or was previously blocked but time was granted)
+        // OR have status='blocked' in database but time remaining (should be unblocked)
         // 
         // How it works:
-        // - Get all active devices (not blocked, not whitelisted) with time remaining
-        // - For each device, try to authenticate it in NoDogSplash
-        // - allowDeviceThrough() is idempotent - safe to call multiple times
-        // - If device is already authenticated, it will skip (no harm done)
-        $activeDevicesWithTime = Device::where('status', 'active')
+        // - Get all devices (active OR blocked) with time remaining
+        // - For each device, unblock at network level AND authenticate in NoDogSplash
+        // - Update status to 'active' if it was 'blocked'
+        // - allowDeviceThrough() and unblockDevice() are idempotent - safe to call multiple times
+        $devicesWithTime = Device::whereIn('status', ['active', 'blocked'])
             ->where('remaining_time_minutes', '>', 0)
             ->get();
 
         $authenticatedCount = 0;
-        foreach ($activeDevicesWithTime as $device) {
+        $unblockedCount = 0;
+        foreach ($devicesWithTime as $device) {
             // Skip whitelisted devices (handled by MonitorDeviceConnections)
             if ($device->isWhitelisted()) {
                 continue;
             }
 
-            // Authenticate device in NoDogSplash (allows internet access)
+            // Step 1: Unblock device at network level (iptables)
+            // This removes any blocking rules that might prevent internet access
+            try {
+                $unblocked = $networkService->unblockDevice($device);
+                if ($unblocked) {
+                    $unblockedCount++;
+                    Log::debug('Unblocked device with time remaining at network level', [
+                        'device_id' => $device->id,
+                        'device_name' => $device->name,
+                        'mac_address' => $device->mac_address,
+                        'remaining_time_minutes' => $device->remaining_time_minutes,
+                    ]);
+                }
+            } catch (\Exception $e) {
+                Log::debug('Could not unblock device at network level', [
+                    'device_id' => $device->id ?? 'unknown',
+                    'mac_address' => $device->mac_address ?? 'unknown',
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            // Step 2: Authenticate device in NoDogSplash (allows internet access)
             // This is idempotent - if already authenticated, it will skip
             try {
                 $authenticated = $noDogSplashService->allowDeviceThrough($device);
@@ -257,8 +278,6 @@ class CheckTimeExpiration implements ShouldQueue
                     ]);
                 }
             } catch (\Exception $e) {
-                // Log error but continue processing other devices
-                // This can happen if device is not yet in NoDogSplash client list
                 Log::debug('Could not authenticate device with time (may not be in NoDogSplash yet)', [
                     'device_id' => $device->id ?? 'unknown',
                     'mac_address' => $device->mac_address ?? 'unknown',
@@ -266,14 +285,24 @@ class CheckTimeExpiration implements ShouldQueue
                 ]);
                 continue;
             }
+
+            // Step 3: Update status to 'active' if it was 'blocked'
+            // This ensures the device is marked as active in the database
+            if ($device->status === 'blocked') {
+                $device->update(['status' => 'active']);
+                Log::debug('Updated device status from blocked to active', [
+                    'device_id' => $device->id,
+                    'device_name' => $device->name,
+                    'mac_address' => $device->mac_address,
+                ]);
+            }
         }
 
         // Log that the job completed successfully
-        // This helps us track job execution and verify it's running correctly
         Log::info('CheckTimeExpiration job completed', [
             'expired_devices_processed' => $expiredDevices->count(),
             'devices_authenticated' => $authenticatedCount,
+            'devices_unblocked' => $unblockedCount,
         ]);
     }
 }
-
