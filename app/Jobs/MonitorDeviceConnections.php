@@ -178,9 +178,14 @@ class MonitorDeviceConnections implements ShouldQueue
             // - We need to check if each connected device exists in database
             // - We need to check if each database device is still connected
             // - This allows us to detect new devices and disconnected devices
-            $databaseDevices = Device::all()->keyBy('mac_address');
-            // keyBy('mac_address') creates a collection indexed by MAC address
-            // This makes it easy to look up devices by MAC address: $databaseDevices[$mac]
+            $databaseDevices = Device::all()->mapWithKeys(function ($device) {
+                // Normalize MAC address to uppercase with colons for consistent lookup
+                // This ensures we can match devices regardless of how MAC is stored in DB
+                $normalizedMac = strtoupper(str_replace(['-', '_'], ':', $device->mac_address));
+                return [$normalizedMac => $device];
+            });
+            // This creates a collection indexed by normalized MAC address (uppercase with colons)
+            // Example: ['E6:6A:8F:19:BE:B1' => Device, '42:B8:77:AE:74:12' => Device]
 
             // Step 3: Process connected devices
             // For each device currently connected to the network:
@@ -241,7 +246,7 @@ class MonitorDeviceConnections implements ShouldQueue
                                 // Authenticate device in NoDogSplash (allows internet access)
                                 // This puts device in Authenticated state, bypassing portal redirect
                                 $noDogSplashService->allowDeviceThrough($device);
-                                
+
                                 Log::debug('Auto-authenticated whitelisted device in NoDogSplash', [
                                     'device_id' => $device->id,
                                     'device_name' => $device->name,
@@ -254,6 +259,29 @@ class MonitorDeviceConnections implements ShouldQueue
                                 // Device will still be updated, just NoDogSplash auth might have failed
                                 // This can happen if device is not yet in NoDogSplash client list
                                 Log::debug('Could not auto-authenticate whitelisted device (may not be in NoDogSplash yet)', [
+                                    'device_id' => $device->id,
+                                    'mac_address' => $macAddress,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        }
+
+                        // Also authenticate active devices with time remaining
+                        // This ensures devices with time can access internet immediately
+                        if ($device->status === 'active' && $device->remaining_time_minutes > 0) {
+                            try {
+                                // Authenticate device in NoDogSplash (allows internet access)
+                                $noDogSplashService->allowDeviceThrough($device);
+
+                                Log::debug('Auto-authenticated device with time remaining', [
+                                    'device_id' => $device->id,
+                                    'device_name' => $device->name,
+                                    'mac_address' => $macAddress,
+                                    'remaining_time_minutes' => $device->remaining_time_minutes,
+                                ]);
+                            } catch (\Exception $e) {
+                                // Log error but don't fail the job
+                                Log::debug('Could not auto-authenticate device with time (may not be in NoDogSplash yet)', [
                                     'device_id' => $device->id,
                                     'mac_address' => $macAddress,
                                     'error' => $e->getMessage(),
@@ -368,7 +396,6 @@ class MonitorDeviceConnections implements ShouldQueue
                 'disconnected_devices_processed' => $disconnectedCount,
                 'new_devices_detected' => $newDevicesCount,
             ]);
-
         } catch (\Exception $e) {
             // If NetworkService fails or other critical error occurs, catch it here
             // Log the error but don't crash the job
@@ -384,4 +411,3 @@ class MonitorDeviceConnections implements ShouldQueue
         }
     }
 }
-
