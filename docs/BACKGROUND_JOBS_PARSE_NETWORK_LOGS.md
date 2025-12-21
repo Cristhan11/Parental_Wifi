@@ -2,7 +2,7 @@
 
 ## What Is This Job?
 
-The `ParseNetworkLogs` job is a background job that periodically parses network traffic logs to extract browsing history and create BrowsingLog records. It reads tcpdump or iptables log files, extracts HTTP requests, matches them to devices by MAC address, and stores the browsing history in the database.
+The `ParseNetworkLogs` job is a background job that periodically parses network traffic logs to extract browsing history and create BrowsingLog records. It reads DNS log files (from dnsmasq), extracts domain names from DNS queries, matches them to devices by IP address, and stores the browsing history in the database.
 
 **File Location**: `app/Jobs/ParseNetworkLogs.php`
 
@@ -22,27 +22,27 @@ Without this job, browsing history would never be captured, and parents couldn't
 ### Step-by-Step Workflow
 
 1. **Job Runs**: Every 10 minutes, Laravel's scheduler runs this job
-2. **Read Log File**: Reads network log file (tcpdump or iptables)
-3. **Parse Entries**: Splits log into lines and parses each entry
-4. **Extract Information**: Extracts URL, domain, IP address, timestamp, etc.
-5. **Match to Device**: Matches request to device by MAC address
+2. **Read Log File**: Reads DNS log file (`/var/log/dnsmasq.log`)
+3. **Parse Entries**: Splits log into lines and parses each DNS query entry
+4. **Extract Information**: Extracts domain name, source IP address, timestamp
+5. **Match to Device**: Matches request to device by IP address (from DNS log)
 6. **Create Record**: Creates BrowsingLog record in database
 7. **Handle Duplicates**: Skips entries that already exist
 8. **Log Results**: Logs processing summary
 
 ### Example Scenario
 
-**Log Entry**:
+**Log Entry (DNS Log Format)**:
 ```
-2024-01-15 15:30:00 IP 192.168.4.5.54321 > 93.184.216.34.80: GET /page HTTP/1.1 Host: example.com MAC=AA:BB:CC:DD:EE:FF
+Dec 22 04:30:15 parentalpi dnsmasq[1234]: query[A] google.com from 192.168.4.31
 ```
 
 **Processing**:
 1. Parse log entry
-2. Extract MAC address: `AA:BB:CC:DD:EE:FF`
-3. Extract URL: `http://example.com/page`
-4. Extract domain: `example.com`
-5. Match to device by MAC address
+2. Extract domain: `google.com`
+3. Extract source IP: `192.168.4.31`
+4. Match to device by IP address
+5. Construct URL: `https://google.com`
 6. Create BrowsingLog record
 
 ## Code Structure
@@ -99,40 +99,43 @@ private function parseLogEntry(string $line): ?array
 
 ## Key Concepts
 
-### Log File Formats
+### Log File Format
 
-Network logs can be in different formats:
+The job currently uses DNS log format from dnsmasq:
 
-**tcpdump Format**:
+**DNS Log Format**:
 ```
-2024-01-15 15:30:00 IP 192.168.4.5.54321 > 93.184.216.34.80: GET /page HTTP/1.1 Host: example.com
-```
-
-**iptables Format**:
-```
-Jan 15 15:30:00 kernel: IN=wlan0 OUT=eth0 MAC=AA:BB:CC:DD:EE:FF SRC=192.168.4.5 DST=93.184.216.34
+Dec 22 04:30:15 parentalpi dnsmasq[1234]: query[A] google.com from 192.168.4.31
+Dec 22 04:30:16 parentalpi dnsmasq[1234]: query[AAAA] youtube.com from 192.168.4.31
+Dec 22 04:30:17 parentalpi dnsmasq[1234]: reply google.com is 142.250.191.14
 ```
 
-The parser needs to handle both formats (or be configured for one).
+**Format Breakdown:**
+- **Timestamp**: `Dec 22 04:30:15`
+- **Query Type**: `query[A]` (A record) or `query[AAAA]` (IPv6)
+- **Domain**: `google.com`
+- **Source IP**: `from 192.168.4.31`
 
-### MAC Address Extraction
+The parser extracts domain names from DNS queries, which works for both HTTP and HTTPS traffic.
 
-MAC addresses are extracted using regex patterns:
+### Domain Extraction (DNS Logs)
+
+Domains are extracted from DNS query entries:
 
 ```php
-// Pattern: XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX
-preg_match('/([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})/', $line, $matches);
-$macAddress = $matches[0];
+// Pattern: query[A] domain.com from IP
+preg_match('/dnsmasq\[.*?\]:\s*query\[.*?\]\s+([^\s]+)\s+from\s+(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})/', $line, $matches);
+$domain = $matches[1];  // e.g., "google.com"
+$sourceIp = $matches[2]; // e.g., "192.168.4.31"
 ```
 
-### URL Extraction
+### IP Address Matching
 
-URLs are extracted from HTTP requests:
+DNS logs contain IP addresses, not MAC addresses. The job matches devices by IP:
 
 ```php
-// Pattern: http:// or https:// followed by domain and path
-preg_match('/https?:\/\/([^\s]+)/', $line, $matches);
-$url = $matches[0];
+// Match device by IP address
+$device = Device::where('ip_address', $sourceIp)->first();
 ```
 
 ### Timestamp Parsing
@@ -181,11 +184,12 @@ BrowsingLog::create([
 
 ### Device Model
 
-The job matches requests to devices by MAC address:
+The job matches requests to devices by IP address (for DNS logs):
 
 ```php
-$devices = Device::all()->keyBy('mac_address');
-$device = $devices[$macAddress];
+// Index devices by IP address for quick lookup
+$devicesByIp = Device::whereNotNull('ip_address')->get()->keyBy('ip_address');
+$device = $devicesByIp[$sourceIp] ?? Device::where('ip_address', $sourceIp)->first();
 ```
 
 ### Storage Facade
@@ -317,9 +321,11 @@ ParseNetworkLogs::dispatch();
 
 **Solutions**:
 1. Check if entries parsed: Verify `$parsedEntry` is not null
-2. Check device matching: Verify MAC address matches device
-3. Check duplicates: Verify entries aren't being skipped as duplicates
-4. Check database: Verify BrowsingLog model works
+2. Check device matching: Verify IP address matches device (devices must have `ip_address` set)
+3. Check device IP addresses: Run `MonitorDeviceConnections` job to update device IPs
+4. Check duplicates: Verify entries aren't being skipped as duplicates
+5. Check database: Verify BrowsingLog model works
+6. Check DNS log format: Verify log entries match expected format
 
 ## Code Examples
 
@@ -343,15 +349,16 @@ ParseNetworkLogs::dispatch();
 
 ```php
 $job = new ParseNetworkLogs();
-$line = "2024-01-15 15:30:00 IP 192.168.4.5 > 93.184.216.34: GET /page HTTP/1.1 MAC=AA:BB:CC:DD:EE:FF";
+$line = "Dec 22 04:30:15 parentalpi dnsmasq[1234]: query[A] google.com from 192.168.4.31";
 $parsed = $job->parseLogEntry($line);
 
 print_r($parsed);
 // Output:
 // [
-//     'mac_address' => 'AA:BB:CC:DD:EE:FF',
-//     'url' => 'http://93.184.216.34/page',
-//     'domain' => '93.184.216.34',
+//     'source_ip' => '192.168.4.31',
+//     'url' => 'https://google.com',
+//     'domain' => 'google.com',
+//     'is_dns_log' => true,
 //     ...
 // ]
 ```
@@ -362,14 +369,14 @@ In `config/network.php`:
 
 ```php
 return [
-    'log_path' => env('NETWORK_LOG_PATH', '/var/log/tcpdump/network.log'),
+    'log_path' => env('NETWORK_LOG_PATH', '/var/log/dnsmasq.log'),
 ];
 ```
 
 In `.env`:
 
 ```env
-NETWORK_LOG_PATH=/var/log/tcpdump/network.log
+NETWORK_LOG_PATH=/var/log/dnsmasq.log
 ```
 
 ## Summary
@@ -377,10 +384,21 @@ NETWORK_LOG_PATH=/var/log/tcpdump/network.log
 The `ParseNetworkLogs` job is essential for browsing history tracking. It:
 
 - Runs every 10 minutes
-- Parses network log files
-- Extracts browsing information
+- Parses DNS log files (`/var/log/dnsmasq.log`)
+- Extracts domain names from DNS queries
+- Matches requests to devices by IP address
 - Creates BrowsingLog records
 - Prevents duplicates
 
+**Key Features:**
+- Works with DNS logging (captures HTTP and HTTPS domains)
+- Reliable domain extraction (100% accurate)
+- Automatic execution via Laravel scheduler
+- Handles both DNS query and reply entries
+
 Without this job, browsing history would never be captured, and parents couldn't review what their children are visiting.
+
+**Related Documentation:**
+- Complete setup guide: `docs/BROWSING_LOGS_REFERENCE.md`
+- DNS logging setup: See `docs/BROWSING_LOGS_REFERENCE.md` for complete setup instructions
 

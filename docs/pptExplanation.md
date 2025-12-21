@@ -187,11 +187,15 @@ Parents need to:
 - **If Blocked**: Returns `127.0.0.1` (localhost - a fake address that goes nowhere)
 - **If Not Blocked**: Returns the real IP address
 - **Result**: Blocked websites can't be accessed because the device can't find them
+- **Also Logs**: Every DNS query is automatically logged (e.g., "google.com was queried by device at 192.168.4.31")
+- **Why Log DNS**: This is how we capture browsing history - even encrypted websites (HTTPS) need to look up domain names first
 
 **Step 3: Laravel Application Records Access**
 - **Background Job**: `ParseNetworkLogs` runs every 10 minutes
 - **What It Does**: 
-  - Reads network logs to see which websites were accessed
+  - Reads DNS logs to see which domains were visited
+  - Extracts domain names (e.g., "google.com", "youtube.com")
+  - Matches the device by IP address
   - Records them in the database (browsing_logs table)
 - **Why**: Parents can see browsing history in the dashboard
 
@@ -841,10 +845,14 @@ This slide explains the limitations and constraints of the system - what it CANN
 - **Ethical Considerations**: Balances monitoring with privacy
 
 **How Components Work Within This Limitation**:
+- **DNS Logging**: Captures only domain names from DNS queries
+  - Records "google.com was visited" but not which page
+  - Works for both HTTP and HTTPS (encrypted sites still need DNS lookups)
+  - Cannot see encrypted content or full URLs
 - **MariaDB**: Stores only:
   - Domain names (not full URLs with parameters)
   - Timestamps
-  - MAC addresses
+  - Device information
   - No personal information from websites
 - **Laravel ParseNetworkLogs**: Logs domain-level access only
   - Records "facebook.com was visited"

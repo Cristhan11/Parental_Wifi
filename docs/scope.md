@@ -67,7 +67,7 @@ Laravel simply sends instructions such as:
 - **"Whitelist this device"** → Updates firewall rules via bash script
 - **"Redirect the child to quiz/video"** → Configures NoDogSplash via service
 - **"Schedule internet until 9PM"** → Sets up cron/systemd timer
-- **"Record child's browsing logs"** → Parses network traffic logs
+- **"Record child's browsing logs"** → Parses DNS logs to extract domain names visited
 
 This architecture allows the web-based dashboard to have full control over the network, devices, and captive portal while maintaining security through proper script execution and validation.
 
@@ -262,8 +262,15 @@ The captive portal is the **core focus** of this project. The logic works as fol
 ### 8. Monitoring & Logging
 - **BrowsingLogController**: View browsing history
 - **AccessAttemptController**: View security events
-- Background job to parse network logs (tcpdump, iptables logs)
-- Real-time log ingestion
+- **DNS Logging System**: dnsmasq logs all DNS queries to capture domain names visited
+  - dnsmasq configured with `log-queries` and `log-facility=local0`
+  - Systemd service (`dnsmasq-log-forwarder.service`) forwards DNS logs from journal to `/var/log/dnsmasq.log`
+  - Captures all domain lookups (HTTP and HTTPS) reliably
+- **ParseNetworkLogs Job**: Background job runs every 10 minutes to parse DNS logs
+  - Extracts domain names from DNS query entries (e.g., `query[A] google.com from 192.168.4.31`)
+  - Matches domains to devices by IP address
+  - Creates BrowsingLog records in database
+  - Works for both HTTP and HTTPS traffic (captures domain names via DNS queries)
 - Views: browsing logs, access attempts dashboard
 
 ### 9. Captive Portal Core System
@@ -322,7 +329,13 @@ The captive portal is the **core focus** of this project. The logic works as fol
 - Real-time notification panel
 
 ### 12. Background Jobs & Commands
-- **ParseNetworkLogs**: Cron job to process network traffic logs
+- **ParseNetworkLogs**: Background job that runs every 10 minutes to parse DNS logs and extract browsing history
+  - Reads `/var/log/dnsmasq.log` file containing DNS query entries
+  - Parses DNS log format: `query[A] domain.com from 192.168.4.31`
+  - Extracts domain names and source IP addresses
+  - Matches IP addresses to devices in database
+  - Creates BrowsingLog records with domain, URL, timestamp, and device association
+  - Works for both HTTP and HTTPS traffic (captures domains via DNS queries, not encrypted content)
 - **EnforceSchedules**: Check and enforce time-based rules
 - **MonitorDeviceConnections**: Detect new/removed devices
 - **CheckTimeLimits**: Monitor daily usage limits
@@ -757,7 +770,7 @@ scripts/
 18. **device-management**: ✅ **COMPLETE** - DeviceController built with full CRUD operations, MAC address validation, time allocation management, status management (active/blocked/whitelisted), role management (child/guest/parent), and comprehensive views (accounts, create, edit, blocklist, whitelist, child devices stats). DeviceService created for MAC address normalization, validation, and device statistics. All form requests (StoreDeviceRequest, UpdateDeviceRequest) with validation rules. DevicePolicy for authorization. Comprehensive test suite created: 45 tests (29 feature tests, 16 unit tests) with 110 assertions - all passing. Tests compatible with both SQLite (testing) and MariaDB (production). See `docs/TEST_DEVICE_MANAGEMENT_RESULTS.md` for complete test results.
 19. **website-management**: ✅ **COMPLETE** - BlockedWebsiteController and FlaggedWebsiteController built with full CRUD operations, URL validation, and management views. Domain-level and app-level blocking fully implemented: (1) ✅ Updated blocked_websites migration with block_type (url/domain/app), block_subdomains (boolean), and related_domains (JSON) fields, (2) ✅ Built DomainBlockingService for DNS-based blocking via dnsmasq with related domain detection (30+ domains for Facebook), wildcard subdomain support, and optimized dnsmasq reload mechanism, (3) ✅ Created shell scripts (block_domain.sh, unblock_domain.sh, update_dnsmasq_blocklist.sh) for DNS enforcement with stdin input support, (4) ✅ Built BlockedWebsiteController with blocking type selection (URL/Domain/App), AJAX-based related domains suggestion UI, and integration with DomainBlockingService, (5) ✅ Built FlaggedWebsiteController with URL validation and domain extraction, (6) ✅ Created views (index, create, edit) with blocking type indicators and related domains display. All tests completed successfully (Test 1: Basic blocking, Test 2: Subdomain blocking, Test 3: App-level blocking, Test 4: Unblocking). System correctly handles cached content limitations. See `docs/WEBSITE_MANAGEMENT_IMPLEMENTATION.md` for complete implementation details and `docs/DOMAIN_BLOCKING_TESTING_GUIDE.md` for testing procedures.
 20. **scheduling**: ✅ **COMPLETE** - DeviceScheduleController built with full CRUD operations (index, create, store, edit, update, destroy), time-based access control, and schedule enforcement logic. StoreDeviceScheduleRequest and UpdateDeviceScheduleRequest with comprehensive validation (device ownership, time format, end time after start time with custom validation). DeviceSchedulePolicy for authorization ensuring parents can only manage schedules for their own devices. Views created (index.blade.php with filtering and pagination, create.blade.php, edit.blade.php) with device dropdown, day selector, time pickers, and schedule list. Routes added to web.php with proper middleware. Navigation menu updated with "General Settings" dropdown containing "Blocked Websites", "Flagged Websites", and "Schedules" links. Client-side JavaScript validation added for immediate feedback on time comparison errors. Server-side validation with prominent error display. DeviceSchedule model updated with Carbon casting for start_time and end_time fields. Fully integrated with existing EnforceSchedules background job. All validation working correctly (required fields, time comparison, device ownership). See `docs/SCHEDULE_MANAGEMENT_TESTING_GUIDE.md` for testing procedures.
-21. **monitoring**: Build BrowsingLogController and AccessAttemptController with log parsing and display views
+21. **monitoring**: ✅ **COMPLETE** - BrowsingLogController and AccessAttemptController built with log parsing and display views. DNS logging system implemented: (1) ✅ dnsmasq configured with `log-queries` and `log-facility=local0` to log all DNS queries, (2) ✅ Systemd service (`dnsmasq-log-forwarder.service`) created to forward DNS logs from journal to `/var/log/dnsmasq.log`, (3) ✅ ParseNetworkLogs job updated to parse DNS log format and extract domain names, (4) ✅ Job matches devices by IP address (from DNS logs) instead of MAC address, (5) ✅ BrowsingLogController created with filtering and pagination for viewing browsing history, (6) ✅ AccessAttemptController created for viewing security events. DNS logging captures all domain lookups (HTTP and HTTPS) reliably. See `docs/BROWSING_LOGS_REFERENCE.md` for complete setup guide.
 22. **websockets**: Set up Laravel Broadcasting with WebSockets, create events (DeviceConnected, BlockedWebsiteAccessed, TimeExpired, TimeGranted, etc.), configure frontend with Laravel Echo
 23. **dashboard**: Build admin dashboard UI with device overview, time status, recent activity, alerts, and real-time notification panel using Blade + Alpine.js
 
