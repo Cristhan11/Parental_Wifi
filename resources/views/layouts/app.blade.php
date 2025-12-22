@@ -10,29 +10,100 @@
         <!-- Fonts -->
         <link rel="preconnect" href="https://fonts.googleapis.com">
         <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700&display=swap" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 
+        <!-- Tailwind CSS -->
+        <script src="https://cdn.tailwindcss.com"></script>
+
+        <!-- Alpine.js -->
+        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+        
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
+        
+        <!-- Styles -->
+        <style>
+            .font-montserrat {
+                font-family: 'Montserrat', sans-serif;
+            }
+        </style>
+        
         @stack('scripts')
     </head>
     <body class="font-sans antialiased" style="font-family: 'Montserrat', sans-serif;">
-        <div class="min-h-screen" style="background-color: #FFFFCC;">
-            @include('layouts.navigation')
+        <div class="min-h-screen flex bg-[#FFFFCC]" 
+             x-data="{ 
+                 sidebarOpen: window.innerWidth >= 1280,
+                 manuallyToggled: false,
+                toggleSidebar() {
+                    this.manuallyToggled = true;
+                    this.sidebarOpen = !this.sidebarOpen;
+                    // Dispatch event to update sidebar
+                    this.$nextTick(() => {
+                        window.dispatchEvent(new CustomEvent('sidebar-state-updated', { detail: { open: this.sidebarOpen } }));
+                    });
+                },
+                 init() {
+                     // Watch for window resize to auto-show/hide sidebar (only if not manually toggled)
+                     const handleResize = () => {
+                         if (!this.manuallyToggled) {
+                             if (window.innerWidth >= 1280) {
+                                 this.sidebarOpen = true;
+                             } else {
+                                 this.sidebarOpen = false;
+                             }
+                             // Dispatch event to update sidebar
+                             window.dispatchEvent(new CustomEvent('sidebar-state-updated', { detail: { open: this.sidebarOpen } }));
+                         }
+                     };
+                     window.addEventListener('resize', handleResize);
+                     
+                 }
+             }">
+            <!-- Backdrop (Visible when sidebar is open on smaller screens only) -->
+            <div x-show="sidebarOpen && window.innerWidth < 1280" 
+                 @click="sidebarOpen = false; manuallyToggled = false; window.dispatchEvent(new CustomEvent('sidebar-state-updated', { detail: { open: false } }))"
+                 x-transition:enter="transition-opacity ease-linear duration-300"
+                 x-transition:enter-start="opacity-0"
+                 x-transition:enter-end="opacity-100"
+                 x-transition:leave="transition-opacity ease-linear duration-300"
+                 x-transition:leave-start="opacity-100"
+                 x-transition:leave-end="opacity-0"
+                 class="fixed inset-0 bg-gray-900 bg-opacity-50 z-20 xl:hidden"
+                 style="display: none;"
+                 aria-hidden="true"></div>
 
-            <!-- Page Heading -->
-            @isset($header)
-                <header class="bg-white shadow">
-                    <div class="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
-                        {{ $header }}
-                    </div>
-                </header>
-            @endisset
+            <!-- Sidebar Navigation -->
+            @include('layouts.sidebar')
 
-            <!-- Page Content -->
-            <main>
-                {{ $slot }}
-            </main>
+            <!-- Hamburger Menu Button (Always visible when sidebar is hidden, or on smaller screens) -->
+            <button @click.stop="manuallyToggled = true; sidebarOpen = !sidebarOpen; window.dispatchEvent(new CustomEvent('sidebar-state-updated', { detail: { open: sidebarOpen } }));" 
+                    class="fixed top-4 left-4 z-50 p-2 rounded-md bg-white shadow-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-all duration-200"
+                    :class="(sidebarOpen && window.innerWidth >= 1280) ? 'opacity-0 pointer-events-none' : 'opacity-100 pointer-events-auto'"
+                    style="display: block;"
+                    aria-label="Toggle navigation menu">
+                <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+
+            <!-- Main Content Area (Margin on xl screens when sidebar is visible) -->
+            <div class="flex-1 flex flex-col w-full overflow-x-hidden min-h-screen transition-all duration-300"
+                 :class="sidebarOpen && window.innerWidth >= 1280 ? 'xl:ml-64' : ''">
+                <!-- Top Header (if needed) -->
+                @isset($header)
+                    <header class="bg-white shadow-sm border-b border-gray-200">
+                        <div class="px-6 py-4">
+                            {{ $header }}
+                        </div>
+                    </header>
+                @endisset
+
+                <!-- Page Content -->
+                <div class="flex-1 overflow-hidden">
+                    {{ $slot }}
+                </div>
+            </div>
         </div>
         @stack('scripts')
     </body>
