@@ -448,13 +448,34 @@ class TimeTrackingService
             // Also ensures we don't over-deduct time
             if ($sessionDurationMinutes >= 1) {
                 // Calculate how much time to deduct
-                // We deduct the full duration (rounded up)
+                // We deduct the full duration since the session's started_at (rounded up)
                 // ceil() rounds up: 5.1 minutes = 6 minutes (ensures fair deduction)
                 $minutesToDeduct = (int) ceil($sessionDurationMinutes);
 
                 // Deduct time from device
                 // deductTime() prevents negative values (won't go below 0)
                 $device->deductTime($minutesToDeduct);
+
+                // BUG FIX: Reset session's started_at to now() after deducting time.
+                // Previously, started_at was never updated, so getDurationMinutes() always
+                // returned the TOTAL duration from the original session start. This meant
+                // each run of trackActiveSessions() would deduct cumulative time instead of
+                // only the incremental time since the last deduction.
+                //
+                // Example of the bug (job runs every 5 minutes):
+                //   Run 1 (t=5min):  duration=5  → deducted 5  (correct)
+                //   Run 2 (t=10min): duration=10 → deducted 10 (should be 5, over-deducted by 5)
+                //   Run 3 (t=15min): duration=15 → deducted 15 (should be 5, over-deducted by 10)
+                //   Total deducted: 30 minutes instead of correct 15 minutes!
+                //
+                // Fix: By resetting started_at to now() after each deduction, the next run
+                // only calculates duration from this reset point, ensuring only the incremental
+                // time is deducted:
+                //   Run 1 (t=5min):  duration=5 → deduct 5 → reset started_at to t=5min
+                //   Run 2 (t=10min): duration=5 → deduct 5 → reset started_at to t=10min
+                //   Run 3 (t=15min): duration=5 → deduct 5 → reset started_at to t=15min
+                //   Total deducted: 15 minutes (correct!)
+                $session->update(['started_at' => now()]);
 
                 // Update device's last_seen_at (device is currently active)
                 // This tracks when device was last seen online

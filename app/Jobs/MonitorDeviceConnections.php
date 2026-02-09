@@ -289,6 +289,38 @@ class MonitorDeviceConnections implements ShouldQueue
                             }
                         }
 
+                        // BUG FIX: Start a session for connected active devices so that
+                        // TrackActiveSessions can deduct time from their remaining_time_minutes.
+                        // Previously, startSession() was never called from anywhere in the codebase,
+                        // which meant no DeviceSession records were created. Without active sessions,
+                        // the TrackActiveSessions job found nothing to process and time was never
+                        // deducted — causing remaining_time_minutes to stay the same indefinitely.
+                        //
+                        // startSession() is safe to call repeatedly because it checks for existing
+                        // active sessions first and returns the existing one if found (prevents duplicates).
+                        // Only creates a session if the device is approved (status 'active' or 'whitelisted').
+                        if ($device->status === 'active') {
+                            try {
+                                $session = $timeTrackingService->startSession($device);
+                                if ($session) {
+                                    Log::debug('Session ensured for connected active device', [
+                                        'device_id' => $device->id,
+                                        'device_name' => $device->name,
+                                        'mac_address' => $macAddress,
+                                        'session_id' => $session->id,
+                                        'session_started_at' => $session->started_at,
+                                    ]);
+                                }
+                            } catch (\Exception $e) {
+                                // Log error but don't fail the job — session will be retried on next run
+                                Log::warning('Could not start session for active device', [
+                                    'device_id' => $device->id,
+                                    'mac_address' => $macAddress,
+                                    'error' => $e->getMessage(),
+                                ]);
+                            }
+                        }
+
                         $connectedCount++;
 
                         Log::debug('Device connection updated', [
