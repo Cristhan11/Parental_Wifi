@@ -2,6 +2,8 @@
 
 namespace App\Jobs;
 
+use App\Events\DeviceConnected;
+use App\Events\DeviceDisconnected;
 use App\Models\Device;
 use App\Services\NetworkService;
 use App\Services\NoDogSplashService;
@@ -163,11 +165,11 @@ class MonitorDeviceConnections implements ShouldQueue
             // - Returns JSON array of connected devices
             $connectedDevices = $networkService->getConnectedDevices();
 
-            // If no devices connected, log and exit early
-            // This is normal if no devices are connected to the network
+            // If no devices are connected, we still continue to disconnection reconciliation.
+            // Why: all-online -> all-offline transitions should clear IPs, end sessions,
+            // and emit disconnection events where applicable.
             if (empty($connectedDevices)) {
-                Log::debug('MonitorDeviceConnections job completed - no devices connected');
-                return; // Exit early - no work to do
+                Log::debug('MonitorDeviceConnections found no currently connected devices; proceeding with disconnection reconciliation');
             }
 
             // Step 2: Get all devices from database
@@ -225,6 +227,7 @@ class MonitorDeviceConnections implements ShouldQueue
                     if (isset($databaseDevices[$macAddress])) {
                         // Device exists in database - update it
                         $device = $databaseDevices[$macAddress];
+                        $wasConnected = !empty($device->ip_address);
 
                         // Update IP address if changed
                         // IP addresses can change when device reconnects
@@ -321,6 +324,20 @@ class MonitorDeviceConnections implements ShouldQueue
                             }
                         }
 
+                        // Broadcast connection event only on offline -> online transitions.
+                        // Why: the job runs every 2 minutes; without this guard, parents
+                        // would receive repetitive "connected" notifications every cycle.
+                        // This event feeds the parent dashboard realtime notification panel.
+                        if (!$wasConnected && !empty($ipAddress) && $device->user_id) {
+                            event(new DeviceConnected(
+                                userId: $device->user_id,
+                                deviceId: $device->id,
+                                deviceName: $device->name,
+                                macAddress: $device->mac_address,
+                                ipAddress: $ipAddress
+                            ));
+                        }
+
                         $connectedCount++;
 
                         Log::debug('Device connection updated', [
@@ -377,6 +394,7 @@ class MonitorDeviceConnections implements ShouldQueue
 
                     // If device is not connected, handle disconnection
                     if (!$isConnected) {
+                        $wasConnected = !empty($device->ip_address);
                         // Check if device has active sessions
                         // If device has active sessions, we need to end them
                         $activeSessions = $device->sessions()->whereNull('ended_at')->get();
@@ -400,6 +418,18 @@ class MonitorDeviceConnections implements ShouldQueue
                         // Only clear if IP address is set (avoid unnecessary updates)
                         if ($device->ip_address) {
                             $device->update(['ip_address' => null]);
+                        }
+
+                        // Broadcast disconnection only if device was previously online.
+                        // Why: prevents false disconnect alerts for already-offline devices,
+                        // and keeps notifications meaningful for parents.
+                        if ($wasConnected && $device->user_id) {
+                            event(new DeviceDisconnected(
+                                userId: $device->user_id,
+                                deviceId: $device->id,
+                                deviceName: $device->name,
+                                macAddress: $device->mac_address
+                            ));
                         }
 
                         $disconnectedCount++;

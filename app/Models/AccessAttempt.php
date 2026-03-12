@@ -2,6 +2,8 @@
 
 namespace App\Models;
 
+use App\Events\BlockedWebsiteAccessed;
+use App\Events\FlaggedWebsiteVisited;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -15,6 +17,48 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 class AccessAttempt extends Model
 {
     use HasFactory;
+
+    /**
+     * Realtime bridge for security events.
+     *
+     * Why in model hook:
+     * - Any creation path (job/service/controller/script import) triggers here.
+     * - Ensures websocket alerts are consistent no matter where attempts are created.
+     */
+    protected static function booted(): void
+    {
+        static::created(function (AccessAttempt $attempt): void {
+            // Load device relation so we can resolve owning parent channel.
+            $attempt->loadMissing('device');
+
+            // No parent = no destination channel for private notifications.
+            if (!$attempt->device || !$attempt->device->user_id) {
+                return;
+            }
+
+            if ($attempt->type === 'blocked_website') {
+                // High-severity alert: blocked access attempt.
+                event(new BlockedWebsiteAccessed(
+                    userId: $attempt->device->user_id,
+                    deviceId: $attempt->device_id,
+                    deviceName: $attempt->device->name,
+                    url: $attempt->url,
+                    domain: $attempt->domain
+                ));
+            }
+
+            if ($attempt->type === 'flagged_website') {
+                // Warning-level alert: flagged site was visited.
+                event(new FlaggedWebsiteVisited(
+                    userId: $attempt->device->user_id,
+                    deviceId: $attempt->device_id,
+                    deviceName: $attempt->device->name,
+                    url: $attempt->url,
+                    domain: $attempt->domain
+                ));
+            }
+        });
+    }
 
     /**
      * The attributes that are mass assignable.

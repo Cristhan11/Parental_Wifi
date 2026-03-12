@@ -4,6 +4,8 @@
         <meta charset="utf-8">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <meta name="csrf-token" content="{{ csrf_token() }}">
+        <!-- Expose auth user id so dashboard JS can subscribe to private user.{id} websocket channel. -->
+        <meta name="auth-user-id" content="{{ auth()->id() }}">
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
@@ -28,7 +30,6 @@
             }
         </style>
         
-        @stack('scripts')
     </head>
     <body class="font-sans antialiased" style="font-family: 'Montserrat', sans-serif;">
         <div class="min-h-screen flex bg-[#FFFFCC]" 

@@ -1,14 +1,23 @@
 <x-app-layout>
-    <main class="flex-1 w-full bg-[#FFFFCC] font-sans text-gray-900 overflow-x-hidden pl-4 pr-4 sm:pl-6 sm:pr-6 lg:pl-10 lg:pr-10 py-4 sm:py-6" style="margin-top: 0; font-family: 'Montserrat', sans-serif; max-width: 100%; height: calc(100vh - 0px); display: flex; flex-direction: column;">
+    <main class="flex-1 w-full bg-[#FFFFCC] font-sans text-gray-900 overflow-x-hidden overflow-y-hidden pl-4 pr-4 sm:pl-6 sm:pr-6 lg:pl-10 lg:pr-10 py-4 sm:py-6" style="margin-top: 0; font-family: 'Montserrat', sans-serif; max-width: 100%; height: calc(100vh - 0px); display: flex; flex-direction: column;">
 
         <!-- Welcome Section -->
-        <section class="text-center sm:text-left mb-4 flex-shrink-0">
-            <div class="text-lg sm:text-xl font-normal mb-1 font-montserrat">Welcome,</div>
-            <h1 class="font-extrabold text-xl sm:text-2xl tracking-tight font-montserrat text-black">{{ Auth::user()->name }}</h1>
+        <section class="mb-4 flex-shrink-0">
+            <div class="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div class="text-center sm:text-left">
+                    <div class="text-lg sm:text-xl font-normal mb-1 font-montserrat">Welcome,</div>
+                    <h1 class="font-extrabold text-xl sm:text-2xl tracking-tight font-montserrat text-black">{{ Auth::user()->name }}</h1>
+                </div>
+                <div id="latestLiveToast" class="hidden w-full sm:w-auto sm:max-w-md rounded-lg border px-3 py-2 text-xs sm:text-sm font-montserrat shadow-sm bg-white">
+                    <span id="latestLiveToastMessage">Waiting for live notifications...</span>
+                </div>
+            </div>
         </section>
 
+        <!-- Scrollable dashboard content area (stops above realtime notifications) -->
+        <div class="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1 sm:pr-2">
         <!-- Dashboard Grid - 12 Column Layout -->
-        <section class="grid grid-cols-12 gap-3 sm:gap-4 w-full max-w-full flex-1 min-h-0" style="grid-auto-rows: 1fr;">
+        <section class="grid grid-cols-12 gap-3 sm:gap-4 w-full max-w-full pb-3 sm:pb-4" style="grid-auto-rows: 1fr;">
             
             <!-- Column 2: Time Usage Card (7 columns) -->
             <article class="col-span-12 sm:col-span-7 rounded-xl bg-white text-black border-4 border-[#FFDE15] p-4 sm:p-6 flex flex-col gap-2 min-w-0 overflow-hidden" style="min-height: 0;">
@@ -154,7 +163,21 @@
                 </div>
             </article>
 
+            <!-- Realtime Notifications Card (5th grid item, spans both columns) -->
+            <article class="col-span-12 rounded-xl bg-white border-4 border-[#FFDE15] p-4 sm:p-5 min-w-0 overflow-hidden">
+                <div class="flex items-center justify-between mb-2">
+                    <h2 class="text-sm sm:text-lg font-extrabold flex items-center gap-2 font-montserrat text-black">
+                        <i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="bell"></i> REAL-TIME NOTIFICATIONS
+                    </h2>
+                    <span class="text-xs font-semibold text-gray-500 font-montserrat">Live</span>
+                </div>
+                <ul id="realtimeNotificationsList" class="space-y-2 text-xs sm:text-sm font-montserrat h-64 sm:h-72 overflow-y-auto custom-scrollbar pr-2">
+                    <li id="realtimeNotificationsEmpty" class="text-gray-600">Waiting for live events...</li>
+                </ul>
+            </article>
+
         </section>
+        </div>
 
     </main>
 
@@ -316,6 +339,98 @@
                     window.usageChartInstance.destroy();
                     window.usageChartInstance = null;
                 }
+            });
+        })();
+    </script>
+    <script>
+        (function () {
+            'use strict';
+
+            document.addEventListener('DOMContentLoaded', function () {
+                // Subscribe using auth user id from layout meta tag.
+                // This must match private channel authorization in routes/channels.php.
+                const userId = document.querySelector('meta[name="auth-user-id"]')?.getAttribute('content');
+                const list = document.getElementById('realtimeNotificationsList');
+                const empty = document.getElementById('realtimeNotificationsEmpty');
+                const latestToast = document.getElementById('latestLiveToast');
+                const latestToastMessage = document.getElementById('latestLiveToastMessage');
+                let latestToastTimeout = null;
+
+                // Graceful fallback: if Echo is not initialized, dashboard still works without live updates.
+                if (!userId || !list || typeof window.Echo === 'undefined') {
+                    return;
+                }
+
+                const toastColors = {
+                    info: 'border-blue-300 text-blue-900 bg-white',
+                    warning: 'border-yellow-300 text-yellow-900 bg-white',
+                    danger: 'border-red-300 text-red-900 bg-white',
+                    success: 'border-green-300 text-green-900 bg-white',
+                };
+
+                // Show a single popup in the welcome row; always overwrite with latest event.
+                const showLatestToast = (message, type = 'info') => {
+                    if (!latestToast || !latestToastMessage) {
+                        return;
+                    }
+
+                    latestToast.className = `w-full sm:w-auto sm:max-w-md rounded-lg border px-3 py-2 text-xs sm:text-sm font-montserrat shadow-sm ${toastColors[type] ?? toastColors.info}`;
+                    latestToastMessage.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+
+                    if (latestToastTimeout) {
+                        clearTimeout(latestToastTimeout);
+                    }
+
+                    latestToastTimeout = setTimeout(() => {
+                        latestToast.classList.add('hidden');
+                    }, 5000);
+                };
+
+                // Small UI helper that keeps the notification list bounded and readable.
+                const addNotification = (message, type = 'info') => {
+                    if (empty) {
+                        empty.remove();
+                    }
+
+                    const li = document.createElement('li');
+                    const colors = {
+                        info: 'border-blue-200 bg-blue-50 text-blue-900',
+                        warning: 'border-yellow-200 bg-yellow-50 text-yellow-900',
+                        danger: 'border-red-200 bg-red-50 text-red-900',
+                        success: 'border-green-200 bg-green-50 text-green-900',
+                    };
+
+                    li.className = `rounded-lg border px-3 py-2 ${colors[type] ?? colors.info}`;
+                    li.textContent = `${new Date().toLocaleTimeString()} - ${message}`;
+                    list.prepend(li);
+
+                    showLatestToast(message, type);
+
+                };
+
+                // Listen to backend broadcast aliases and map them to human-friendly alerts.
+                // These aliases are defined in app/Events/* via broadcastAs().
+                window.Echo.private(`user.${userId}`)
+                    .listen('.device.connected', (event) => {
+                        addNotification(`${event.device_name} connected (${event.ip_address ?? 'unknown IP'})`, 'success');
+                    })
+                    .listen('.device.disconnected', (event) => {
+                        addNotification(`${event.device_name} disconnected`, 'warning');
+                    })
+                    .listen('.time.expired', (event) => {
+                        addNotification(`Time expired for ${event.device_name}. Device redirected to portal.`, 'danger');
+                    })
+                    .listen('.time.granted', (event) => {
+                        addNotification(`${event.minutes_granted} minutes granted to ${event.device_name} via ${event.source}.`, 'success');
+                    })
+                    .listen('.website.blocked_accessed', (event) => {
+                        const target = event.domain || event.url || 'blocked website';
+                        addNotification(`${event.device_name} attempted blocked site: ${target}`, 'danger');
+                    })
+                    .listen('.website.flagged_visited', (event) => {
+                        const target = event.domain || event.url || 'flagged website';
+                        addNotification(`${event.device_name} visited flagged site: ${target}`, 'warning');
+                    });
             });
         })();
     </script>

@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Events\TimeExpired;
 use App\Models\Device;
 use App\Services\NetworkService;
 use App\Services\NoDogSplashService;
@@ -204,6 +205,18 @@ class CheckTimeExpiration implements ShouldQueue
                     'network_blocked' => $networkBlocked,
                     'redirect_configured' => $redirectConfigured,
                 ]);
+
+                if ($device->user_id) {
+                    // Notify the owning parent in real time that this device hit time limit.
+                    // This connects backend enforcement (block + redirect) to immediate
+                    // dashboard visibility so parents understand why internet stopped.
+                    event(new TimeExpired(
+                        userId: $device->user_id,
+                        deviceId: $device->id,
+                        deviceName: $device->name,
+                        macAddress: $device->mac_address
+                    ));
+                }
             } catch (\Exception $e) {
                 // If an error occurs while processing a device, catch it here
                 // Log the error but continue processing other devices

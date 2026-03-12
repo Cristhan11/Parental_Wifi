@@ -2,6 +2,7 @@
  
 namespace App\Services;
 
+use App\Events\TimeGranted;
 use App\Models\Device;
 use App\Models\DeviceTimeGrant;
 use App\Models\QuizAttempt;
@@ -406,6 +407,20 @@ class TimeGrantingService
             'remaining_time_minutes' => $device->remaining_time_minutes, // Updated remaining time
             'device_status' => $device->status, // 'active' or 'blocked' (should be 'active' if unblocked)
         ]);
+
+        if ($device->user_id) {
+            // Emit realtime feedback to parent dashboard after successful grant.
+            // Why here: this is the single source-of-truth point where remaining
+            // time has already been updated and (if needed) unblock flow completed.
+            event(new TimeGranted(
+                userId: $device->user_id,
+                deviceId: $device->id,
+                deviceName: $device->name,
+                minutesGranted: $minutes,
+                remainingMinutes: (int) ($device->remaining_time_minutes ?? 0),
+                source: $source
+            ));
+        }
 
         // Return the created DeviceTimeGrant record
         // This can be used by callers to track the grant (e.g., display to user)

@@ -18,7 +18,8 @@ return Application::configure(basePath: dirname(__DIR__))
     // Configure routing - tells Laravel where to find route files
     ->withRouting(
         web: __DIR__.'/../routes/web.php',        // Main web routes (GET, POST, etc.)
-        commands: __DIR__.'/../routes/console.php', // Artisan command routes
+        commands: __DIR__.'/../routes/console.php',
+        channels: __DIR__.'/../routes/channels.php', // Artisan command routes
         health: '/up',                              // Health check endpoint
     )
     // Configure middleware - code that runs before requests reach controllers
