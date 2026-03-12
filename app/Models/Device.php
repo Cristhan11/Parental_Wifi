@@ -406,7 +406,7 @@ class Device extends Model
      * Deduct time from this device (used when device is actively browsing).
      * 
      * Removes time from remaining_time_minutes as the device uses internet.
-     * Prevents negative values using max(0, $minutes).
+     * Prevents negative final values by clamping to 0.
      *
      * @param int $minutes Amount of time to deduct
      * @return void No return value
@@ -425,9 +425,15 @@ class Device extends Model
      */
     public function deductTime(int $minutes): void
     {
-        // decrement() subtracts from existing value
-        // max(0, $minutes) ensures we never go below 0
-        $this->decrement('remaining_time_minutes', max(0, $minutes));
+        // Guard against negative input so we never "add" time by accident.
+        $minutesToDeduct = max(0, $minutes);
+
+        // Clamp final value to 0 to prevent negative remaining time.
+        // Previous implementation used decrement(), which could produce negatives
+        // when minutesToDeduct was greater than current remaining_time_minutes.
+        $newRemaining = max(0, ($this->remaining_time_minutes ?? 0) - $minutesToDeduct);
+
+        $this->update(['remaining_time_minutes' => $newRemaining]);
     }
 
     /**
