@@ -7,6 +7,7 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\DeviceScheduleController;
 use App\Http\Controllers\FlaggedWebsiteController;
+use App\Http\Controllers\LogsController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuizController;
@@ -123,6 +124,19 @@ Route::middleware('auth')->group(function () {
     // Attempts are automatically created when children try to access blocked sites or visit flagged sites
     Route::prefix('access-attempts')->name('access-attempts.')->group(function () {
         Route::get('/', [AccessAttemptController::class, 'index'])->name('index'); // List access attempts with filtering
+    });
+
+    // Unified logs module (finals scope - frontend logs/filtering).
+    // Why grouped here:
+    // - keeps logs concerns discoverable under one route prefix
+    // - keeps auth/role middleware behavior aligned with the rest of dashboard pages
+    // Relevance:
+    // - index provides separated streams for UI investigation
+    // - export reuses the same query/filter state for report handoff (CSV)
+    Route::prefix('logs')->name('logs.')->group(function () {
+        Route::get('/', [LogsController::class, 'index'])->name('index');
+        Route::get('/export', [LogsController::class, 'export'])->name('export');
+        Route::get('/export-excel', [LogsController::class, 'exportExcel'])->name('export.excel');
     });
 });
 
