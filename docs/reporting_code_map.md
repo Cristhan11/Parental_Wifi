@@ -41,6 +41,17 @@ Use this doc as a checklist when writing the Raspberry Pi / SMTP tutorial.
 | `reporting:send-dummy-immediate-alerts …` | Preview immediate templates |
 | `php scripts/debug_listeners.php` | Inspect registered listeners (duplicate-handler debugging) |
 
+## Raspberry Pi — post-deploy check
+
+After `composer install`, `.env`, `php artisan migrate --force`, cron + queue worker:
+
+```bash
+chmod +x scripts/pi_verify_reporting_and_logs.sh
+./scripts/pi_verify_reporting_and_logs.sh
+```
+
+This runs `ReportingEmailConfigTest` + `PiCriticalLogsReportingTest` (SQLite in-memory via `phpunit.xml`, no real SMTP). Optional live SMTP/queue test: set `PI_LIVE_DIGEST_TEST=1` and `PI_PARENT_USER_ID`.
+
 ## Tests
 
 - `tests/Feature/ReportingEmailConfigTest.php`
