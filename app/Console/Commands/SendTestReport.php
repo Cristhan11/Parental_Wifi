@@ -39,7 +39,8 @@ class SendTestReport extends Command
         }
 
         // Second argument must match what DispatchDigestReportJob expects: 'daily' | 'weekly' | 'monthly'.
-        DispatchDigestReportJob::dispatch($userId, 'daily');
+        // Third: unique subject so manual CLI tests do not collapse into one Gmail thread.
+        DispatchDigestReportJob::dispatch($userId, 'daily', isManualTest: true);
         $this->info('Queued test daily digest job.');
 
         return self::SUCCESS;

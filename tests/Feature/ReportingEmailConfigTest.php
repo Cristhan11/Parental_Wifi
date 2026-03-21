@@ -197,5 +197,51 @@ class ReportingEmailConfigTest extends TestCase
             'status' => 'sent',
         ]);
     }
+
+    public function test_manual_test_daily_digest_includes_unique_test_suffix_in_subject(): void
+    {
+        Mail::fake();
+
+        $parent = User::factory()->create(['role' => 'parent']);
+        $device = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Tablet',
+            'mac_address' => 'AA:BB:CC:DD:EE:33',
+            'status' => 'active',
+            'role' => 'child',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        ReportingPreference::create([
+            'user_id' => $parent->id,
+            'immediate_alerts_enabled' => true,
+            'daily_digest_enabled' => true,
+            'weekly_digest_enabled' => true,
+            'monthly_digest_enabled' => true,
+            'timezone' => 'UTC',
+            'skip_empty_digests' => true,
+        ]);
+        ReportingRecipient::create([
+            'user_id' => $parent->id,
+            'email' => 'digest@example.test',
+            'is_enabled' => true,
+        ]);
+
+        BrowsingLog::create([
+            'device_id' => $device->id,
+            'url' => 'https://example.org',
+            'domain' => 'example.org',
+            'visited_at' => now()->subDay()->setTime(10, 0),
+        ]);
+
+        DispatchDigestReportJob::dispatchSync($parent->id, 'daily', isManualTest: true);
+
+        Mail::assertSent(DailyDigestReportMail::class, function (DailyDigestReportMail $mail): bool {
+            return $mail->hasTo('digest@example.test')
+                && str_contains($mail->subjectLine, '[Test ')
+                && preg_match('/\[Test \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\]$/', $mail->subjectLine) === 1;
+        });
+    }
 }
 

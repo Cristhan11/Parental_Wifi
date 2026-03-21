@@ -25,8 +25,10 @@ use Throwable;
  * Implements `ShouldQueue` so Laravel knows this class is meant for the queue system.
  * If no worker is running, jobs stay pending in the `jobs` table (driver=database) forever.
  *
- * Constructor receives `$userId` and `$frequency` — they are serialized into the queue payload
+ * Constructor receives `$userId`, `$frequency`, and optional `$isManualTest` — serialized into the queue payload
  * so the worker can rebuild this job later (even after a server restart).
+ * When `$isManualTest` is true (UI “Send test digest” / `reporting:send-test`), the email subject gets a
+ * unique `[Test …]` suffix so Gmail and similar clients do not collapse multiple sends into one thread.
  *
  * Flow summary:
  * 1. Load parent User + preferences + recipients.
@@ -47,12 +49,13 @@ class DispatchDigestReportJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     /**
-     * Constructor property promotion (PHP 8): creates public properties `$userId` and `$frequency` automatically.
+     * Constructor property promotion (PHP 8): creates public properties automatically.
      * `readonly` means they cannot change after construction — good for queue safety.
      */
     public function __construct(
         public readonly int $userId,
-        public readonly string $frequency
+        public readonly string $frequency,
+        public readonly bool $isManualTest = false,
     ) {
     }
 
@@ -222,10 +225,13 @@ class DispatchDigestReportJob implements ShouldQueue
         };
     }
 
-    /** Human-readable subject line; includes frequency and date range for inbox scanning. */
+    /**
+     * Human-readable subject line; includes frequency and date range for inbox scanning.
+     * Manual/test sends append a timestamp so each message is a distinct thread in Gmail.
+     */
     private function buildSubject(CarbonImmutable $periodStart, CarbonImmutable $periodEnd, string $timezone): string
     {
-        return match ($this->frequency) {
+        $subject = match ($this->frequency) {
             'daily' => sprintf(
                 '[Parental WiFi][Daily Digest] %s - %s (%s)',
                 $periodStart->format('M d, Y'),
@@ -244,6 +250,15 @@ class DispatchDigestReportJob implements ShouldQueue
             ),
             default => throw new InvalidArgumentException('Unsupported digest frequency.'),
         };
+
+        if ($this->isManualTest) {
+            $subject .= sprintf(
+                ' [Test %s]',
+                CarbonImmutable::now($timezone)->format('Y-m-d H:i:s.u')
+            );
+        }
+
+        return $subject;
     }
 
     /**

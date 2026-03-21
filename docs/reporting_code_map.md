@@ -8,7 +8,7 @@ Use this doc as a checklist when writing the Raspberry Pi / SMTP tutorial.
 
 1. **Schedule** — `routes/console.php` runs `reporting:send-digest {frequency}` at fixed clock times (server local time unless you change it).
 2. **Command** — `app/Console/Commands/SendDigestReports.php` finds opted-in parents and queues one job per user.
-3. **Job** — `app/Jobs/DispatchDigestReportJob.php` builds the period window, calls `ReportingDigestService`, sends mail, writes `report_dispatch_logs`.
+3. **Job** — `app/Jobs/DispatchDigestReportJob.php` builds the period window, calls `ReportingDigestService`, sends mail, writes `report_dispatch_logs`. Optional `isManualTest` (UI test button / `reporting:send-test`) appends a unique `[Test …]` subject suffix so Gmail does not merge sends into one thread.
 4. **Data** — `app/Services/ReportingDigestService.php` reads `AccessAttempt`, `BrowsingLog`, sessions, grants, etc.
 5. **Templates** — `resources/views/emails/reports/*-digest.blade.php` include `_digest-body.blade.php`.
 
@@ -36,7 +36,7 @@ Use this doc as a checklist when writing the Raspberry Pi / SMTP tutorial.
 
 | Command | Purpose |
 |--------|---------|
-| `reporting:send-test {user_id}` | Queue real daily digest for one parent |
+| `reporting:send-test {user_id}` | Queue daily digest for one parent (manual-test subject suffix) |
 | `reporting:send-dummy-digest …` | Fake numbers, preview templates (no dispatch log rows) |
 | `reporting:send-dummy-immediate-alerts …` | Preview immediate templates |
 | `php scripts/debug_listeners.php` | Inspect registered listeners (duplicate-handler debugging) |

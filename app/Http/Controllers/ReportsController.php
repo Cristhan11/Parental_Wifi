@@ -164,7 +164,8 @@ class ReportsController extends Controller
         $this->ensureCanManageReports($user->role);
 
         // Does not send email in this request — only pushes a job. Requires `queue:work` + valid MAIL_*.
-        DispatchDigestReportJob::dispatch($user->id, 'daily');
+        // Third arg: unique subject suffix so Gmail does not thread multiple test sends as one conversation.
+        DispatchDigestReportJob::dispatch($user->id, 'daily', isManualTest: true);
 
         return redirect()
             ->route('reports.index')

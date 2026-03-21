@@ -964,6 +964,7 @@ This script will check:
 
 ## Related Documentation
 
+- **Logs & Reporting (testing on Pi)**: `docs/LogsAndReporting_Testing.md` — Step-by-step from `git pull` through PHPUnit, browser checks, and optional live email/queue tests (references this setup doc)
 - **WiFi Access Point Setup**: `docs/RASPBERRY_PI_ACCESS_POINT_SETUP.md` - Complete guide for setting up the Raspberry Pi as a WiFi access point
 - **NoDogSplash Setup**: `docs/NODOGSPLASH_SETUP.md` - Complete NoDogSplash installation and configuration guide
 - **NoDogSplash Integration**: `docs/NODOGSPLASH_INTEGRATION.md` - Detailed implementation of NoDogSplash integration
