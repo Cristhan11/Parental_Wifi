@@ -14,6 +14,17 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
 
+/**
+ * Web UI for reporting: preferences, recipients, dispatch history, and “send test daily digest” (queues a job).
+ *
+ * Flow (high level):
+ * 1. Parent saves preferences → {@see ReportingPreference} updated (timezone, toggles).
+ * 2. Parent manages recipients → {@see ReportingRecipient} CRUD.
+ * 3. “Send test daily” → {@see DispatchDigestReportJob} queued (requires queue worker + SMTP).
+ * 4. Dispatch logs are read-only display of {@see ReportDispatchLog}.
+ *
+ * Related routes: `routes/web.php` → `reports.*` middleware `role.parent` (and admin where applicable).
+ */
 class ReportsController extends Controller
 {
     /**
@@ -25,9 +36,11 @@ class ReportsController extends Controller
      */
     public function index(Request $request): View
     {
+        // `user()` returns the logged-in User model (thanks to `auth` middleware on the route group).
         $user = $request->user();
         $this->ensureCanManageReports($user->role);
 
+        // `firstOrCreate`: if a row exists for this user_id, load it; otherwise INSERT defaults and return the new model.
         $preferences = ReportingPreference::firstOrCreate(
             ['user_id' => $user->id],
             [
@@ -46,12 +59,14 @@ class ReportsController extends Controller
             ->orderBy('email')
             ->get();
 
+        // Recent email audit rows (newest first) — keep the list short for performance.
         $dispatchLogs = ReportDispatchLog::query()
             ->where('user_id', $user->id)
             ->latest()
             ->limit(20)
             ->get();
 
+        // `view()` renders resources/views/reports/index.blade.php and passes these variables into it.
         return view('reports.index', [
             'preferences' => $preferences,
             'recipients' => $recipients,
@@ -62,6 +77,7 @@ class ReportsController extends Controller
 
     public function updatePreferences(UpdateReportingPreferencesRequest $request): RedirectResponse
     {
+        // FormRequest already ran validation rules — if we are here, input is valid.
         $user = $request->user();
         $this->ensureCanManageReports($user->role);
 
@@ -77,7 +93,7 @@ class ReportsController extends Controller
             ]
         );
 
-        // Checkboxes are absent when unchecked, so we coerce explicit booleans.
+        // HTML checkboxes: checked = "1" sent; unchecked = field missing. `boolean()` maps missing → false.
         $preferences->update([
             'immediate_alerts_enabled' => $request->boolean('immediate_alerts_enabled'),
             'daily_digest_enabled' => $request->boolean('daily_digest_enabled'),
@@ -87,6 +103,7 @@ class ReportsController extends Controller
             'timezone' => $request->string('timezone')->toString(),
         ]);
 
+        // Flash `success` into session — the Blade view shows it once on the next request.
         return redirect()
             ->route('reports.index')
             ->with('success', 'Reporting preferences updated.');
@@ -97,6 +114,7 @@ class ReportsController extends Controller
         $user = $request->user();
         $this->ensureCanManageReports($user->role);
 
+        // Second arg `true` to `boolean()` = default when checkbox missing (treat as enabled).
         ReportingRecipient::create([
             'user_id' => $user->id,
             'label' => $request->input('label'),
@@ -113,6 +131,7 @@ class ReportsController extends Controller
     {
         $user = $request->user();
         $this->ensureCanManageReports($user->role);
+        // Route could contain another user’s id if tampered — never trust the URL alone.
         abort_if($recipient->user_id !== $user->id, 403);
 
         $recipient->update([
@@ -144,6 +163,7 @@ class ReportsController extends Controller
         $user = $request->user();
         $this->ensureCanManageReports($user->role);
 
+        // Does not send email in this request — only pushes a job. Requires `queue:work` + valid MAIL_*.
         DispatchDigestReportJob::dispatch($user->id, 'daily');
 
         return redirect()
@@ -151,6 +171,10 @@ class ReportsController extends Controller
             ->with('success', 'Test daily digest queued.');
     }
 
+    /**
+     * Central guard: only parent and admin roles may open reporting routes (defense in depth with middleware).
+     * `abort_unless(condition, 403)` throws HttpException if condition is false → browser shows 403 Forbidden.
+     */
     private function ensureCanManageReports(string $role): void
     {
         abort_unless(in_array($role, ['parent', 'admin'], true), 403);

@@ -10,6 +10,14 @@ use App\Models\User;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Aggregates browsing/access data into the array shape consumed by digest mailables and Blade templates.
+ *
+ * Why: Keeps SQL and grouping rules in one place so {@see \App\Jobs\DispatchDigestReportJob} stays thin (send + log only).
+ *
+ * Inputs: parent {@see \App\Models\User}, digest window in parent’s timezone (converted to UTC for queries).
+ * Outputs: payload keys like `violations_summary`, `devices[]`, `top_visited_domains` — see {@see resources/views/emails/reports/_digest-body.blade.php}.
+ */
 class ReportingDigestService
 {
     /**
@@ -25,11 +33,14 @@ class ReportingDigestService
         CarbonInterface $periodEndLocal,
         string $timezone
     ): array {
+        // DB timestamps are stored in UTC — convert the digest window once, then reuse for all queries.
         $periodStartUtc = $periodStartLocal->clone()->setTimezone('UTC');
         $periodEndUtc = $periodEndLocal->clone()->setTimezone('UTC');
 
+        // All child devices owned by this parent — digests never mix households.
         $deviceIds = $parent->devices()->pluck('id');
 
+        // AccessAttempt rows are created when the filtering layer records blocked/flagged attempts.
         $blockedCount = AccessAttempt::query()
             ->whereIn('device_id', $deviceIds)
             ->where('type', 'blocked_website')

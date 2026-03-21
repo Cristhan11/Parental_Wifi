@@ -1,3 +1,4 @@
+{{-- Immediate blocked-site alert; payload from SendImmediateBlockedWebsiteAlert listener. --}}
 <!DOCTYPE html>
 <html lang="en">
 <head>

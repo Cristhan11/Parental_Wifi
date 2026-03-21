@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Stores per-parent toggles for immediate alerts vs digest emails, timezone, and skip-empty behavior.
+ *
+ * @see \App\Models\ReportingPreference
+ */
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;

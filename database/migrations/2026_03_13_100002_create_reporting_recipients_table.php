@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * SMTP “fan-out” list: who receives digests and immediate alerts for a parent account.
+ *
+ * @see \App\Models\ReportingRecipient
+ */
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;

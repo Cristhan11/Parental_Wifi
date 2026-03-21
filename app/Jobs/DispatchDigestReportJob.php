@@ -19,44 +19,89 @@ use Illuminate\Support\Facades\Mail;
 use InvalidArgumentException;
 use Throwable;
 
+/**
+ * QUEUED JOB — runs asynchronously when a worker processes the queue.
+ *
+ * Implements `ShouldQueue` so Laravel knows this class is meant for the queue system.
+ * If no worker is running, jobs stay pending in the `jobs` table (driver=database) forever.
+ *
+ * Constructor receives `$userId` and `$frequency` — they are serialized into the queue payload
+ * so the worker can rebuild this job later (even after a server restart).
+ *
+ * Flow summary:
+ * 1. Load parent User + preferences + recipients.
+ * 2. Bail early with a "skipped" log if disabled, no recipients, or empty digest when skip_empty is on.
+ * 3. Decide the date range (yesterday / last week / last month) in the parent’s timezone.
+ * 4. Call ReportingDigestService to build a big `$payload` array for Blade.
+ * 5. For each recipient email: send mailable, then insert ReportDispatchLog (sent or failed).
+ */
 class DispatchDigestReportJob implements ShouldQueue
 {
+    /**
+     * Traits mixed into the job:
+     * - Dispatchable: allows `DispatchDigestReportJob::dispatch(...)`.
+     * - InteractsWithQueue: `$this->release()`, retries, etc.
+     * - Queueable: connection / queue name customization.
+     * - SerializesModels: when job is queued, Eloquent models in constructor are re-fetched by id on the worker.
+     */
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    /**
+     * Constructor property promotion (PHP 8): creates public properties `$userId` and `$frequency` automatically.
+     * `readonly` means they cannot change after construction — good for queue safety.
+     */
     public function __construct(
         public readonly int $userId,
         public readonly string $frequency
     ) {
     }
 
+    /**
+     * Laravel calls `handle()` on the worker. Dependencies are resolved from the service container:
+     * `ReportingDigestService $digestService` is auto-injected.
+     */
     public function handle(ReportingDigestService $digestService): void
     {
+        // Eager-load related models to avoid N+1 queries when we access them below.
         $user = User::with(['reportingPreference', 'reportingRecipients'])->find($this->userId);
-        if (!$user) {
+        if (! $user) {
+            // Parent deleted — nothing to do.
             return;
         }
 
         $preference = $this->resolvePreference($user);
-        if (!$this->isFrequencyEnabled($preference)) {
+        if (! $this->isFrequencyEnabled($preference)) {
             $this->logSkipped($user->id, 'Digest frequency disabled.');
+
             return;
         }
 
+        // Only enabled recipient rows; `pluck` gives a Collection of email strings.
         $recipients = $user->reportingRecipients()->enabled()->pluck('email');
         if ($recipients->isEmpty()) {
             $this->logSkipped($user->id, 'No enabled reporting recipients.');
+
             return;
         }
 
+        // Fallback timezone if DB column is empty — see config/reporting.php.
         $timezone = $preference->timezone ?: config('reporting.default_timezone');
+
+        // Tuple destructuring: `resolvePeriodWindow` returns [start, end] as CarbonImmutable instances.
         [$periodStart, $periodEnd] = $this->resolvePeriodWindow($timezone);
+
+        // All heavy SQL aggregation lives in the service — keeps this job readable.
         $payload = $digestService->buildDigestPayload($user, $periodStart, $periodEnd, $timezone);
+
+        // Extra keys the Blade layout expects (service focuses on metrics; job adds presentation metadata).
         $payload['dashboard_url'] = route('dashboard');
-        $payload['title'] = ucfirst($this->frequency) . ' Report';
+        $payload['title'] = ucfirst($this->frequency).' Report';
         $payload['preheader'] = $this->resolvePreheader($payload);
 
-        if ($preference->skip_empty_digests && !$payload['has_activity']) {
+        // If parent chose to skip empty digests and the service found no meaningful activity, stop here.
+        if ($preference->skip_empty_digests && ! $payload['has_activity']) {
             $this->logSkipped($user->id, 'No activity in digest period.', $periodStart, $periodEnd);
+
             return;
         }
 
@@ -64,8 +109,10 @@ class DispatchDigestReportJob implements ShouldQueue
 
         foreach ($recipients as $email) {
             try {
+                // `send()` is synchronous inside the job — the job itself is async; SMTP happens here.
                 Mail::to($email)->send($this->resolveMailable($payload, $subject));
 
+                // Store UTC timestamps in the DB for consistent sorting across timezones.
                 ReportDispatchLog::create([
                     'user_id' => $user->id,
                     'report_type' => 'digest',
@@ -83,6 +130,7 @@ class DispatchDigestReportJob implements ShouldQueue
                     'sent_at' => now(),
                 ]);
             } catch (Throwable $e) {
+                // Catch mail transport errors (wrong password, network) so one bad address does not crash the whole job.
                 ReportDispatchLog::create([
                     'user_id' => $user->id,
                     'report_type' => 'digest',
@@ -98,6 +146,9 @@ class DispatchDigestReportJob implements ShouldQueue
         }
     }
 
+    /**
+     * Ensure we always have a preference row — jobs may run before the parent opened the Reports UI.
+     */
     private function resolvePreference(User $user): ReportingPreference
     {
         if ($user->reportingPreference) {
@@ -115,6 +166,9 @@ class DispatchDigestReportJob implements ShouldQueue
         ]);
     }
 
+    /**
+     * Map the job’s frequency string to the correct boolean column on reporting_preferences.
+     */
     private function isFrequencyEnabled(ReportingPreference $preference): bool
     {
         return match ($this->frequency) {
@@ -125,6 +179,10 @@ class DispatchDigestReportJob implements ShouldQueue
         };
     }
 
+    /**
+     * Compute [start, end] of the reporting window in the parent’s timezone.
+     * We intentionally use "previous" day/week/month relative to "now" so a 06:00 scheduled run summarizes completed periods.
+     */
     private function resolvePeriodWindow(string $timezone): array
     {
         $now = CarbonImmutable::now($timezone);
@@ -137,6 +195,9 @@ class DispatchDigestReportJob implements ShouldQueue
         };
     }
 
+    /**
+     * Pick the correct Mailable class — each uses a thin Blade wrapper but shares `_digest-body`.
+     */
     private function resolveMailable(array $payload, string $subject): object
     {
         return match ($this->frequency) {
@@ -147,6 +208,7 @@ class DispatchDigestReportJob implements ShouldQueue
         };
     }
 
+    /** Short summary line some email clients show under the subject (preview text). */
     private function resolvePreheader(array $payload): string
     {
         return match ($this->frequency) {
@@ -160,6 +222,7 @@ class DispatchDigestReportJob implements ShouldQueue
         };
     }
 
+    /** Human-readable subject line; includes frequency and date range for inbox scanning. */
     private function buildSubject(CarbonImmutable $periodStart, CarbonImmutable $periodEnd, string $timezone): string
     {
         return match ($this->frequency) {
@@ -183,6 +246,9 @@ class DispatchDigestReportJob implements ShouldQueue
         };
     }
 
+    /**
+     * Record why a digest was not emailed — parents can see "skipped" rows in the Reports UI for transparency.
+     */
     private function logSkipped(
         int $userId,
         string $reason,
@@ -200,4 +266,3 @@ class DispatchDigestReportJob implements ShouldQueue
         ]);
     }
 }
-

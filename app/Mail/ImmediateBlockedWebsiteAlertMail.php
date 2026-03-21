@@ -8,6 +8,11 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * One-off alert when a blocked site is attempted — rendered by {@see resources/views/emails/reports/immediate-blocked.blade.php}.
+ *
+ * Dispatched from {@see \App\Listeners\SendImmediateBlockedWebsiteAlert} after {@see \App\Events\BlockedWebsiteAccessed} fires.
+ */
 class ImmediateBlockedWebsiteAlertMail extends Mailable
 {
     use Queueable, SerializesModels;

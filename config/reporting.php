@@ -1,5 +1,11 @@
 <?php
 
+/**
+ * Reporting module defaults (non-secret).
+ *
+ * Secrets stay in `.env` (MAIL_*, etc.). This file only holds app-level defaults consumed by
+ * {@see \App\Models\ReportingPreference}, listeners, and {@see \App\Http\Controllers\ReportsController}.
+ */
 return [
 
     /*

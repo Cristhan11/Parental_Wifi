@@ -12,7 +12,8 @@ use Illuminate\Queue\SerializesModels;
  * Broadcast when a device attempts to access a blocked website.
  *
  * Why this exists:
- * - Security alerts should appear in parent dashboard immediately.
+ * - Security alerts should appear in parent dashboard immediately (WebSockets).
+ * - The same event is consumed by {@see \App\Listeners\SendImmediateBlockedWebsiteAlert} for optional SMTP alerts.
  */
 class BlockedWebsiteAccessed implements ShouldBroadcastNow
 {

@@ -7,7 +7,9 @@ use DateTimeZone;
 use Exception;
 
 /**
- * Builds grouped IANA timezone options for the reporting preferences UI.
+ * Builds grouped IANA timezone options for the reporting preferences UI ({@see resources/views/reports/index.blade.php}).
+ *
+ * Why not hard-code a short list: parents abroad may need their local zone; we still surface Philippines first via `$recommended`.
  */
 final class ReportingTimezoneOptions
 {

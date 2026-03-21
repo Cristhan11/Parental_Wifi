@@ -6,6 +6,16 @@ use App\Jobs\DispatchDigestReportJob;
 use App\Models\ReportingRecipient;
 use Illuminate\Console\Command;
 
+/**
+ * Minimal CLI test: queues ONE daily digest job for a given parent user id.
+ *
+ * Differences vs `SendDigestReports`:
+ * - Always uses frequency `daily` (hard-coded in `dispatch()`).
+ * - Checks that at least one enabled recipient exists first — avoids queueing a useless job.
+ *
+ * Typical use: SSH into Raspberry Pi, configure MAIL_*, run `php artisan queue:work` in another terminal,
+ * then: `php artisan reporting:send-test 1`
+ */
 class SendTestReport extends Command
 {
     protected $signature = 'reporting:send-test {user_id : Parent user ID}';
@@ -16,20 +26,22 @@ class SendTestReport extends Command
     {
         $userId = (int) $this->argument('user_id');
 
+        // `exists()` is efficient — we only need true/false, not the actual rows.
         $hasRecipient = ReportingRecipient::query()
             ->where('user_id', $userId)
             ->enabled()
             ->exists();
 
-        if (!$hasRecipient) {
+        if (! $hasRecipient) {
             $this->error('No enabled reporting recipients found for this user.');
+
             return self::FAILURE;
         }
 
+        // Second argument must match what DispatchDigestReportJob expects: 'daily' | 'weekly' | 'monthly'.
         DispatchDigestReportJob::dispatch($userId, 'daily');
         $this->info('Queued test daily digest job.');
 
         return self::SUCCESS;
     }
 }
-

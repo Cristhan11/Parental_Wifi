@@ -1,3 +1,4 @@
+{{-- Shared HTML body for daily / weekly / monthly digest emails. Included by daily-digest, weekly-digest, monthly-digest views. Data: ReportingDigestService::buildDigestPayload --}}
 @php
     $devices = $payload['devices'] ?? [];
     $registered = (int) ($payload['registered_devices_count'] ?? count($devices));

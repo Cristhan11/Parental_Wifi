@@ -5,6 +5,7 @@
     - keep one predictable filter/export surface for investigation workflows
     Connection:
     - data is orchestrated by LogsController and normalized before rendering
+    - same underlying activity tables (e.g. AccessAttempt, BrowsingLog) feed digest rollups in ReportingDigestService for email reports
 --}}
 <x-app-layout>
     <x-slot name="header">

@@ -14,6 +14,7 @@ use InvalidArgumentException;
 /**
  * Sends a synthetic digest email so designers/QA can verify all template fields and bar charts.
  * Does not use real DB metrics; labeled clearly in the subject line.
+ * Does not write {@see \App\Models\ReportDispatchLog} (preview only).
  */
 class SendDummyDigestPreview extends Command
 {

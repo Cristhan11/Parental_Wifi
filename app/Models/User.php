@@ -139,7 +139,9 @@ class User extends Authenticatable
     }
 
     /**
-     * Dispatch history for reports and alerts generated for this account.
+     * Dispatch history for reports and alerts generated for this account ({@see ReportDispatchLog}).
+     *
+     * Populated by {@see \App\Jobs\DispatchDigestReportJob} and immediate listeners; shown read-only on Reports page.
      */
     public function reportDispatchLogs(): HasMany
     {

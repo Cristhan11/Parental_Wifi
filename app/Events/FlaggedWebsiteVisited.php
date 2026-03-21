@@ -12,7 +12,8 @@ use Illuminate\Queue\SerializesModels;
  * Broadcast when a device visits a flagged website.
  *
  * Why this exists:
- * - Flagged visits are warning-level events parents should see in real time.
+ * - Flagged visits are warning-level events parents should see in real time (WebSockets).
+ * - Also drives {@see \App\Listeners\SendImmediateFlaggedWebsiteAlert} for email when enabled.
  */
 class FlaggedWebsiteVisited implements ShouldBroadcastNow
 {

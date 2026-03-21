@@ -1,3 +1,9 @@
+{{--
+  Parent-facing Reporting & email config UI.
+
+  Backed by: App\Http\Controllers\ReportsController, routes name prefix `reports.*`.
+  Data: reporting_preferences, reporting_recipients, report_dispatch_logs (read-only history).
+--}}
 <x-app-layout>
     <x-slot name="header">
         <div class="flex items-center justify-between" style="background-color: #FFDE15; padding: 1rem; border-radius: 0.5rem;">

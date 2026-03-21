@@ -1,3 +1,4 @@
+{{-- Immediate flagged-site alert; payload from SendImmediateFlaggedWebsiteAlert listener. --}}
 <!DOCTYPE html>
 <html lang="en">
 <head>

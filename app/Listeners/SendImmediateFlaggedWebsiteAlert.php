@@ -10,24 +10,33 @@ use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
+/**
+ * Parallel to {@see SendImmediateBlockedWebsiteAlert} for {@see \App\Events\FlaggedWebsiteVisited} / {@see \App\Mail\ImmediateFlaggedWebsiteAlertMail}.
+ */
 class SendImmediateFlaggedWebsiteAlert
 {
+    /**
+     * Same structure as {@see SendImmediateBlockedWebsiteAlert::handle} but for {@see FlaggedWebsiteVisited}
+     * and {@see ImmediateFlaggedWebsiteAlertMail} (different copy + styling in Blade).
+     */
     public function handle(FlaggedWebsiteVisited $event): void
     {
         $user = User::with(['reportingPreference', 'reportingRecipients'])->find($event->userId);
-        if (!$user) {
+        if (! $user) {
             return;
         }
 
         $preference = $this->resolvePreference($user);
-        if (!$preference->immediate_alerts_enabled) {
+        if (! $preference->immediate_alerts_enabled) {
             $this->logSkipped($user->id, 'immediate_flagged_website', 'Immediate alerts are disabled.');
+
             return;
         }
 
         $recipients = $user->reportingRecipients()->enabled()->pluck('email');
         if ($recipients->isEmpty()) {
             $this->logSkipped($user->id, 'immediate_flagged_website', 'No enabled reporting recipients.');
+
             return;
         }
 
@@ -46,6 +55,7 @@ class SendImmediateFlaggedWebsiteAlert
         ];
 
         foreach ($recipients as $email) {
+            // Per-recipient try/catch so one bad mailbox does not block others.
             try {
                 Mail::to($email)->send(new ImmediateFlaggedWebsiteAlertMail($payload, $subject));
                 ReportDispatchLog::create([

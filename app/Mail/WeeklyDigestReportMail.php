@@ -8,6 +8,10 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * Weekly digest Mailable — structurally identical to {@see DailyDigestReportMail} but uses view `emails.reports.weekly-digest`.
+ * The *data* inside `$payload` still comes from the same service; only the reporting window in the job differs.
+ */
 class WeeklyDigestReportMail extends Mailable
 {
     use Queueable, SerializesModels;
@@ -35,4 +39,3 @@ class WeeklyDigestReportMail extends Mailable
         );
     }
 }
-

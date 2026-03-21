@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * Audit trail for email attempts (digest + immediate): sent, failed, skipped — powers the Reports “history” table.
+ *
+ * @see \App\Models\ReportDispatchLog
+ */
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;

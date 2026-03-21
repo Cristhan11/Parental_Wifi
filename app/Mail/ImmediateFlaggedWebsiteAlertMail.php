@@ -8,6 +8,11 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * One-off alert for flagged-site visits — {@see resources/views/emails/reports/immediate-flagged.blade.php}.
+ *
+ * Dispatched from {@see \App\Listeners\SendImmediateFlaggedWebsiteAlert} on {@see \App\Events\FlaggedWebsiteVisited}.
+ */
 class ImmediateFlaggedWebsiteAlertMail extends Mailable
 {
     use Queueable, SerializesModels;

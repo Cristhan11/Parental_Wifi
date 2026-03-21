@@ -10,28 +10,42 @@ use App\Models\User;
 use Illuminate\Support\Facades\Mail;
 use Throwable;
 
+/**
+ * Email side of {@see \App\Events\BlockedWebsiteAccessed}: respects {@see \App\Models\ReportingPreference::immediate_alerts_enabled}
+ * and enabled {@see \App\Models\ReportingRecipient} rows, then sends via the Mail facade and writes {@see ReportDispatchLog}.
+ *
+ * Registration: Laravel event discovery (see {@see \App\Providers\AppServiceProvider::boot}) — do not duplicate with manual `Event::listen`.
+ */
 class SendImmediateBlockedWebsiteAlert
 {
+    /**
+     * Laravel invokes this when {@see BlockedWebsiteAccessed} is dispatched (same request or queued listener).
+     * The `$event` carries primitive data (ids, device name, url/domain) set by whoever fired the event.
+     */
     public function handle(BlockedWebsiteAccessed $event): void
     {
+        // Load parent account; `$event->userId` is the owning parent, not the child device user.
         $user = User::with(['reportingPreference', 'reportingRecipients'])->find($event->userId);
-        if (!$user) {
+        if (! $user) {
             return;
         }
 
         $preference = $this->resolvePreference($user);
-        if (!$preference->immediate_alerts_enabled) {
+        if (! $preference->immediate_alerts_enabled) {
             $this->logSkipped($user->id, 'immediate_blocked_website', 'Immediate alerts are disabled.');
+
             return;
         }
 
         $recipients = $user->reportingRecipients()->enabled()->pluck('email');
         if ($recipients->isEmpty()) {
             $this->logSkipped($user->id, 'immediate_blocked_website', 'No enabled reporting recipients.');
+
             return;
         }
 
         $timezone = $preference->timezone ?: config('reporting.default_timezone');
+        // Prefer domain for display; fall back to full URL; event fields may be null depending on capture path.
         $domain = $event->domain ?: ($event->url ?: 'unknown-domain');
         $subject = sprintf('[Parental WiFi][Alert][Blocked] %s attempted %s', $event->deviceName, $domain);
         $payload = [
@@ -45,6 +59,7 @@ class SendImmediateBlockedWebsiteAlert
             'dashboard_url' => route('dashboard'),
         ];
 
+        // One SMTP send per recipient — same content, independent success/failure logging.
         foreach ($recipients as $email) {
             try {
                 Mail::to($email)->send(new ImmediateBlockedWebsiteAlertMail($payload, $subject));
@@ -71,6 +86,7 @@ class SendImmediateBlockedWebsiteAlert
         }
     }
 
+    /** Create defaults if the parent never opened the Reports page (same pattern as digest job). */
     private function resolvePreference(User $user): ReportingPreference
     {
         if ($user->reportingPreference) {

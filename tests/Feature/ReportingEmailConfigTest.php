@@ -15,6 +15,11 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
+/**
+ * Feature tests for the reporting stack: routes, preferences, recipients, digest job wiring, and mail fakes.
+ *
+ * Run: `php artisan test --filter=ReportingEmailConfigTest`
+ */
 class ReportingEmailConfigTest extends TestCase
 {
     use RefreshDatabase;

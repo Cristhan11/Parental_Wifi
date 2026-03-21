@@ -1,5 +1,12 @@
 <?php
 
+/**
+ * Dev helper: introspect the event dispatcher to confirm which listeners are bound (e.g. duplicate immediate email handlers).
+ *
+ * Usage from project root: `php scripts/debug_listeners.php`
+ *
+ * Related: {@see \App\Providers\AppServiceProvider::boot} — avoid double-registering the same listener.
+ */
 require __DIR__.'/../vendor/autoload.php';
 $app = require_once __DIR__.'/../bootstrap/app.php';
 $app->make(\Illuminate\Contracts\Console\Kernel::class)->bootstrap();

@@ -8,6 +8,9 @@ use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
 
+/**
+ * Monthly digest Mailable — view `emails.reports.monthly-digest` (includes shared `_digest-body`).
+ */
 class MonthlyDigestReportMail extends Mailable
 {
     use Queueable, SerializesModels;
@@ -35,4 +38,3 @@ class MonthlyDigestReportMail extends Mailable
         );
     }
 }
-

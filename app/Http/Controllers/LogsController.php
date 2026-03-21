@@ -37,6 +37,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Architectural relevance:
  * - It acts as an adapter layer between domain models and a normalized log contract
  *   consumed by Blade and export endpoints.
+ *
+ * Relationship to email reporting:
+ * - Digests aggregate some of the same sources ({@see \App\Services\ReportingDigestService}) for SMTP summaries;
+ *   this controller is the interactive drill-down, not the mail pipeline.
  */
 class LogsController extends Controller
 {

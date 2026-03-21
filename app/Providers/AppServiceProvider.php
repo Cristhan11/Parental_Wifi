@@ -4,6 +4,10 @@ namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
 
+/**
+ * Global app bootstrap. Reporting immediate-alert listeners are **not** registered here — they live under
+ * `app/Listeners` and are picked up by Laravel’s event discovery to avoid duplicate handler registration.
+ */
 class AppServiceProvider extends ServiceProvider
 {
     /**

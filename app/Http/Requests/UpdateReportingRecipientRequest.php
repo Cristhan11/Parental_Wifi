@@ -5,6 +5,12 @@ namespace App\Http\Requests;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+/**
+ * Validation for PUT/PATCH when editing an existing recipient.
+ *
+ * Route model binding injects `ReportingRecipient $recipient` — here we read it from the route
+ * so we can `ignore($recipientId)` on the unique rule (otherwise you could not save without changing email).
+ */
 class UpdateReportingRecipientRequest extends FormRequest
 {
     public function authorize(): bool
@@ -14,6 +20,7 @@ class UpdateReportingRecipientRequest extends FormRequest
 
     public function rules(): array
     {
+        // In tests or malformed routes, `recipient` might not be an object — guard before accessing ->id.
         $recipient = $this->route('recipient');
         $recipientId = is_object($recipient) ? $recipient->id : null;
 
@@ -31,4 +38,3 @@ class UpdateReportingRecipientRequest extends FormRequest
         ];
     }
 }
-
