@@ -10,6 +10,8 @@ use App\Models\DeviceSchedule;
 use App\Models\DeviceSession;
 use App\Models\DeviceTimeGrant;
 use App\Models\FlaggedWebsite;
+use App\Models\ReportingPreference;
+use App\Models\ReportingRecipientEvent;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -41,6 +43,8 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * Relationship to email reporting:
  * - Digests aggregate some of the same sources ({@see \App\Services\ReportingDigestService}) for SMTP summaries;
  *   this controller is the interactive drill-down, not the mail pipeline.
+ * - Parent/admin stream includes {@see ReportingRecipientEvent} (recipient add/edit/enable/remove) and
+ *   {@see ReportingPreference} timestamps so email reporting setup appears alongside device/policy changes.
  */
 class LogsController extends Controller
 {
@@ -712,7 +716,7 @@ class LogsController extends Controller
             $devices->where('id', $deviceId);
         }
 
-        return $entries->merge($devices->get()->flatMap(function (Device $item) use ($from, $to): array {
+        $entries = $entries->merge($devices->get()->flatMap(function (Device $item) use ($from, $to): array {
             $rows = [];
             $actorRole = $item->user?->role;
 
@@ -752,6 +756,94 @@ class LogsController extends Controller
 
             return $rows;
         }));
+
+        // Email reporting: recipients + preferences are account-level (no device_id).
+        // When the UI filters by a single device, skip these rows — they are not tied to one device.
+        if ($deviceId === null) {
+            $recipientEvents = ReportingRecipientEvent::query()
+                ->with('user')
+                ->whereBetween('created_at', [$from, $to]);
+
+            if (! $isAdmin) {
+                $recipientEvents->where('user_id', Auth::id());
+            }
+
+            $entries = $entries->merge($recipientEvents->orderByDesc('created_at')->get()->map(function (ReportingRecipientEvent $event): array {
+                $actorRole = $event->user?->role;
+                $status = match ($event->action) {
+                    'added' => 'success',
+                    'removed' => 'warning',
+                    default => 'info',
+                };
+
+                return [
+                    'id' => 'reporting-recipient-event-' . $event->id,
+                    'timestamp' => Carbon::parse($event->created_at),
+                    'stream' => 'parent_admin_changes',
+                    'event_type' => 'configuration',
+                    'status' => $status,
+                    'role' => $actorRole,
+                    'device_id' => null,
+                    'device_name' => 'Reporting',
+                    'target' => $event->email,
+                    'summary' => $event->summary,
+                ];
+            }));
+
+            $reportingPreferences = ReportingPreference::query()
+                ->with('user')
+                ->where(function ($query) use ($from, $to) {
+                    $query->whereBetween('created_at', [$from, $to])
+                        ->orWhereBetween('updated_at', [$from, $to]);
+                });
+
+            if (! $isAdmin) {
+                $reportingPreferences->where('user_id', Auth::id());
+            }
+
+            $entries = $entries->merge($reportingPreferences->get()->flatMap(function (ReportingPreference $item) use ($from, $to): array {
+                $rows = [];
+                $actorRole = $item->user?->role;
+
+                if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
+                    $rows[] = [
+                        'id' => 'reporting-prefs-create-' . $item->id,
+                        'timestamp' => Carbon::parse($item->created_at),
+                        'stream' => 'parent_admin_changes',
+                        'event_type' => 'configuration',
+                        'status' => 'success',
+                        'role' => $actorRole,
+                        'device_id' => null,
+                        'device_name' => 'Reporting',
+                        'target' => 'preferences',
+                        'summary' => 'Reporting preferences initialized',
+                    ];
+                }
+
+                if (
+                    $item->updated_at &&
+                    ! $item->updated_at->equalTo($item->created_at) &&
+                    Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
+                ) {
+                    $rows[] = [
+                        'id' => 'reporting-prefs-update-' . $item->id,
+                        'timestamp' => Carbon::parse($item->updated_at),
+                        'stream' => 'parent_admin_changes',
+                        'event_type' => 'configuration',
+                        'status' => 'info',
+                        'role' => $actorRole,
+                        'device_id' => null,
+                        'device_name' => 'Reporting',
+                        'target' => 'preferences',
+                        'summary' => 'Reporting preferences updated',
+                    ];
+                }
+
+                return $rows;
+            }));
+        }
+
+        return $entries;
     }
 
     private function applySharedFilters(

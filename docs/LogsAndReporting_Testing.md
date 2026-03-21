@@ -25,6 +25,35 @@ If Nginx/MariaDB/PHP-FPM are not working, fix that first using the **Check Servi
 
 ---
 
+## Raspberry Pi — verified test matrix (reference)
+
+Use this section as a **single checklist** of what was exercised on the Pi during development. Repeat it after future deploys when you change reporting, logs, or email.
+
+1. **Git** — Verify a clean tree or stash before pull. Run `git status`. If only `composer.json` was edited locally for `process-timeout`, prefer matching `origin/main` (`git restore composer.json`) then `git pull` — the repo now includes `process-timeout` in `composer.json`.
+2. **Config files** — Verify `config/network.php` comes from the repo. It is pulled with `main`; optional override via `.env` `NETWORK_LOG_PATH`.
+3. **Dependencies** — Verify `vendor/` is up to date: `composer install --no-interaction`.
+4. **Migrations** — Verify all reporting + logs-related tables: `php artisan migrate --force` — includes `reporting_preferences`, `reporting_recipients`, `report_dispatch_logs`, and **`reporting_recipient_events`** (recipient audit for Parent/Admin log stream).
+5. **Config cache** — Verify `.env` is loaded: `php artisan config:cache` after `.env` edits.
+6. **Queue worker** — Verify digests & jobs run: `sudo systemctl restart laravel-queue.service` after code/config changes. `sudo systemctl status laravel-queue.service` → **active (running)**.
+7. **Cron** — Verify the scheduler runs: `crontab -l` shows `schedule:run` every minute. `php artisan schedule:list` shows `reporting:send-digest` tasks.
+8. **Automated tests** — PHPUnit (no real email): `php artisan test tests/Feature/ReportingEmailConfigTest.php` → **PASS**. `php artisan test tests/Feature/PiCriticalLogsReportingTest.php` → **PASS**. Optional: `php artisan test tests/Feature/LogsParentAdminReportingTest.php` (recipient audit + logs UI wiring).
+9. **Bundled script** — One-shot smoke test: `./scripts/pi_verify_reporting_and_logs.sh` → **Verification script finished OK** (runs `ReportingEmailConfigTest` + `PiCriticalLogsReportingTest` by default).
+10. **Digest (queued)** — Verify the job completes: `php artisan reporting:send-digest daily` → “Queued … job(s)”. Then `sudo journalctl -u laravel-queue.service -n 30` → `DispatchDigestReportJob` **RUNNING** → **DONE**.
+11. **Digest (manual test)** — SMTP + distinct Gmail thread: Reports UI **Send test digest** or `php artisan reporting:send-test <parent_id>`. Subject includes **`[Test …]`** suffix. Inbox receives mail; Reports **Dispatch history** shows `sent` (or `skipped` if empty period + skip empty).
+12. **Gmail vs history** — Threading vs row count: same subject → one **thread** may show “2” while history shows more **sends** — open thread / check Spam / Promotions.
+13. **Immediate alerts (preview)** — Two template emails: `php artisan reporting:send-dummy-immediate-alerts <parent_id>` — does **not** use the same audit rows as live events (see command comments).
+14. **Immediate alerts (real pipeline)** — Events → listeners → mail: `php artisan tinker` → `AccessAttempt::create([...])` with `type` `blocked_website` / `flagged_website` for a **child** `device_id` owned by the parent. Inbox + `report_dispatch_logs` / Reports history.
+15. **Logs → Parent/Admin** — Reporting recipients & prefs: `/logs` → **Parent/Admin Changes**, **Device: All devices**, widen **From/To**. Recipient add/update/enable/disable/remove appear via **`reporting_recipient_events`** (after migration). Preference rows still derived from `reporting_preferences` timestamps.
+16. **Shutdown** — Safe power-off: `sudo shutdown -h now` or `sudo poweroff`, wait for activity to stop, then unplug power.
+
+**Find a parent user id (for Artisan):**
+
+```bash
+php artisan tinker --execute="echo \App\Models\User::where('role','parent')->get(['id','name','email'])->toJson(JSON_PRETTY_PRINT);"
+```
+
+---
+
 ## Step 1 — SSH into the Pi
 
 ```bash
@@ -138,6 +167,13 @@ You should see migrations such as:
 - `2026_03_13_100001_create_reporting_preferences_table`
 - `2026_03_13_100002_create_reporting_recipients_table`
 - `2026_03_13_100003_create_report_dispatch_logs_table`
+- `2026_03_22_120000_create_reporting_recipient_events_table` (audit rows for Parent/Admin log stream — add / edit / enable-disable / remove recipient)
+
+Confirm:
+
+```bash
+php artisan migrate:status | grep -E 'reporting_|report_dispatch|reporting_recipient_events'
+```
 
 ---
 
@@ -263,6 +299,12 @@ This script:
   - `tests/Feature/ReportingEmailConfigTest.php`
   - `tests/Feature/PiCriticalLogsReportingTest.php`
 
+To also run **logs + reporting recipient audit** tests (not in the script by default):
+
+```bash
+php artisan test tests/Feature/LogsParentAdminReportingTest.php
+```
+
 **Faster check** (skip PHPUnit, only Artisan + schedule):
 
 ```bash
@@ -275,7 +317,10 @@ PI_SKIP_PHPUNIT=1 ./scripts/pi_verify_reporting_and_logs.sh
 
 ```bash
 cd /var/www/parental_wifi
-php artisan test tests/Feature/ReportingEmailConfigTest.php tests/Feature/PiCriticalLogsReportingTest.php
+php artisan test \
+  tests/Feature/ReportingEmailConfigTest.php \
+  tests/Feature/PiCriticalLogsReportingTest.php \
+  tests/Feature/LogsParentAdminReportingTest.php
 ```
 
 All tests should **pass**. They use the **testing** environment (`phpunit.xml`: SQLite `:memory:`, `MAIL_MAILER=array`, `QUEUE_CONNECTION=sync`) — **no real email** is sent.
@@ -286,7 +331,7 @@ All tests should **pass**. They use the **testing** environment (`phpunit.xml`: 
 
 1. Open the app in a browser: `http://<PI_IP>/` or your configured domain (see Nginx in [`RASPBERRY_PI_SERVICES_SETUP.md`](./RASPBERRY_PI_SERVICES_SETUP.md)).
 2. Log in as a **parent** user.
-3. **Unified logs:** open **`/logs`** — page should load; try filters and tabs (`child_activity` / `parent_admin_changes`).
+3. **Unified logs:** open **`/logs`** — page should load; try filters and tabs (`child_activity` / `parent_admin_changes`). On **Parent/Admin Changes**, reporting recipient actions (add, email/label change, enable/disable, remove) are stored in **`reporting_recipient_events`** and appear with summaries — widen **From/To** if you don’t see a recent change.
 4. **Reporting:** open **`/reports`** — set timezone, toggles, add at least one **enabled recipient** with a real email you can check.
 
 If you get 403 or redirect loops, confirm middleware and that the user role is `parent` (or `admin` where allowed).
@@ -355,6 +400,7 @@ These send through real `MAIL_*` but do **not** pollute `report_dispatch_logs` t
 | Digest never sends | Cron `schedule:run`, `QUEUE_CONNECTION`, `queue:work`, parent has recipients + enabled digest |
 | SMTP errors | `.env` `MAIL_*`, firewall, provider app-password / TLS port |
 | History shows `sent` but inbox shows fewer messages | Gmail threading (same subject); Spam/Promotions; search `in:anywhere from:…`; use test-send unique subject (see Step 10) |
+| Parent/Admin log missing a reporting change | Widen **From/To**; use **All devices** (recipient events are account-level); ensure migration `reporting_recipient_events` ran; actions only logged **after** that migration |
 
 ### Composer: `curl error 28` / timeout while downloading (common on Pi)
 
@@ -412,7 +458,9 @@ If it **keeps failing** or hangs forever:
 |------|------|
 | `scripts/pi_verify_reporting_and_logs.sh` | Pi verification script |
 | `tests/Feature/PiCriticalLogsReportingTest.php` | HTTP + Artisan smoke tests |
-| `tests/Feature/ReportingEmailConfigTest.php` | Reporting feature tests |
+| `tests/Feature/ReportingEmailConfigTest.php` | Reporting routes, prefs, recipients, digest job, mail fakes |
+| `tests/Feature/LogsParentAdminReportingTest.php` | Parent/Admin log stream + `reporting_recipient_events` |
+| `app/Observers/ReportingRecipientObserver.php` | Writes recipient audit rows for `/logs` |
 | `docs/reporting_code_map.md` | How reporting + logs connect in code |
 
 ---
@@ -420,3 +468,4 @@ If it **keeps failing** or hangs forever:
 ## Reference
 
 - **Pi services & Git workflow:** [`RASPBERRY_PI_SERVICES_SETUP.md`](./RASPBERRY_PI_SERVICES_SETUP.md)
+- **This guide’s checklist:** use **Raspberry Pi — verified test matrix (reference)** at the top when validating a deploy end-to-end.

@@ -30,6 +30,7 @@ Use this doc as a checklist when writing the Raspberry Pi / SMTP tutorial.
 ## Logs UI vs email
 
 - **Interactive logs** — `LogsController` + `resources/views/logs/index.blade.php` (investigation, export).
+- **Recipient audit** — `ReportingRecipientObserver` writes `reporting_recipient_events` (add / edit email or label / enable-disable / delete) for the Parent/Admin Changes stream; deletes are captured here because the `reporting_recipients` row is gone.
 - **Email digests** — same *kinds* of underlying activity (e.g. attempts, browsing) summarized by `ReportingDigestService`; different presentation and scheduling.
 
 ## Dev / QA commands

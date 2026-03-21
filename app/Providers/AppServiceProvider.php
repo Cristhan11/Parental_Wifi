@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\ReportingRecipient;
+use App\Observers\ReportingRecipientObserver;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -23,6 +25,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        ReportingRecipient::observe(ReportingRecipientObserver::class);
+
         // Immediate alert listeners live under app/Listeners and are auto-registered by
         // Laravel's event discovery (see Illuminate\Foundation\Support\Providers\EventServiceProvider).
         // Do not also Event::listen() them here — that would register the same handle() twice.

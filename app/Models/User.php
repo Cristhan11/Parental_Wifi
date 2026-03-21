@@ -139,6 +139,16 @@ class User extends Authenticatable
     }
 
     /**
+     * Audit rows for recipient add / edit / remove (shown on Logs → Parent/Admin Changes).
+     *
+     * @see \App\Models\ReportingRecipientEvent
+     */
+    public function reportingRecipientEvents(): HasMany
+    {
+        return $this->hasMany(ReportingRecipientEvent::class);
+    }
+
+    /**
      * Dispatch history for reports and alerts generated for this account ({@see ReportDispatchLog}).
      *
      * Populated by {@see \App\Jobs\DispatchDigestReportJob} and immediate listeners; shown read-only on Reports page.
