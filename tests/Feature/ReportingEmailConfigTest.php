@@ -11,6 +11,7 @@ use App\Models\Device;
 use App\Models\ReportingPreference;
 use App\Models\ReportingRecipient;
 use App\Models\User;
+use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
@@ -23,6 +24,14 @@ use Tests\TestCase;
 class ReportingEmailConfigTest extends TestCase
 {
     use RefreshDatabase;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        // Web PUT/POST tests do not submit a browser _token; disable CSRF for this feature suite only.
+        $this->withoutMiddleware(ValidateCsrfToken::class);
+    }
 
     public function test_parent_can_view_and_update_reporting_preferences(): void
     {
