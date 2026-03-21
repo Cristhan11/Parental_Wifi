@@ -33,6 +33,70 @@ Remaining work is Raspberry Pi production-like validation.
 
 ---
 
+## Execution Log (2026-03-13)
+
+This section records what was actually executed during Raspberry Pi rollout and what was observed.
+
+### Completed on Raspberry Pi
+
+1. Installed dependencies:
+   - `composer install --no-dev --optimize-autoloader`
+   - `npm install`
+2. Applied build and cache steps:
+   - `php artisan optimize:clear`
+   - `php artisan config:cache`
+   - `php artisan route:cache`
+   - `php artisan view:cache`
+   - `npm run build`
+3. Verified DB and queue:
+   - `php artisan migrate --force` (nothing to migrate)
+   - `php artisan queue:restart`
+   - `parental-wifi-queue.service` is active/running
+4. Created and enabled Reverb systemd service:
+   - `/etc/systemd/system/parental-wifi-reverb.service`
+   - `sudo systemctl daemon-reload`
+   - `sudo systemctl enable parental-wifi-reverb.service`
+   - `sudo systemctl start parental-wifi-reverb.service`
+   - service status is active/running
+5. Confirmed Reverb listener:
+   - `sudo ss -tulpn | grep 8080`
+   - observed `0.0.0.0:8080` bound by php/reverb
+6. Confirmed scheduler entry:
+   - `crontab -l` contains `* * * * * ... php artisan schedule:run ...`
+
+### Network issue found and resolved
+
+Initial issue:
+
+- Client could reach `192.168.4.1:80` but not `192.168.4.1:8080`
+- `Test-NetConnection 192.168.4.1 -Port 8080` failed
+- Browser console showed websocket failures and Echo state `unavailable`
+
+Resolution:
+
+- Added INPUT allow rules for TCP/8080:
+  - `sudo iptables -I INPUT 1 -i wlan0 -p tcp --dport 8080 -j ACCEPT`
+  - `sudo iptables -I INPUT 1 -p tcp --dport 8080 -j ACCEPT`
+- Re-tested from Windows:
+  - `Test-NetConnection 192.168.4.1 -Port 8080` => `TcpTestSucceeded : True`
+
+Post-fix verification evidence:
+
+- Browser console state became `connected`
+- Network tab showed websocket entries with status `101`
+
+### Current Raspberry Pi status
+
+- Reverb service: PASS (running)
+- Queue service: PASS (running)
+- Scheduler/cron entry: PASS
+- Port 8080 reachability from AP client: PASS
+- Browser websocket handshake (`101`): PASS
+- Echo connection state (`connected`): PASS
+- Full event checklist (all Step 22 scenarios): IN PROGRESS
+
+---
+
 ## A) Git Workflow (Local Machine -> GitHub -> Raspberry Pi)
 
 ### 1) Local machine: commit and push changes
@@ -235,4 +299,29 @@ After finishing Pi tests, document this in your test notes:
 - UI scroll/layout checks: PASS/FAIL
 - Reverb restart recovery: PASS/FAIL
 - Notes/issues:
+
+---
+
+## G) Immediate Next Actions
+
+To finish Step 22 validation on Raspberry Pi, run these remaining checks and mark PASS/FAIL:
+
+1. Confirm `/broadcasting/auth` request returns `200` in browser Network tab.
+2. Trigger and validate each event on Pi:
+   - `device.connected`
+   - `device.disconnected`
+   - `time.expired`
+   - `time.granted` (quiz and video)
+   - `website.blocked_accessed`
+   - `website.flagged_visited`
+3. Validate updated dashboard UX:
+   - Realtime card is the 5th grid item
+   - Grid scrolling works correctly
+   - Realtime log list scrolls with retained history
+   - Welcome-row popup shows latest event and auto-hides
+4. Perform resilience check:
+   - restart reverb service while dashboard is open
+   - confirm reconnect + successful event receipt after restart
+5. Persist firewall rules across reboot (if not yet persisted):
+   - use `iptables-persistent` / `netfilter-persistent save`
 

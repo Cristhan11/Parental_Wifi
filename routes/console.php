@@ -251,3 +251,24 @@ Schedule::job(new ParseNetworkLogs)
     ->everyTenMinutes() // Run every 10 minutes
     ->name('parse-network-logs') // Name for logging and monitoring
     ->withoutOverlapping(); // Prevent multiple instances running at once
+
+/**
+ * Reporting digest schedules (locked scope).
+ *
+ * Daily/weekly/monthly runs are split to keep each cadence independently
+ * observable in scheduler output and easier to retry per frequency.
+ */
+Schedule::command('reporting:send-digest daily')
+    ->dailyAt('06:00')
+    ->name('reporting-digest-daily')
+    ->withoutOverlapping();
+
+Schedule::command('reporting:send-digest weekly')
+    ->weeklyOn(1, '06:05')
+    ->name('reporting-digest-weekly')
+    ->withoutOverlapping();
+
+Schedule::command('reporting:send-digest monthly')
+    ->monthlyOn(1, '06:10')
+    ->name('reporting-digest-monthly')
+    ->withoutOverlapping();

@@ -5,6 +5,7 @@ namespace App\Models;
 // use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -112,6 +113,37 @@ class User extends Authenticatable
     public function dictionaryWords(): HasMany
     {
         return $this->hasMany(DictionaryWord::class);
+    }
+
+    /**
+     * Reporting preferences for this account.
+     *
+     * Why hasOne:
+     * - one account owns one reporting preference profile controlling digest cadence
+     *   and immediate alert behavior.
+     */
+    public function reportingPreference(): HasOne
+    {
+        return $this->hasOne(ReportingPreference::class);
+    }
+
+    /**
+     * Email recipients that should receive this account's reports.
+     *
+     * Why separate table:
+     * - one parent can notify multiple recipients without duplicating account records.
+     */
+    public function reportingRecipients(): HasMany
+    {
+        return $this->hasMany(ReportingRecipient::class);
+    }
+
+    /**
+     * Dispatch history for reports and alerts generated for this account.
+     */
+    public function reportDispatchLogs(): HasMany
+    {
+        return $this->hasMany(ReportDispatchLog::class);
     }
 
     /**

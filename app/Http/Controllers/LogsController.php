@@ -22,6 +22,22 @@ use PhpOffice\PhpSpreadsheet\Style\Fill;
 use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
+/**
+ * LogsController
+ *
+ * High-level responsibility:
+ * - Provide one unified logs experience while preserving semantic separation
+ *   between child activity and parent/admin changes.
+ *
+ * Why this controller matters:
+ * - The product needs investigation-grade visibility (filters, sorting, paging, exports).
+ * - The current data model stores log evidence across several domain tables, not one
+ *   centralized audit table, so this controller normalizes those sources for UI/reporting.
+ *
+ * Architectural relevance:
+ * - It acts as an adapter layer between domain models and a normalized log contract
+ *   consumed by Blade and export endpoints.
+ */
 class LogsController extends Controller
 {
     /**
@@ -143,6 +159,10 @@ class LogsController extends Controller
 
     public function export(Request $request): StreamedResponse
     {
+        // CSV remains the machine-friendly export option.
+        // Why keep it:
+        // - lightweight interoperability with scripts/BI tooling
+        // - fast to generate for automation pipelines
         $entries = $this->resolveExportEntries($request);
         $stream = $request->input('stream', 'child_activity');
         if (!in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
@@ -184,6 +204,10 @@ class LogsController extends Controller
 
     public function exportExcel(Request $request): StreamedResponse
     {
+        // Excel is the presentation-friendly export option.
+        // Why this exists in addition to CSV:
+        // - non-technical reviewers requested better readability
+        // - status coloring and auto-sized columns reduce manual cleanup effort
         $entries = $this->resolveExportEntries($request);
         $stream = $request->input('stream', 'child_activity');
         if (!in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
@@ -200,6 +224,7 @@ class LogsController extends Controller
             $headers = ['timestamp', 'type', 'status', 'role', 'device', 'target', 'summary'];
             $sheet->fromArray($headers, null, 'A1');
 
+            // Header styling intentionally mirrors dashboard color language for consistency.
             $sheet->getStyle('A1:G1')->applyFromArray([
                 'font' => ['bold' => true, 'color' => ['rgb' => '000000']],
                 'fill' => [
@@ -231,6 +256,7 @@ class LogsController extends Controller
                     default => 'DBEAFE',
                 };
 
+                // Status tint gives immediate scanability without reading every row.
                 $sheet->getStyle("C{$row}")->applyFromArray([
                     'fill' => [
                         'fillType' => Fill::FILL_SOLID,
@@ -246,6 +272,7 @@ class LogsController extends Controller
                 $sheet->getColumnDimension($column)->setAutoSize(true);
             }
 
+            // Freeze header to keep context visible during long list review.
             $sheet->freezePane('A2');
 
             $writer = new Xlsx($spreadsheet);
@@ -257,6 +284,16 @@ class LogsController extends Controller
 
     private function resolveExportEntries(Request $request): Collection
     {
+        /**
+         * Shared export resolver used by CSV + Excel endpoints.
+         *
+         * Why this abstraction exists:
+         * - Prevents drift between export formats.
+         * - Ensures both exports always reflect the exact same filtered/sorted dataset.
+         *
+         * Practical outcome:
+         * - If a row is visible in filtered UI logic, it is exported consistently.
+         */
         /** @var User $user */
         $user = Auth::user();
         $isAdmin = $user->isAdmin();
@@ -282,6 +319,8 @@ class LogsController extends Controller
             ? $this->buildChildActivityEntries($isAdmin, $from, $to, $deviceFilter)
             : $this->buildParentAdminEntries($isAdmin, $from, $to, $deviceFilter);
 
+        // Backward compatibility detail:
+        // keep reading legacy `severity` links while standardizing on `status`.
         $entries = $this->applySharedFilters(
             $entries,
             $request->input('role'),
@@ -738,6 +777,8 @@ class LogsController extends Controller
         if ($keyword !== '') {
             $needle = mb_strtolower($keyword);
             $entries = $entries->filter(function (array $row) use ($needle): bool {
+                // Keyword search deliberately spans multiple fields to emulate
+                // "investigation search" behavior (device + target + summary + type).
                 $haystack = mb_strtolower(implode(' ', [
                     $row['summary'] ?? '',
                     $row['target'] ?? '',

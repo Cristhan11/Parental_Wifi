@@ -11,6 +11,7 @@ use App\Http\Controllers\LogsController;
 use App\Http\Controllers\PortalController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\QuizController;
+use App\Http\Controllers\ReportsController;
 use App\Http\Controllers\VideoController;
 use Illuminate\Support\Facades\Route;
 
@@ -137,6 +138,19 @@ Route::middleware('auth')->group(function () {
         Route::get('/', [LogsController::class, 'index'])->name('index');
         Route::get('/export', [LogsController::class, 'export'])->name('export');
         Route::get('/export-excel', [LogsController::class, 'exportExcel'])->name('export.excel');
+    });
+
+    // Reporting configuration and delivery controls.
+    // Locked finals scope:
+    // - immediate alerts: blocked + flagged events
+    // - digests: daily, weekly, monthly
+    Route::prefix('reports')->name('reports.')->group(function () {
+        Route::get('/', [ReportsController::class, 'index'])->name('index');
+        Route::put('/preferences', [ReportsController::class, 'updatePreferences'])->name('preferences.update');
+        Route::post('/recipients', [ReportsController::class, 'storeRecipient'])->name('recipients.store');
+        Route::put('/recipients/{recipient}', [ReportsController::class, 'updateRecipient'])->name('recipients.update');
+        Route::delete('/recipients/{recipient}', [ReportsController::class, 'destroyRecipient'])->name('recipients.destroy');
+        Route::post('/send-test-digest', [ReportsController::class, 'sendTestDigest'])->name('send-test-digest');
     });
 });
 
