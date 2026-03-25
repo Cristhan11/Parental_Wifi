@@ -114,6 +114,10 @@ class CheckTimeExpiration implements ShouldQueue
         // This helps us track when the job executes and debug any issues
         Log::info('CheckTimeExpiration job started - checking for expired devices');
 
+        // Sync incremental deductions first so remaining_time matches active sessions, and
+        // sessions can be closed as soon as quota hits 0 inside trackActiveSessions().
+        $timeTrackingService->trackActiveSessions();
+
         // Step 1: Find all devices whose time has expired
         // TimeTrackingService::getExpiredDevices() returns a collection of Device models
         // where remaining_time_minutes <= 0 (time has run out)
@@ -156,6 +160,13 @@ class CheckTimeExpiration implements ShouldQueue
                     'mac_address' => $device->mac_address,
                     'remaining_time_minutes' => $device->remaining_time_minutes,
                 ]);
+
+                // Close open DeviceSession rows so dashboard "time usage" reflects granted
+                // internet time only — not idle WiFi after the quota is gone.
+                $device->refresh();
+                foreach ($device->sessions()->whereNull('ended_at')->get() as $openSession) {
+                    $timeTrackingService->closeOpenSessionWhenInternetTimeExpired($openSession);
+                }
 
                 // Step 3: Update device status to 'blocked' in database
                 // This marks the device as blocked in our application

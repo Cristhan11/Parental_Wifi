@@ -384,6 +384,55 @@ class TimeTrackingService
     }
 
     /**
+     * Close an active session after incremental deductions have brought remaining time to 0.
+     * Does not deduct again — time was already removed in {@see trackActiveSessions()}.
+     */
+    private function finalizeSessionAfterQuotaDepleted(DeviceSession $session): void
+    {
+        if (! $session->isActive()) {
+            return;
+        }
+
+        $session->ended_at = now();
+        $session->calculateDuration();
+        $session->save();
+    }
+
+    /**
+     * End an open session when internet time has expired (e.g. last partial minute before a
+     * TrackActiveSessions run, or when CheckTimeExpiration runs). Deducts up to remaining
+     * quota so DB stays consistent, then closes the session.
+     */
+    public function closeOpenSessionWhenInternetTimeExpired(DeviceSession $session): void
+    {
+        if (! $session->isActive()) {
+            return;
+        }
+
+        $device = $session->device;
+        if ($device->isWhitelisted()) {
+            return;
+        }
+
+        $device = $device->fresh();
+        $sessionDurationMinutes = $session->getDurationMinutes();
+
+        if ($sessionDurationMinutes > 0) {
+            $remaining = max(0, (int) ($device->remaining_time_minutes ?? 0));
+            $toDeduct = min((int) ceil($sessionDurationMinutes), $remaining);
+
+            if ($toDeduct > 0) {
+                $device->deductTime($toDeduct);
+                $device->refresh();
+            }
+        }
+
+        $session->ended_at = now();
+        $session->calculateDuration();
+        $session->save();
+    }
+
+    /**
      * Track all active sessions and deduct time periodically.
      * 
      * This is the MAIN method called by the background job (TrackActiveSessions).
@@ -455,6 +504,25 @@ class TimeTrackingService
                 // Deduct time from device
                 // deductTime() prevents negative values (won't go below 0)
                 $device->deductTime($minutesToDeduct);
+
+                $device->refresh();
+
+                // When quota is exhausted, end the session immediately so "time usage" and
+                // reporting reflect granted internet time only — not WiFi association after
+                // the child is blocked (parents often stay connected to WiFi without internet).
+                if (($device->remaining_time_minutes ?? 0) <= 0) {
+                    $session->refresh();
+                    $device->update(['last_seen_at' => now()]);
+                    $this->finalizeSessionAfterQuotaDepleted($session);
+
+                    Log::debug('Active session closed — internet time quota exhausted', [
+                        'device_id' => $device->id,
+                        'device_name' => $device->name,
+                        'session_id' => $session->id,
+                    ]);
+
+                    continue;
+                }
 
                 // BUG FIX: Reset session's started_at to now() after deducting time.
                 // Previously, started_at was never updated, so getDurationMinutes() always

@@ -29,10 +29,24 @@
                         {{ $currentDate }}
                     </time>
                 </div>
-                
+                <p class="text-xs text-gray-600 font-montserrat flex-shrink-0 leading-snug">
+                    <span class="font-semibold text-gray-700">Today’s usage</span> — time counted while this child still has <span class="font-semibold text-gray-700">granted internet time</span> (not idle Wi‑Fi after time runs out; resets at midnight).
+                </p>
+                {{-- Server render time: client adds live session seconds to today's usage + remaining countdown --}}
+                <meta name="time-usage-rendered-at" content="{{ $timeUsageRenderedAt }}">
+
                 <div class="text-xs sm:text-sm font-normal leading-relaxed font-montserrat space-y-2 flex-1 overflow-y-auto custom-scrollbar">
                     @forelse($timeUsageData as $index => $data)
-                        <div class="flex items-center justify-between p-2 sm:p-3 rounded-lg border-2 border-gray-100 hover:border-[#FFDE15] transition-all">
+                        <div
+                            class="js-dashboard-time-row flex items-center justify-between p-2 sm:p-3 rounded-lg border-2 border-gray-100 hover:border-[#FFDE15] transition-all"
+                            data-device-id="{{ $data['device']->id }}"
+                            data-db-remaining-minutes="{{ $data['db_remaining_minutes'] }}"
+                            data-active-session-started-at="{{ $data['active_session_started_at'] ?? '' }}"
+                            data-total-usage-seconds="{{ $data['total_seconds'] }}"
+                            data-is-whitelisted="{{ $data['is_whitelisted'] ? '1' : '0' }}"
+                            data-is-connected="{{ $data['is_connected'] ? '1' : '0' }}"
+                            data-remaining-minutes-fallback="{{ $data['remaining_minutes'] }}"
+                        >
                             <div class="flex items-center gap-2 sm:gap-3">
                                 <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-sm sm:text-base text-black bg-[#FFDE15] flex-shrink-0">
                                     {{ $index + 1 }}
@@ -48,14 +62,25 @@
                                             <span class="w-2 h-2 bg-gray-400 rounded-full"></span> Offline
                                         </span>
                                     @endif
+                                    @if(!empty($data['active_session_started_at']))
+                                        <p class="text-[10px] text-gray-500 font-montserrat mt-0.5">
+                                            Current session since {{ \Carbon\Carbon::parse($data['active_session_started_at'])->timezone(config('app.timezone'))->format('g:i A') }}
+                                        </p>
+                                    @endif
                                 </div>
                             </div>
                             <div class="text-right flex-shrink-0">
-                                <p class="text-lg sm:text-xl font-bold text-black mb-0.5 font-montserrat">
+                                <p class="text-[10px] font-bold uppercase tracking-wide text-gray-500 font-montserrat mb-0.5">Today</p>
+                                <p class="js-time-usage-usage text-lg sm:text-xl font-bold text-black mb-0.5 font-montserrat">
                                     {{ $data['hours'] }}h{{ str_pad($data['minutes'], 2, '0', STR_PAD_LEFT) }}m
                                 </p>
-                                <p class="text-xs font-semibold {{ $data['remaining_minutes'] > 0 ? 'text-gray-600' : 'text-red-600' }} font-montserrat">
-                                    {{ $data['remaining_minutes'] > 0 ? $data['remaining_minutes'] . ' min remaining' : 'Expired' }}
+                                <p class="text-[10px] font-semibold text-gray-500 font-montserrat mb-0.5">Time left</p>
+                                <p class="js-time-usage-remaining text-xs font-semibold {{ $data['remaining_minutes'] > 0 ? 'text-gray-600' : 'text-red-600' }} font-montserrat">
+                                    @if($data['is_whitelisted'])
+                                        Unlimited
+                                    @else
+                                        {{ $data['remaining_minutes'] > 0 ? $data['remaining_minutes'] . ' min remaining' : 'Expired' }}
+                                    @endif
                                 </p>
                             </div>
                         </div>
@@ -109,49 +134,80 @@
             </article>
 
             <!-- Column 2: Graphical Representation Card (7 columns) -->
-            <article class="col-span-12 sm:col-span-7 rounded-xl bg-white border-4 border-[#FFDE15] p-4 sm:p-6 flex flex-col text-black min-w-0 overflow-hidden" style="min-height: 0;">
-                <h2 class="text-base sm:text-xl font-extrabold flex items-center gap-2 font-montserrat mb-2 flex-shrink-0">
-                    <i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="trending-up"></i> GRAPHICAL REPRESENTATION
+            <article class="col-span-12 sm:col-span-7 rounded-xl bg-white border-4 border-[#FFDE15] p-2 sm:p-4 flex flex-col text-black min-w-0 overflow-hidden" style="min-height: 0;">
+                <h2 class="text-sm sm:text-lg font-extrabold flex items-center gap-2 font-montserrat mb-1 flex-shrink-0">
+                    <i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="trending-up"></i> CHILD'S DEVICE USAGE TIME
                 </h2>
-                <div class="flex-1 relative min-h-0" style="height: 180px; max-height: 220px;">
-                    <canvas id="usageChart" role="img" aria-label="Monthly internet usage graph showing hours used per month for the last 12 months"></canvas>
+                <!-- Filter controls for the usage chart -->
+                <div class="mb-1.5 flex items-center justify-between gap-3 flex-shrink-0">
+                    <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">FILTER</span>
+                    <div class="flex flex-wrap gap-2 justify-end">
+                        <button type="button"
+                            class="js-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                            data-usage-chart-range="daily">
+                            Daily
+                        </button>
+                        <button type="button"
+                            class="js-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                            data-usage-chart-range="weekly">
+                            Weekly
+                        </button>
+                        <button type="button"
+                            class="js-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                            data-usage-chart-range="monthly">
+                            Monthly
+                        </button>
+                        <button type="button"
+                            class="js-usage-chart-filter js-usage-chart-filter-active inline-flex items-center justify-center rounded-full border-2 border-[#FFDE15] bg-[#FFDE15] text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFC107] transition"
+                            data-usage-chart-range="yearly">
+                            Yearly
+                        </button>
+                    </div>
+                </div>
+                {{-- 
+                    Chart sizing note:
+                    - Chart.js needs a real container height to render correctly.
+                    - We avoid a tiny fixed height so the graph fills the card and looks “premium”.
+                --}}
+                <div class="flex-1 relative min-h-[60px] sm:min-h-[70px] lg:min-h-[75px]">
+                    <canvas id="usageChart" role="img" aria-label="Time usage graph showing minutes used per child device"></canvas>
                 </div>
             </article>
 
             <!-- Column 3: Quiz & Video Remaining Card (5 columns) -->
-            <article class="col-span-12 sm:col-span-5 rounded-xl bg-white border-4 border-[#FFDE15] p-4 sm:p-6 flex flex-col gap-3 min-w-0 overflow-hidden" style="min-height: 0;">
-                <h2 class="text-base sm:text-xl font-extrabold flex items-center gap-2 font-montserrat text-black flex-shrink-0">
-                    <i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="check-circle"></i> QUIZ & VIDEO REMAINING
+            <article class="col-span-12 sm:col-span-5 rounded-xl bg-white border-4 border-[#FFDE15] p-2 sm:p-3 flex flex-col gap-0.5 min-w-0 overflow-hidden" style="min-height: 0;">
+                <h2 class="text-xs sm:text-base font-extrabold flex items-center gap-2 font-montserrat text-black flex-shrink-0">
+                    <i class="w-3 h-3 sm:w-4 sm:h-4" data-feather="check-circle"></i> QUIZ & VIDEO REMAINING
                 </h2>
 
                 <!-- Quiz Remaining -->
-                <div class="space-y-3 flex-1 flex flex-col justify-center">
+                <div class="space-y-0.5 flex-none flex flex-col">
                     <div>
-                        <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center justify-between mb-1">
                             <span class="font-bold text-black font-montserrat">QUIZ REMAINING</span>
                             <span class="text-sm font-semibold text-gray-600 font-montserrat" aria-label="Quiz remaining count">{{ $totalQuizzes }} available</span>
                         </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div class="bg-green-500 h-2 rounded-full transition-all duration-300" style="width: {{ $quizRemainingPercent }}%"></div>
+                        <div class="w-full bg-gray-200 rounded-full h-1">
+                            <div class="bg-green-500 h-0.5 rounded-full transition-all duration-300" style="width: {{ $quizRemainingPercent }}%"></div>
                         </div>
-                        <p class="text-sm text-gray-600 font-montserrat mt-1">{{ $quizRemainingPercent }}% Available</p>
+                        <p class="text-[12px] text-gray-600 font-montserrat mt-0.5">{{ $quizRemainingPercent }}% Available</p>
                     </div>
 
                     <!-- Video Remaining -->
                     <div>
-                        <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center justify-between mb-1">
                             <span class="font-bold text-black font-montserrat">VIDEO REMAINING</span>
                             <span class="text-sm font-semibold text-gray-600 font-montserrat" aria-label="Video remaining count">{{ $totalVideos }} available</span>
                         </div>
-                        <div class="w-full bg-gray-200 rounded-full h-2">
-                            <div class="bg-green-500 h-2 rounded-full transition-all duration-300" style="width: {{ $videoRemainingPercent }}%"></div>
+                        <div class="w-full bg-gray-200 rounded-full h-1">
+                            <div class="bg-green-500 h-0.5 rounded-full transition-all duration-300" style="width: {{ $videoRemainingPercent }}%"></div>
                         </div>
-                        <p class="text-sm text-gray-600 font-montserrat mt-1">{{ $videoRemainingPercent }}% Available</p>
+                        <p class="text-[12px] text-gray-600 font-montserrat mt-0.5">{{ $videoRemainingPercent }}% Available</p>
                     </div>
                 </div>
 
                 <!-- Action Buttons -->
-                <div class="flex flex-wrap gap-2 mt-2 flex-shrink-0">
+                <div class="flex flex-wrap gap-2 mt-0.5 flex-shrink-0 pt-0">
                     <button type="button" onclick="window.location.href='{{ route('quizzes.index') }}'"
                         class="use-loader inline-flex font-montserrat items-center gap-1.5 rounded-full bg-red-600 text-white px-3 py-1.5 text-xs sm:text-sm font-medium shadow-sm hover:bg-opacity-90 transition w-fit">
                         <i data-feather="edit-2" class="w-3 h-3 sm:w-4 sm:h-4"></i> Manage Quizzes
@@ -201,15 +257,19 @@
     </style>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
-        // Store chart instance globally to prevent reuse errors
+        // Multi-series dashboard usage chart (per device) driven by `/dashboard/usage-chart`.
         (function() {
             'use strict';
-            
-            // Use window object to store chart instance to avoid redeclaration errors
-            if (typeof window.usageChartInstance !== 'undefined' && window.usageChartInstance !== null) {
-                window.usageChartInstance.destroy();
-                window.usageChartInstance = null;
-            }
+
+            // These globals allow the realtime notification script to request a chart refresh.
+            window.usageChartInstance = window.usageChartInstance ?? null;
+            window.currentUsageChartRange = window.currentUsageChartRange ?? 'yearly';
+            window.__usageChartRefreshImpl = null;
+            window.refreshUsageChart = function (reason) {
+                if (typeof window.__usageChartRefreshImpl === 'function') {
+                    window.__usageChartRefreshImpl(reason);
+                }
+            };
 
             document.addEventListener('DOMContentLoaded', function() {
                 // Initialize Feather Icons
@@ -220,117 +280,254 @@
                 const ctx = document.getElementById('usageChart');
                 if (!ctx) return;
 
-                // Destroy existing chart if it exists to prevent canvas reuse error
-                if (window.usageChartInstance) {
-                    window.usageChartInstance.destroy();
-                    window.usageChartInstance = null;
+                const filterButtons = document.querySelectorAll('[data-usage-chart-range]');
+                const setActiveFilter = (range) => {
+                    window.currentUsageChartRange = range;
+                    filterButtons.forEach((btn) => {
+                        const isActive = btn.dataset.usageChartRange === range;
+                        btn.classList.toggle('js-usage-chart-filter-active', isActive);
+                        if (isActive) {
+                            btn.classList.add('border-[#FFDE15]', 'bg-[#FFDE15]');
+                            btn.classList.remove('border-gray-300', 'bg-white');
+                        } else {
+                            btn.classList.remove('border-[#FFDE15]', 'bg-[#FFDE15]');
+                            btn.classList.add('border-gray-300', 'bg-white');
+                        }
+                    });
+                };
+
+                // Pick initial range from the active button (Yearly by default).
+                const activeBtn = document.querySelector('.js-usage-chart-filter-active[data-usage-chart-range]');
+                if (activeBtn) {
+                    setActiveFilter(activeBtn.dataset.usageChartRange);
+                } else {
+                    setActiveFilter('yearly');
                 }
 
-                const monthlyData = @json($monthlyUsage);
-                
-                // Extract months and hours
-                const months = monthlyData.map(item => item.month);
-                const hours = monthlyData.map(item => item.hours);
+                // Build visually distinct line colors for multiple child devices.
+                const makeBorderColor = (index) => {
+                    const hue = (index * 55) % 360;
+                    return `hsl(${hue} 70% 35%)`;
+                };
 
-                window.usageChartInstance = new Chart(ctx, {
-                    type: 'line',
-                    data: {
-                        labels: months,
-                        datasets: [{
-                            label: 'Hours Used',
-                            data: hours,
-                            borderColor: '#000000',
-                            backgroundColor: 'rgba(255, 222, 21, 0.4)', // Yellow fill
-                            borderWidth: 2.5,
-                            fill: true,
-                            tension: 0.4,
-                            pointRadius: 5,
-                            pointBackgroundColor: '#FFDE15',
-                            pointBorderColor: '#000000',
-                            pointBorderWidth: 2.5,
-                            pointHoverRadius: 7,
-                            pointHoverBackgroundColor: '#FFC107',
-                            pointHoverBorderColor: '#000000',
-                            pointHoverBorderWidth: 3
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        plugins: {
-                            legend: {
-                                display: false
-                            },
-                            tooltip: {
-                                enabled: true,
-                                backgroundColor: 'rgba(0, 0, 0, 0.85)',
-                                titleColor: '#fff',
-                                bodyColor: '#fff',
-                                borderColor: '#FFDE15',
-                                borderWidth: 2,
-                                padding: 12,
-                                titleFont: {
-                                    size: 14,
-                                    weight: 'bold',
-                                    family: 'Montserrat'
-                                },
-                                bodyFont: {
-                                    size: 13,
-                                    family: 'Montserrat'
-                                },
-                                cornerRadius: 8
-                            }
-                        },
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                max: Math.max(8, Math.ceil(Math.max(...hours, 1) / 4) * 4),
-                                ticks: {
-                                    stepSize: 4,
-                                    callback: function(value) {
-                                        return value;
-                                    },
-                                    font: {
-                                        size: 13,
-                                        weight: 'bold',
-                                        family: 'Montserrat'
-                                    },
-                                    color: '#000000',
-                                    padding: 10
-                                },
-                                grid: {
-                                    color: 'rgba(0, 0, 0, 0.1)',
-                                    lineWidth: 1.5,
-                                    drawBorder: true,
-                                    borderColor: '#000000',
-                                    borderWidth: 1
-                                }
-                            },
-                            x: {
-                                ticks: {
-                                    font: {
-                                        size: 12,
-                                        weight: 'bold',
-                                        family: 'Montserrat'
-                                    },
-                                    color: '#000000',
-                                    padding: 8
-                                },
-                                grid: {
-                                    display: false
-                                }
-                            }
-                        },
-                        interaction: {
-                            intersect: false,
-                            mode: 'index'
-                        },
-                        animation: {
-                            duration: 1000,
-                            easing: 'easeInOutQuart'
-                        }
+                const destroyChartIfNeeded = () => {
+                    if (window.usageChartInstance) {
+                        window.usageChartInstance.destroy();
+                        window.usageChartInstance = null;
                     }
+                };
+
+                const buildDatasets = (series) => {
+                    return series.map((item, idx) => {
+                        const borderColor = makeBorderColor(idx);
+                        return {
+                            label: item.device_name,
+                            data: item.values,
+                            borderColor,
+                            backgroundColor: 'rgba(255, 222, 21, 0.10)',
+                            borderWidth: 2.5,
+                            fill: false,
+                            tension: 0.35,
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: '#FFDE15',
+                            pointBorderColor: borderColor,
+                            pointBorderWidth: 2
+                        };
+                    });
+                };
+
+                const renderChart = (payload) => {
+                    const labels = payload.labels ?? [];
+                    const series = payload.series ?? [];
+
+                    destroyChartIfNeeded();
+
+                    const allValues = series.flatMap((s) => Array.isArray(s.values) ? s.values : []);
+                    const maxVal = Math.max(...allValues, 0);
+                    const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
+                    const dailyFixedMax = payload.range === 'daily' ? 60 : null;
+
+                    // The API returns a unit per range:
+                    // - daily => minutes
+                    // - weekly/monthly/yearly => hours
+                    //
+                    // We still cap the Y-axis with parent-friendly, real-world limits so the chart stays readable.
+                    //
+                    // - Daily: max 60 minutes per hour bucket
+                    // - Weekly: max 168 hours per week (7 * 24)
+                    // - Monthly: max daysInMonth * 24 hours (range depends on month length)
+                    // - Yearly: max 8760 hours (365 * 24)
+                    const maxByRangeInChartUnit = (() => {
+                        if (payload.range === 'daily') return 60;
+                        if (payload.range === 'weekly') return 168;
+                        if (payload.range === 'yearly') return 8760;
+                        if (payload.range === 'monthly') {
+                            // Monthly labels look like "Week 1..Week 4/5", but the theoretical max is still
+                            // the number of hours in the month.
+                            const now = new Date();
+                            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+                            return daysInMonth * 24;
+                        }
+                        return null;
+                    })();
+
+                    const showLegend = series.length > 0 && series.length <= 6;
+                    const datasets = buildDatasets(series);
+
+                    window.usageChartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: {
+                            labels,
+                            datasets
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: showLegend,
+                                    position: 'bottom',
+                                    labels: {
+                                        font: {
+                                            family: 'Montserrat',
+                                            size: 11,
+                                            weight: 'bold'
+                                        },
+                                        boxWidth: 10
+                                    }
+                                },
+                                tooltip: {
+                                    enabled: true,
+                                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                                    titleColor: '#fff',
+                                    bodyColor: '#fff',
+                                    borderColor: '#FFDE15',
+                                    borderWidth: 2,
+                                    padding: 12,
+                                    cornerRadius: 8,
+                                    callbacks: {
+                                        label: (context) => {
+                                            const label = context.dataset?.label ? context.dataset.label + ': ' : '';
+                                            const unit = payload.unit === 'hours' ? ' hr' : ' min';
+                                            return label + context.parsed.y + unit;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ...(dailyFixedMax !== null
+                                        ? { max: dailyFixedMax }
+                                        : (maxByRangeInChartUnit !== null ? { max: maxByRangeInChartUnit } : { suggestedMax })),
+                                    title: {
+                                        display: true,
+                                        // Simple, parent-friendly label.
+                                        text: payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)',
+                                        font: {
+                                            family: 'Montserrat',
+                                            size: 12,
+                                            weight: 'bold'
+                                        },
+                                        color: '#000000',
+                                        padding: { top: 6, bottom: 6 }
+                                    },
+                                    ticks: {
+                                        font: {
+                                            size: 12,
+                                            weight: 'bold',
+                                            family: 'Montserrat'
+                                        },
+                                        ...(dailyFixedMax !== null ? { stepSize: 10 } : {}),
+                                        color: '#000000',
+                                        padding: 8
+                                    },
+                                    grid: {
+                                        color: 'rgba(0, 0, 0, 0.1)',
+                                        lineWidth: 1.3,
+                                    }
+                                },
+                                x: {
+                                    ticks: {
+                                        font: {
+                                            size: 11,
+                                            weight: 'bold',
+                                            family: 'Montserrat'
+                                        },
+                                        color: '#000000',
+                                        padding: 6
+                                    },
+                                    grid: {
+                                        display: false
+                                    }
+                                }
+                            },
+                            interaction: {
+                                intersect: false,
+                                mode: 'index'
+                            },
+                            animation: {
+                                duration: 600,
+                                easing: 'easeInOutQuart'
+                            }
+                        }
+                    });
+                };
+
+                const fetchUsageChart = async (range) => {
+                    const url = `/dashboard/usage-chart?range=${encodeURIComponent(range)}`;
+                    const res = await fetch(url, {
+                        method: 'GET',
+                        headers: {
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        credentials: 'same-origin'
+                    });
+
+                    if (!res.ok) {
+                        throw new Error(`Usage chart request failed: ${res.status}`);
+                    }
+
+                    return await res.json();
+                };
+
+                // Refresh chart using whichever filter is currently selected.
+                let refreshInFlight = false;
+                window.__usageChartRefreshImpl = async (reason) => {
+                    if (refreshInFlight) return;
+                    refreshInFlight = true;
+                    try {
+                        const range = window.currentUsageChartRange || 'yearly';
+                        const payload = await fetchUsageChart(range);
+                        renderChart(payload);
+                    } catch (e) {
+                        console.error('Failed to refresh usage chart', reason, e);
+                    } finally {
+                        refreshInFlight = false;
+                    }
+                };
+
+                // Wire filter buttons.
+                filterButtons.forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        const range = btn.dataset.usageChartRange;
+                        setActiveFilter(range);
+                        window.__usageChartRefreshImpl('filter-change');
+                    });
                 });
+
+                // Initial load.
+                window.__usageChartRefreshImpl('initial-load');
+
+                // Active-session gap:
+                // Even with realtime events, active sessions may advance without a websocket tick every second.
+                // We refresh only for the Daily view and only while the tab is visible.
+                setInterval(() => {
+                    if (window.currentUsageChartRange !== 'daily') return;
+                    if (document.visibilityState !== 'visible') return;
+                    window.__usageChartRefreshImpl('daily-timer');
+                }, 60000);
             });
 
             // Cleanup on page unload
@@ -340,6 +537,114 @@
                     window.usageChartInstance = null;
                 }
             });
+        })();
+    </script>
+    {{-- Live time usage + remaining: 1s client tick (session-aware); WebSockets optional for syncing grants/expiry --}}
+    <script>
+        (function () {
+            'use strict';
+
+            function parseIsoMs(s) {
+                if (!s) {
+                    return NaN;
+                }
+                const t = Date.parse(s);
+                return Number.isNaN(t) ? NaN : t;
+            }
+
+            function formatUsageSeconds(totalSec) {
+                const sec = Math.max(0, Math.floor(totalSec));
+                const h = Math.floor(sec / 3600);
+                const m = Math.floor((sec % 3600) / 60);
+                return h + 'h' + String(m).padStart(2, '0') + 'm';
+            }
+
+            function formatRemainingLabel(isWhitelisted, hasActive, remainingSec, fallbackMin, isConnected) {
+                if (isWhitelisted) {
+                    return 'Unlimited';
+                }
+                if (!hasActive) {
+                    if (fallbackMin <= 0) {
+                        return 'Expired';
+                    }
+                    // Connected but no DeviceSession row yet (e.g. scheduler hasn’t opened a session):
+                    // still tick down from page load so “Time left” isn’t frozen.
+                    if (isConnected) {
+                        if (remainingSec <= 0) {
+                            return 'Expired';
+                        }
+                        const m = Math.floor(remainingSec / 60);
+                        const s = Math.floor(remainingSec % 60);
+                        return m + ':' + String(s).padStart(2, '0') + ' left';
+                    }
+                    return fallbackMin + ' min remaining';
+                }
+                if (remainingSec <= 0) {
+                    return 'Expired';
+                }
+                const h = Math.floor(remainingSec / 3600);
+                const m = Math.floor((remainingSec % 3600) / 60);
+                const s = Math.floor(remainingSec % 60);
+                if (h > 0) {
+                    return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's left';
+                }
+                return m + ':' + String(s).padStart(2, '0') + ' left';
+            }
+
+            function tickDashboardTimeRows() {
+                const renderedAt = document.querySelector('meta[name="time-usage-rendered-at"]')?.getAttribute('content');
+                const t0 = parseIsoMs(renderedAt);
+                const now = Date.now();
+                const deltaSec = !Number.isNaN(t0) ? Math.max(0, Math.floor((now - t0) / 1000)) : 0;
+
+                document.querySelectorAll('.js-dashboard-time-row').forEach(function (row) {
+                    const totalBase = parseInt(row.dataset.totalUsageSeconds || '0', 10) || 0;
+                    const activeStart = row.dataset.activeSessionStartedAt || '';
+                    const hasActive = activeStart.length > 0;
+                    const usageSec = totalBase + (hasActive ? deltaSec : 0);
+
+                    const isWhitelisted = row.dataset.isWhitelisted === '1';
+                    const isConnected = row.dataset.isConnected === '1';
+                    const dbRemMin = parseInt(row.dataset.dbRemainingMinutes || '0', 10) || 0;
+                    const fallbackMin = parseInt(row.dataset.remainingMinutesFallback || '0', 10) || 0;
+
+                    let remainingSec = 0;
+                    if (isWhitelisted) {
+                        remainingSec = 999999;
+                    } else if (hasActive) {
+                        const startMs = parseIsoMs(activeStart);
+                        const elapsedSec = !Number.isNaN(startMs) ? Math.floor((now - startMs) / 1000) : 0;
+                        remainingSec = Math.max(0, dbRemMin * 60 - elapsedSec);
+                    } else if (isConnected && fallbackMin > 0) {
+                        remainingSec = Math.max(0, fallbackMin * 60 - deltaSec);
+                    } else {
+                        remainingSec = Math.max(0, fallbackMin * 60);
+                    }
+
+                    const usageEl = row.querySelector('.js-time-usage-usage');
+                    const remEl = row.querySelector('.js-time-usage-remaining');
+                    if (usageEl) {
+                        usageEl.textContent = formatUsageSeconds(usageSec);
+                    }
+                    if (remEl) {
+                        remEl.textContent = formatRemainingLabel(isWhitelisted, hasActive, remainingSec, fallbackMin, isConnected);
+                        const expired = !isWhitelisted && (
+                            (hasActive && remainingSec <= 0) ||
+                            (!hasActive && fallbackMin <= 0) ||
+                            (!hasActive && isConnected && fallbackMin > 0 && remainingSec <= 0)
+                        );
+                        remEl.className = 'js-time-usage-remaining text-xs font-semibold font-montserrat ' +
+                            (isWhitelisted ? 'text-gray-600' : (expired ? 'text-red-600' : 'text-gray-600'));
+                    }
+                });
+            }
+
+            document.addEventListener('DOMContentLoaded', function () {
+                tickDashboardTimeRows();
+                setInterval(tickDashboardTimeRows, 1000);
+            });
+
+            window.tickDashboardTimeRows = tickDashboardTimeRows;
         })();
     </script>
     <script>
@@ -413,15 +718,44 @@
                 window.Echo.private(`user.${userId}`)
                     .listen('.device.connected', (event) => {
                         addNotification(`${event.device_name} connected (${event.ip_address ?? 'unknown IP'})`, 'success');
+                        if (typeof window.refreshUsageChart === 'function') {
+                            window.refreshUsageChart('device.connected');
+                        }
                     })
                     .listen('.device.disconnected', (event) => {
                         addNotification(`${event.device_name} disconnected`, 'warning');
+                        if (typeof window.refreshUsageChart === 'function') {
+                            window.refreshUsageChart('device.disconnected');
+                        }
                     })
                     .listen('.time.expired', (event) => {
                         addNotification(`Time expired for ${event.device_name}. Device redirected to portal.`, 'danger');
+                        const row = document.querySelector('.js-dashboard-time-row[data-device-id="' + event.device_id + '"]');
+                        if (row) {
+                            row.dataset.dbRemainingMinutes = '0';
+                            row.dataset.remainingMinutesFallback = '0';
+                            row.dataset.activeSessionStartedAt = '';
+                        }
+                        if (typeof window.tickDashboardTimeRows === 'function') {
+                            window.tickDashboardTimeRows();
+                        }
+                        if (typeof window.refreshUsageChart === 'function') {
+                            window.refreshUsageChart('time.expired');
+                        }
                     })
                     .listen('.time.granted', (event) => {
                         addNotification(`${event.minutes_granted} minutes granted to ${event.device_name} via ${event.source}.`, 'success');
+                        const row = document.querySelector('.js-dashboard-time-row[data-device-id="' + event.device_id + '"]');
+                        if (row && event.remaining_minutes !== undefined) {
+                            row.dataset.dbRemainingMinutes = String(event.remaining_minutes);
+                            row.dataset.remainingMinutesFallback = String(event.remaining_minutes);
+                        }
+                        if (typeof window.tickDashboardTimeRows === 'function') {
+                            window.tickDashboardTimeRows();
+                        }
+                        if (typeof window.refreshUsageChart === 'function') {
+                            window.refreshUsageChart('time.granted');
+                        }
                     })
                     .listen('.website.blocked_accessed', (event) => {
                         const target = event.domain || event.url || 'blocked website';
