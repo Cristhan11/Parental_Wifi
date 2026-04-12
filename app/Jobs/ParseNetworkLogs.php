@@ -132,25 +132,27 @@ class ParseNetworkLogs implements ShouldQueue
         BlockedAccessAttemptRecorder $blockedAccessRecorder,
         FlaggedAccessAttemptRecorder $flaggedAccessRecorder,
     ): void {
-        // Log that the job started running
-        // This helps us track when the job executes and debug any issues
-        Log::info('ParseNetworkLogs job started - parsing network traffic logs');
-
         // Step 1: Determine which log files to process
         // Network logs can be stored in different locations depending on configuration
         // Common locations:
         // - tcpdump logs: /var/log/tcpdump/network.log
         // - iptables logs: /var/log/iptables.log
-        // - Custom location: config('network.log_path')
+        // - dnsmasq: /var/log/dnsmasq.log (set NETWORK_LOG_PATH in .env)
         //
-        // For now, we'll use a configurable path from environment
-        // In production, this would be configured in .env file
+        // Always log the resolved path: queue workers keep config from startup / config:cache,
+        // so "wrong path" bugs show up here instead of looking like "parsing does nothing".
         $logPath = config('network.log_path', '/var/log/tcpdump/network.log');
+
+        Log::info('ParseNetworkLogs job started', [
+            'log_path' => $logPath,
+            'log_exists' => file_exists($logPath),
+            'log_readable' => file_exists($logPath) && is_readable($logPath),
+        ]);
 
         // Check if log file exists
         // If log file doesn't exist, there's nothing to process
         if (! file_exists($logPath)) {
-            Log::debug('ParseNetworkLogs job completed - log file does not exist', [
+            Log::warning('ParseNetworkLogs job completed - log file does not exist', [
                 'log_path' => $logPath,
             ]);
 
