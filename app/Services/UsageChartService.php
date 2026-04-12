@@ -37,8 +37,10 @@ class UsageChartService
      *     ...
      *   ]
      * ]
+     *
+     * @param  int|null  $onlyDeviceId  When set, only this device is included (must belong to $parent).
      */
-    public function buildChartPayload(User $parent, string $range): array
+    public function buildChartPayload(User $parent, string $range, ?int $onlyDeviceId = null): array
     {
         $range = strtolower($range);
         $timezone = (string) (config('app.timezone') ?: 'UTC');
@@ -47,10 +49,15 @@ class UsageChartService
         $buckets = $this->buildBuckets($range, $now);
         $unit = $this->unitForRange($range);
 
-        $devices = Device::query()
+        $devicesQuery = Device::query()
             ->where('user_id', $parent->id)
-            ->orderBy('name')
-            ->get(['id', 'name', 'status']);
+            ->orderBy('name');
+
+        if ($onlyDeviceId !== null) {
+            $devicesQuery->where('id', $onlyDeviceId);
+        }
+
+        $devices = $devicesQuery->get(['id', 'name', 'status']);
 
         $labels = array_map(static fn(array $b) => $b['label'], $buckets);
         $deviceIndexById = $devices->keyBy('id');

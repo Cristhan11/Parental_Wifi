@@ -8,6 +8,7 @@ use App\Models\Device;
 use App\Services\DeviceService;
 use App\Services\NetworkService;
 use App\Services\TimeTrackingService;
+use App\Services\UsageChartService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -100,6 +101,11 @@ class DeviceController extends Controller
     protected TimeTrackingService $timeTrackingService;
 
     /**
+     * Shared bucket/overlap logic for dashboard and per-device child stats charts.
+     */
+    protected UsageChartService $usageChartService;
+
+    /**
      * Constructor - Called automatically when controller is created.
      * 
      * Laravel's dependency injection automatically provides these services.
@@ -108,15 +114,18 @@ class DeviceController extends Controller
      * @param DeviceService $deviceService Device management utilities
      * @param NetworkService $networkService Network-level operations
      * @param TimeTrackingService $timeTrackingService Time management
+     * @param UsageChartService $usageChartService Per-device / dashboard usage chart payload
      */
     public function __construct(
         DeviceService $deviceService,
         NetworkService $networkService,
-        TimeTrackingService $timeTrackingService
+        TimeTrackingService $timeTrackingService,
+        UsageChartService $usageChartService
     ) {
         $this->deviceService = $deviceService;
         $this->networkService = $networkService;
         $this->timeTrackingService = $timeTrackingService;
+        $this->usageChartService = $usageChartService;
     }
 
     /**
@@ -166,7 +175,7 @@ class DeviceController extends Controller
      * Route: GET /devices or GET /devices/{device}
      * 
      * This view shows statistics for a selected device:
-     * - TIME USAGE graph (line graph showing hours per month)
+     * - TIME USAGE graph (daily / weekly / monthly / yearly via usage-chart JSON)
      * - QUIZ SCORE list (all quiz attempts with scores)
      * - WEBSITE HISTORY list (recently visited websites)
      * 
@@ -219,17 +228,11 @@ class DeviceController extends Controller
         }
 
         // Initialize statistics arrays (will be populated if device exists)
-        $timeUsageData = [];
         $quizScores = [];
         $websiteHistory = [];
 
         // If device exists, calculate statistics
         if ($device) {
-            // Get time usage data for graph (aggregated by month)
-            // Query DeviceSession table for this device
-            // Group by month and calculate total hours per month
-            $timeUsageData = $this->getTimeUsageData($device);
-
             // Get quiz scores for this device
             // Query QuizAttempt table and calculate scores
             $quizScores = $this->getQuizScores($device);
@@ -241,7 +244,30 @@ class DeviceController extends Controller
 
         // Return the child_devices view with all data
         // compact() creates array with all variables
-        return view('devices.child_devices', compact('devices', 'device', 'timeUsageData', 'quizScores', 'websiteHistory'));
+        return view('devices.child_devices', compact('devices', 'device', 'quizScores', 'websiteHistory'));
+    }
+
+    /**
+     * JSON for the Child Devices page time-usage line chart (single selected device).
+     *
+     * Reuses {@see UsageChartService} so buckets and active-session rules match the dashboard graph.
+     */
+    public function childDeviceUsageChart(Request $request, Device $device): JsonResponse
+    {
+        $this->authorize('view', $device);
+
+        $range = strtolower((string) $request->query('range', 'yearly'));
+        if (! in_array($range, ['daily', 'weekly', 'monthly', 'yearly'], true)) {
+            $range = 'yearly';
+        }
+
+        $payload = $this->usageChartService->buildChartPayload(
+            $request->user(),
+            $range,
+            (int) $device->id
+        );
+
+        return response()->json($payload);
     }
 
     /**
@@ -645,69 +671,6 @@ class DeviceController extends Controller
             'success' => true,
             'devices' => $connectedDevices,
         ]);
-    }
-
-    /**
-     * Get time usage data for a device (aggregated by month).
-     * 
-     * This is a helper method used by index() to calculate time usage graph data.
-     * 
-     * What It Does:
-     * 1. Queries DeviceSession table for this device
-     * 2. Groups sessions by month (JAN to DEC)
-     * 3. Calculates total hours per month
-     * 4. Returns array with month => hours mapping
-     * 
-     * @param Device $device The device to get time usage for
-     * @return array<string, float> Array with month abbreviations as keys, hours as values
-     * 
-     * Usage:
-     * Called internally by index() method to populate time usage graph.
-     */
-    protected function getTimeUsageData(Device $device): array
-    {
-        // Query DeviceSession table for this device
-        // where('device_id', $device->id) filters to this device only
-        // whereNotNull('ended_at') only includes completed sessions (not active ones)
-        // selectRaw() calculates total hours per month
-        // Use database-agnostic approach for month extraction
-        $driver = DB::connection()->getDriverName();
-
-        if (in_array($driver, ['mysql', 'mariadb'])) {
-            // MySQL/MariaDB: Use MONTH() function
-            $sessions = DB::table('device_sessions')
-                ->where('device_id', $device->id)
-                ->whereNotNull('ended_at') // Only completed sessions
-                ->selectRaw('MONTH(started_at) as month, SUM(duration_seconds / 3600.0) as total_hours')
-                ->groupBy('month')
-                ->get();
-        } else {
-            // SQLite: Use strftime() function
-            $sessions = DB::table('device_sessions')
-                ->where('device_id', $device->id)
-                ->whereNotNull('ended_at') // Only completed sessions
-                ->selectRaw('CAST(strftime("%m", started_at) AS INTEGER) as month, SUM(duration_seconds / 3600.0) as total_hours')
-                ->groupBy('month')
-                ->get();
-        }
-
-        // Initialize array with all months set to 0
-        // This ensures all months appear in graph even if no data
-        $timeUsageData = [];
-        $monthNames = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
-        foreach ($monthNames as $index => $month) {
-            $timeUsageData[$month] = 0.0;
-        }
-
-        // Populate array with actual data
-        foreach ($sessions as $session) {
-            $monthIndex = (int) $session->month - 1; // Convert to 0-based index
-            if (isset($monthNames[$monthIndex])) {
-                $timeUsageData[$monthNames[$monthIndex]] = (float) $session->total_hours;
-            }
-        }
-
-        return $timeUsageData;
     }
 
     /**

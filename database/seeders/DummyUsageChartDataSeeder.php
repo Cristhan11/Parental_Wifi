@@ -25,10 +25,10 @@ use Illuminate\Database\Seeder;
  * - Uses preferred device names (John, Peter, Test Device) if found; otherwise picks
  *   up to 3 child devices under that parent.
  * - Creates ended sessions for:
- *   - Daily: several hour buckets today
- *   - Weekly: one session per day for the last 7 days
- *   - Monthly: several sessions in the current month
- *   - Yearly: one session per month for the last 12 months
+ *   - Daily: contrasting minutes per hour (light / heavy / medium child)
+ *   - Weekly: large per-day totals on past days (today stays small vs daily buckets)
+ *   - Monthly: strong per–week-bucket hour totals (spread across days in bucket)
+ *   - Yearly: strong per-month hour totals (spread across days in month)
  *
  * Usage:
  *   php artisan db:seed --class=DummyUsageChartDataSeeder
@@ -56,6 +56,7 @@ class DummyUsageChartDataSeeder extends Seeder
 
         if ($devices->isEmpty()) {
             $this->command?->warn('No child devices found for dummy usage seeding.');
+
             return;
         }
 
@@ -162,9 +163,7 @@ class DummyUsageChartDataSeeder extends Seeder
     {
         $dayStart = $now->copy()->startOfDay();
 
-        // Daily chart “shape” requirements:
-        // - Each device should look different (distinct hours/durations).
-        // - Each hour bucket should stay <= 60 minutes so the Daily Y-axis cap makes sense.
+        // Daily chart: large visual spread between children, still ≤60 minutes per hour bucket.
         $profileIndex = $this->getProfileIndex($device);
         $hours = $this->getDailyHoursForProfile($profileIndex);
         $hash = $this->getDeviceHash($device);
@@ -172,25 +171,30 @@ class DummyUsageChartDataSeeder extends Seeder
         foreach ($hours as $idx => $hour) {
             $bucketStart = $dayStart->copy()->setTime($hour, 0, 0);
 
-            // Never create “future” sessions (ended_at must be <= now).
             if ($bucketStart->gte($now)) {
                 continue;
             }
 
-            // Keep session fully inside the hour:
-            // - start in the first ~25 minutes
-            // - end within 55 minutes of the bucketStart
-            $startMinute = 5 + (($hash + ($idx * 13)) % 20); // 5..24
-            $durationMinutes = 20 + (($hash + ($idx * 17)) % 35); // 20..54
-            if ($startMinute + $durationMinutes > 55) {
-                $durationMinutes = 55 - $startMinute; // ensure <=55 minutes into the hour
+            $startMinute = match ($profileIndex) {
+                0 => 12 + (($hash + ($idx * 13)) % 10), // 12..21 — light user, shorter sessions
+                1 => 1 + (($hash + ($idx * 13)) % 6), // 1..6 — heavy user, room for long block in hour
+                default => 5 + (($hash + ($idx * 13)) % 18), // 5..22
+            };
+
+            $durationMinutes = match ($profileIndex) {
+                0 => 14 + (($hash + ($idx * 17)) % 12), // ~14–25 min
+                1 => 52 + (($hash + ($idx * 17)) % 7), // ~52–58 min (near cap)
+                default => 30 + (($hash + ($idx * 17)) % 16), // ~30–45 min
+            };
+
+            if ($startMinute + $durationMinutes > 59) {
+                $durationMinutes = max(1, 59 - $startMinute);
             }
 
             $start = $bucketStart->copy()->addMinutes($startMinute);
             $end = $start->copy()->addMinutes($durationMinutes);
 
             if ($end->gte($now)) {
-                // Still create a short ended session if we are mid-bucket.
                 $end = $now->copy()->subMinutes(1);
             }
 
@@ -211,9 +215,8 @@ class DummyUsageChartDataSeeder extends Seeder
     {
         $startDay = $now->copy()->startOfDay()->subDays(6);
 
-        // Weekly shape requirements:
-        // - Different devices should have different weekly “peaks”.
-        // - Avoid overlapping today's DAILY-hour buckets so Daily Y-axis stays <= 60.
+        // Weekly buckets = one calendar day each. Past days get large contrasting totals;
+        // today stays small and outside daily seed hours so Daily ≤60 min/hour still holds.
         $profileIndex = $this->getProfileIndex($device);
         $dailyHours = $this->getDailyHoursForProfile($profileIndex);
         $nonDailyHour = $this->getFirstNonDailyHour($dailyHours);
@@ -221,51 +224,38 @@ class DummyUsageChartDataSeeder extends Seeder
 
         for ($i = 0; $i < 7; $i++) {
             $day = $startDay->copy()->addDays($i);
+            $isToday = $day->isSameDay($now);
 
-            $dayOfWeek = (int) $day->format('N'); // 1=Mon..7=Sun
-            $isWeekend = $dayOfWeek >= 6;
+            if ($isToday) {
+                $start = $day->copy()->setTime($nonDailyHour, 5 + (($hash + $i) % 20), 0);
+                $durationMinutes = min(40, 25 + (($hash + $i) % 12));
+                $end = $start->copy()->addMinutes($durationMinutes);
+                if ($end->gte($now)) {
+                    $end = $now->copy()->subMinutes(1);
+                }
+                if ($end->gt($start)) {
+                    $this->upsertSession($device->id, $start, $end);
+                }
 
-            // Choose start hour. For "today", ensure it doesn't overlap daily hours.
-            if ($i === 6) {
-                $startHour = $nonDailyHour;
-            } else {
-                $startHourBase = match ($profileIndex) {
-                    0 => 9,
-                    1 => 14,
-                    default => 11,
-                };
-
-                $startHour = ($startHourBase + (($hash + $i) % 3)) % 24;
-            }
-
-            $startMinute = 5 + (($hash + ($i * 7)) % 25); // 5..29
-
-            $durationMinutes = match ($profileIndex) {
-                0 => ($isWeekend ? 20 : 45) + (($hash + $i) % 10), // John: lower on weekend
-                1 => ($isWeekend ? 45 : 25) + (($hash + $i) % 10), // Peter: higher on weekend
-                default => 30 + (($hash + $i) % 25), // Test: steady
-            };
-
-            // Keep within a reasonable daily time window.
-            $durationMinutes = min($durationMinutes, 75);
-            if ($i === 6) {
-                // Today is also used by the Daily chart; keep the weekly slice small
-                // so the daily hour bucket doesn't exceed the 60-minute cap.
-                $durationMinutes = min($durationMinutes, 45);
-            }
-
-            $start = $day->copy()->setTime($startHour, $startMinute, 0);
-            $end = $start->copy()->addMinutes($durationMinutes);
-
-            if ($end->gte($now) && $i === 6) {
-                $end = $now->copy()->subMinutes(1);
-            }
-
-            if ($end->lte($start)) {
                 continue;
             }
 
-            $this->upsertSession($device->id, $start, $end);
+            $dayOfWeek = (int) $day->format('N');
+            $isWeekend = $dayOfWeek >= 6;
+
+            // Target minutes for this calendar day (max 23h so we stay under 24h bucket cap).
+            $targetMinutes = match ($profileIndex) {
+                // Light: ~0.5–2.5 h / day
+                0 => ($isWeekend ? 35 : 55) + (($hash + $i * 17) % 90),
+                // Heavy: ~10–18 h / day on weekdays, slightly less on weekend
+                1 => ($isWeekend ? 420 : 660) + (($hash + $i * 19) % 240),
+                // Medium: ~4–8 h
+                default => ($isWeekend ? 200 : 320) + (($hash + $i * 23) % 120),
+            };
+
+            $targetMinutes = min($targetMinutes, 23 * 60);
+
+            $this->seedBlockMinutesOnPastDay($device->id, $day, $targetMinutes);
         }
     }
 
@@ -283,17 +273,18 @@ class DummyUsageChartDataSeeder extends Seeder
         $nonDailyHour = $this->getFirstNonDailyHour($dailyHours);
         $hash = $this->getDeviceHash($device);
 
-        // Monthly chart groups the month into 4-5 "week buckets".
-        // We create one ended session in each existing week bucket so the chart
-        // is visible and each device has a distinct pattern.
+        // Month → week-sized buckets (≤7 days). Target total minutes per bucket with a big spread between children.
         $nextMonthStart = $monthStart->copy()->addMonthNoOverflow();
         $weekStart = $monthStart->copy();
         $weekNumber = 1;
 
-        $durationPattern = match ($profileIndex) {
-            0 => [55, 35, 25, 45, 30], // John: peaks earlier
-            1 => [20, 30, 60, 25, 40], // Peter: peaks mid-month
-            default => [35, 35, 35, 35, 35], // Test device: steady
+        $targetMinutesPerWeek = match ($profileIndex) {
+            // Light: ~2–5 h per bucket
+            0 => [140, 100, 180, 120, 160],
+            // Heavy: ~25–45 h per bucket (still under 168 h cap)
+            1 => [2200, 2600, 1800, 2400, 2000],
+            // Medium: ~10–18 h
+            default => [720, 900, 600, 840, 780],
         };
 
         while ($weekStart->lt($nextMonthStart)) {
@@ -302,52 +293,23 @@ class DummyUsageChartDataSeeder extends Seeder
                 $bucketEndExclusive = $nextMonthStart->copy();
             }
 
-            $daysInBucket = $weekStart->diffInDays($bucketEndExclusive);
-            if ($daysInBucket <= 0) {
+            if ($weekStart->gte($bucketEndExclusive)) {
                 break;
             }
 
-            $offsetDay = min(2 + $profileIndex, $daysInBucket - 1);
+            $target = $targetMinutesPerWeek[$weekNumber - 1] ?? 400;
+            $target += ($hash + $weekNumber * 31) % 120;
+            $target = min($target, 165 * 60);
 
-            $start = $weekStart->copy()->addDays($offsetDay)->setTime(
-                11 + ($profileIndex * 2),
-                5 + (($hash + $weekNumber) % 20),
-                0
+            $this->seedMinutesAcrossDateRange(
+                $device->id,
+                $weekStart->copy(),
+                $bucketEndExclusive->copy(),
+                $now,
+                $target,
+                $dailyHours,
+                $nonDailyHour
             );
-
-            // Avoid affecting today's daily hour buckets:
-            // if the session lands on today and hour is part of today's daily buckets,
-            // shift it to a non-daily hour.
-            if ($start->isSameDay($now) && in_array((int) $start->hour, $dailyHours, true)) {
-                $start = $start->copy()->setTime($nonDailyHour, (int) $start->minute, 0);
-            }
-
-            if ($start->gte($now)) {
-                $weekStart = $bucketEndExclusive;
-                $weekNumber++;
-                continue;
-            }
-
-            $durationMinutes = $durationPattern[$weekNumber - 1] ?? 30;
-            $durationMinutes += ($hash % 7); // small deterministic variation
-            $durationMinutes = min($durationMinutes, 70);
-            if ($start->isSameDay($now)) {
-                // Daily chart cap compatibility.
-                $durationMinutes = min($durationMinutes, 55);
-            }
-
-            $end = $start->copy()->addMinutes($durationMinutes);
-            if ($end->gte($now)) {
-                $end = $now->copy()->subMinutes(1);
-            }
-
-            if ($end->lte($start)) {
-                $weekStart = $bucketEndExclusive;
-                $weekNumber++;
-                continue;
-            }
-
-            $this->upsertSession($device->id, $start, $end);
 
             $weekStart = $bucketEndExclusive;
             $weekNumber++;
@@ -367,65 +329,133 @@ class DummyUsageChartDataSeeder extends Seeder
         $nonDailyHour = $this->getFirstNonDailyHour($dailyHours);
         $hash = $this->getDeviceHash($device);
 
-        // Yearly chart requirement:
-        // - X-axis always starts with January
-        // - One bucket per month (calendar year)
         $yearStart = $now->copy()->startOfYear();
         $currentMonthStart = $now->copy()->startOfMonth();
 
-        // Different devices have different peak months, making the chart easy to read.
-        $durationPattern = match ($profileIndex) {
-            0 => [20, 25, 30, 15, 40, 70, 65, 45, 35, 25, 30, 20], // John peaks mid-year
-            1 => [40, 35, 20, 55, 60, 30, 25, 20, 50, 70, 60, 45], // Peter peaks around May/Oct
-            default => [25, 30, 35, 40, 25, 30, 35, 40, 45, 30, 25, 20], // Test steady
+        // Total hours per calendar month (spread across days in the month). Large gaps between profiles.
+        $monthTargetHours = match ($profileIndex) {
+            0 => [1.0, 1.5, 2.0, 1.0, 2.5, 1.0, 1.5, 2.0, 1.0, 1.5, 2.0, 1.0],
+            1 => [18.0, 25.0, 32.0, 28.0, 45.0, 52.0, 48.0, 38.0, 30.0, 35.0, 22.0, 16.0],
+            default => [7.0, 10.0, 8.5, 12.0, 9.0, 8.0, 11.0, 9.5, 8.0, 10.0, 7.5, 8.0],
         };
 
         for ($i = 0; $i < 12; $i++) {
             $monthStart = $yearStart->copy()->addMonthsNoOverflow($i)->startOfMonth();
 
-            // Can't create ended sessions in the future.
             if ($monthStart->gt($currentMonthStart)) {
                 continue;
             }
 
-            $daysInMonth = $monthStart->daysInMonth;
-            $day = min(10 + ($profileIndex * 2), $daysInMonth);
+            $monthEndExclusive = $monthStart->copy()->addMonthNoOverflow();
 
-            // Avoid clashing with today's day-of-month in the current month.
-            if ($monthStart->isSameMonth($now) && $day === $now->day) {
-                $day = min($day + 1, $daysInMonth);
+            $hours = $monthTargetHours[$i] ?? 3.0;
+            $hours += (($hash + $i * 17) % 50) / 10.0;
+            $maxHoursInMonth = $monthStart->daysInMonth * 24;
+            $hours = min($hours, $maxHoursInMonth - 0.1);
+
+            $targetMinutes = (int) round($hours * 60);
+
+            $this->seedMinutesAcrossDateRange(
+                $device->id,
+                $monthStart->copy(),
+                $monthEndExclusive->copy(),
+                $now,
+                $targetMinutes,
+                $dailyHours,
+                $nonDailyHour
+            );
+        }
+    }
+
+    /**
+     * Place up to $totalMinutes of usage on a single past calendar day (one or more contiguous blocks).
+     */
+    private function seedBlockMinutesOnPastDay(int $deviceId, Carbon $day, int $totalMinutes): void
+    {
+        $day = $day->copy()->startOfDay();
+        $totalMinutes = min(max($totalMinutes, 0), 23 * 60 + 45);
+
+        $remaining = $totalMinutes;
+        $slot = 0;
+        $baseHour = 6 + ($deviceId % 5);
+
+        while ($remaining >= 10) {
+            $hour = min(20, $baseHour + $slot * 3);
+            $start = $day->copy()->setTime($hour, ($deviceId * 7 + $slot * 13) % 40, 0);
+            $chunk = min($remaining, 9 * 60);
+
+            $end = $start->copy()->addMinutes($chunk);
+            if (! $end->isSameDay($start)) {
+                $end = $day->copy()->setTime(23, 55, 0);
             }
-
-            $startHour = min(12 + ($profileIndex * 2) + ($hash % 3), 21);
-            $start = $monthStart->copy()->setDay($day)->setTime($startHour, 0, 0);
-
-            // Avoid overlapping DAILY bucket hours if it happens to land on today.
-            if ($start->isSameDay($now) && in_array((int) $start->hour, $dailyHours, true)) {
-                $start = $start->copy()->setTime($nonDailyHour, 0, 0);
-            }
-
-            if ($start->gte($now)) {
-                continue;
-            }
-
-            $durationMinutes = $durationPattern[$i] ?? 30;
-            $durationMinutes += ($hash % 9); // deterministic variation
-            $durationMinutes = min($durationMinutes, 90);
-            if ($start->isSameDay($now)) {
-                // Daily chart cap compatibility.
-                $durationMinutes = min($durationMinutes, 55);
-            }
-
-            $end = $start->copy()->addMinutes($durationMinutes);
-            if ($end->gte($now)) {
-                $end = $now->copy()->subMinutes(1);
-            }
-
             if ($end->lte($start)) {
+                break;
+            }
+
+            $this->upsertSession($deviceId, $start, $end);
+            $remaining -= (int) $start->diffInMinutes($end);
+            $slot++;
+            if ($slot > 10) {
+                break;
+            }
+        }
+    }
+
+    /**
+     * Spread $totalMinutes across each day in [rangeStart, rangeEndExclusive) that is not in the future.
+     * Past days use {@see seedBlockMinutesOnPastDay}; “today” gets a short session at $nonDailyHour.
+     */
+    private function seedMinutesAcrossDateRange(
+        int $deviceId,
+        Carbon $rangeStart,
+        Carbon $rangeEndExclusive,
+        Carbon $now,
+        int $totalMinutes,
+        array $dailyHours,
+        int $nonDailyHour
+    ): void {
+        if ($totalMinutes < 5) {
+            return;
+        }
+
+        $days = [];
+        $d = $rangeStart->copy()->startOfDay();
+        while ($d->lt($rangeEndExclusive)) {
+            if ($d->lte($now->copy()->startOfDay())) {
+                $days[] = $d->copy();
+            }
+            $d->addDay();
+        }
+
+        $count = count($days);
+        if ($count === 0) {
+            return;
+        }
+
+        $per = intdiv($totalMinutes, $count);
+        $rem = $totalMinutes % $count;
+
+        foreach ($days as $idx => $day) {
+            $mins = $per + ($idx < $rem ? 1 : 0);
+            if ($mins < 5) {
                 continue;
             }
 
-            $this->upsertSession($device->id, $start, $end);
+            if ($day->isSameDay($now)) {
+                $mins = min($mins, 45);
+                $start = $day->copy()->setTime($nonDailyHour, 10 + ($deviceId % 18), 0);
+                $end = $start->copy()->addMinutes($mins);
+                if ($end->gte($now)) {
+                    $end = $now->copy()->subMinute();
+                }
+                if ($end->gt($start)) {
+                    $this->upsertSession($deviceId, $start, $end);
+                }
+
+                continue;
+            }
+
+            $this->seedBlockMinutesOnPastDay($deviceId, $day, $mins);
         }
     }
 
@@ -448,7 +478,7 @@ class DummyUsageChartDataSeeder extends Seeder
         }
 
         // Fallback: stable pseudo-random profile (0..2).
-        return (int) (sprintf('%u', crc32($nameLower . '|' . $device->id)) % 3);
+        return (int) (sprintf('%u', crc32($nameLower.'|'.$device->id)) % 3);
     }
 
     /**
@@ -457,9 +487,12 @@ class DummyUsageChartDataSeeder extends Seeder
     private function getDailyHoursForProfile(int $profileIndex): array
     {
         return match ($profileIndex) {
-            0 => [0, 2, 4, 6, 8, 10, 12, 14], // John: mostly early
-            1 => [1, 3, 5, 9, 11, 13, 15, 17], // Peter: staggered + mid
-            default => [6, 7, 8, 14, 16, 18, 20, 22], // Test device: evening-heavy
+            // Light: few hours, low minutes → flat low line
+            0 => [8, 11, 14],
+            // Heavy: many hours, near 60 min each → tall “comb”
+            1 => [7, 8, 9, 10, 12, 13, 14, 15, 16, 17, 18, 19],
+            // Medium
+            default => [10, 12, 14, 16, 18, 20],
         };
     }
 
@@ -491,60 +524,7 @@ class DummyUsageChartDataSeeder extends Seeder
      */
     private function getDeviceHash(Device $device): int
     {
-        return (int) (sprintf('%u', crc32(mb_strtolower(trim($device->name)) . '|' . $device->id)) % 1000000);
-    }
-
-    /**
-     * Derive deterministic variation numbers from the device identity.
-     *
-     * Why:
-     * - We want dummy series to be different for each child device,
-     *   but still repeatable (so the graph doesn't change randomly every run).
-     */
-    private function getVariation(Device $device): array
-    {
-        // Convert crc32 to unsigned so modulo math behaves consistently across PHP builds.
-        $hash = (int) sprintf('%u', crc32(strtolower($device->name) . '|' . $device->id));
-
-        return [
-            'dailyHourRotation' => $hash % 8,
-            'dailyMinuteOffset' => $hash % 25, // 0..24
-            'dailyDurationBase' => 15 + ($hash % 35), // 15..49 minutes
-
-            'weeklyStartHour' => 8 + ($hash % 5), // 8..12
-            'weeklyStartMinute' => 5 + ($hash % 20), // 5..24
-            'weeklyDurationBase' => 25 + ($hash % 40), // 25..64 minutes
-
-            'monthlyDayRotation' => $hash % 5, // 0..4 (baseDaysToUse count)
-            'monthlyStartHour' => 11 + ($hash % 4), // 11..14
-            'monthlyStartMinute' => 0 + ($hash % 20), // 0..19
-            'monthlyDurationBase' => 35 + ($hash % 40), // 35..74 minutes
-
-            'yearlyDayOffset' => $hash % 21,
-            'yearlyStartHour' => 9 + ($hash % 6), // 9..14
-            'yearlyDurationBase' => 20 + ($hash % 60), // 20..79 minutes
-        ];
-    }
-
-    /**
-     * Rotate array items to create stable variety.
-     */
-    private function rotateArray(array $items, int $rotation): array
-    {
-        $count = count($items);
-        if ($count === 0) {
-            return $items;
-        }
-
-        $rotation = $rotation % $count;
-        if ($rotation === 0) {
-            return $items;
-        }
-
-        return array_merge(
-            array_slice($items, $rotation),
-            array_slice($items, 0, $rotation)
-        );
+        return (int) (sprintf('%u', crc32(mb_strtolower(trim($device->name)).'|'.$device->id)) % 1000000);
     }
 
     /**

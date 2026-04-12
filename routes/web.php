@@ -74,8 +74,9 @@ Route::middleware('auth')->group(function () {
     // Route: /child_devices (separate from accounts)
     Route::prefix('child_devices')->name('child_devices.')->group(function () {
         Route::get('/', [DeviceController::class, 'index'])->name('index'); // Show stats for first device or selected device
+        Route::get('/api/connected', [DeviceController::class, 'getConnectedDevices'])->name('api.connected'); // Get real-time connected devices (before {device})
+        Route::get('/{device}/usage-chart', [DeviceController::class, 'childDeviceUsageChart'])->name('usage-chart'); // JSON chart for selected device
         Route::get('/{device}', [DeviceController::class, 'index'])->name('show'); // Show stats for specific device
-        Route::get('/api/connected', [DeviceController::class, 'getConnectedDevices'])->name('api.connected'); // Get real-time connected devices
     });
 
     // Blocked websites routes - Website blocking management

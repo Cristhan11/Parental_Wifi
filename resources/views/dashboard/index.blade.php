@@ -352,23 +352,17 @@
                     // - daily => minutes
                     // - weekly/monthly/yearly => hours
                     //
-                    // We still cap the Y-axis with parent-friendly, real-world limits so the chart stays readable.
+                    // Cap Y-axis to the realistic maximum for a *single bucket* (not the whole range).
                     //
-                    // - Daily: max 60 minutes per hour bucket
-                    // - Weekly: max 168 hours per week (7 * 24)
-                    // - Monthly: max daysInMonth * 24 hours (range depends on month length)
-                    // - Yearly: max 8760 hours (365 * 24)
+                    // - Daily: one bucket = one hour → max 60 minutes
+                    // - Weekly: one bucket = one calendar day → max 24 hours
+                    // - Monthly: one bucket = up to 7 days in that month slice → max 168 hours
+                    // - Yearly: one bucket = one calendar month → max 31×24 hours (longest month)
                     const maxByRangeInChartUnit = (() => {
                         if (payload.range === 'daily') return 60;
-                        if (payload.range === 'weekly') return 168;
-                        if (payload.range === 'yearly') return 8760;
-                        if (payload.range === 'monthly') {
-                            // Monthly labels look like "Week 1..Week 4/5", but the theoretical max is still
-                            // the number of hours in the month.
-                            const now = new Date();
-                            const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-                            return daysInMonth * 24;
-                        }
+                        if (payload.range === 'weekly') return 24;
+                        if (payload.range === 'monthly') return 168;
+                        if (payload.range === 'yearly') return 31 * 24;
                         return null;
                     })();
 

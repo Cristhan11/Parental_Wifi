@@ -2,7 +2,7 @@
     Device Management: Child Devices Stats View (Image 3)
     
     This view displays statistics for a selected device:
-    - TIME USAGE graph (line graph showing hours per month)
+    - TIME USAGE graph (line graph: daily / weekly / monthly / yearly, same API rules as dashboard)
     - QUIZ SCORE list (all quiz attempts with scores)
     - WEBSITE HISTORY list (recently visited websites)
     
@@ -11,13 +11,13 @@
     Layout Structure (from Image 3):
     - Yellow header bar with left arrow icon and "CHILD DEVICES" title (with smartphone icon)
     - Child dropdown selector (filter by device)
-    - Card 1: TIME USAGE (line graph + time offline/online table)
+    - Card 1: TIME USAGE (full-width line graph + range filters)
     - Card 2: QUIZ SCORE (list of quiz scores)
     - Card 3: WEBSITE HISTORY (list of visited websites)
     
     Data Flow:
     1. DeviceController@index fetches device data and statistics
-    2. Passes $devices, $device, $timeUsageData, $quizScores, $websiteHistory to this view
+    2. Passes $devices, $device, $quizScores, $websiteHistory; chart data loads via GET child_devices/{id}/usage-chart
     3. View displays statistics in cards matching Image 3 design
     
     Design Reference: Image 3 - "CHILD DEVICES" tab
@@ -92,37 +92,38 @@
                     {{-- Card 1: TIME USAGE (matching Image 3) --}}
                     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                         <div class="p-6">
-                            <h3 class="text-lg font-semibold text-gray-900 mb-4">TIME USAGE</h3>
+                            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                                <h3 class="text-lg font-semibold text-gray-900">TIME USAGE</h3>
+                                <div class="flex flex-col items-stretch sm:items-end gap-2">
+                                    <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">FILTER</span>
+                                    <div class="flex flex-wrap gap-2 justify-start sm:justify-end">
+                                        <button type="button"
+                                            class="js-child-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                                            data-child-usage-chart-range="daily">
+                                            Daily
+                                        </button>
+                                        <button type="button"
+                                            class="js-child-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                                            data-child-usage-chart-range="weekly">
+                                            Weekly
+                                        </button>
+                                        <button type="button"
+                                            class="js-child-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                                            data-child-usage-chart-range="monthly">
+                                            Monthly
+                                        </button>
+                                        <button type="button"
+                                            class="js-child-usage-chart-filter js-child-usage-chart-filter-active inline-flex items-center justify-center rounded-full border-2 border-[#FFDE15] bg-[#FFDE15] text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFC107] transition"
+                                            data-child-usage-chart-range="yearly">
+                                            Yearly
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                             
-                            {{-- Time usage graph and table --}}
-                            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                {{-- Line graph (simplified - in production, use Chart.js or similar) --}}
-                                <div>
-                                    <canvas id="timeUsageChart" width="400" height="200"></canvas>
-                                </div>
-                                
-                                {{-- Time offline/online table (matching Image 3) --}}
-                                <div>
-                                    <table class="min-w-full divide-y divide-gray-200">
-                                        <thead class="bg-gray-50">
-                                            <tr>
-                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">TIME OFFLINE</th>
-                                                <th class="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">TIME ONLINE</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody class="bg-white divide-y divide-gray-200">
-                                            {{-- Example time ranges (in production, calculate from DeviceSession data) --}}
-                                            <tr>
-                                                <td class="px-4 py-2 text-sm text-gray-900">8:00 AM - 9:00 AM</td>
-                                                <td class="px-4 py-2 text-sm text-gray-900">9:00 AM - 10:00 AM</td>
-                                            </tr>
-                                            <tr>
-                                                <td class="px-4 py-2 text-sm text-gray-900">10:00 AM - 11:00 AM</td>
-                                                <td class="px-4 py-2 text-sm text-gray-900">11:00 AM - 12:00 PM</td>
-                                            </tr>
-                                        </tbody>
-                                    </table>
-                                </div>
+                            {{-- Full-width chart (same data source as dashboard usage graph) --}}
+                            <div class="relative w-full min-h-[280px] sm:min-h-[320px] lg:min-h-[380px]">
+                                <canvas id="timeUsageChart" class="w-full h-full" role="img" aria-label="Time usage for selected child device"></canvas>
                             </div>
                         </div>
                     </div>
@@ -213,63 +214,250 @@
         </div>
     </div>
 
-    {{-- Chart.js script for time usage graph --}}
+    {{-- Chart.js + usage-chart fetch (same ranges/units as dashboard graph) --}}
     @push('scripts')
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    @if($device)
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
-        @if($device && isset($timeUsageData))
-        // Time usage graph (matching Image 3 design)
         (function() {
-            const timeUsageCanvas = document.getElementById('timeUsageChart');
-            if (timeUsageCanvas && typeof Chart !== 'undefined') {
-                // Destroy existing chart if it exists
-                if (window.timeUsageChartInstance) {
-                    window.timeUsageChartInstance.destroy();
-                }
-                
-                window.timeUsageChartInstance = new Chart(timeUsageCanvas, {
-                    type: 'line',
-                    data: {
-                        labels: ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'],
-                        datasets: [{
-                            label: 'Hours',
-                            data: [
-                                {{ $timeUsageData['JAN'] ?? 0 }},
-                                {{ $timeUsageData['FEB'] ?? 0 }},
-                                {{ $timeUsageData['MAR'] ?? 0 }},
-                                {{ $timeUsageData['APR'] ?? 0 }},
-                                {{ $timeUsageData['MAY'] ?? 0 }},
-                                {{ $timeUsageData['JUN'] ?? 0 }},
-                                {{ $timeUsageData['JUL'] ?? 0 }},
-                                {{ $timeUsageData['AUG'] ?? 0 }},
-                                {{ $timeUsageData['SEP'] ?? 0 }},
-                                {{ $timeUsageData['OCT'] ?? 0 }},
-                                {{ $timeUsageData['NOV'] ?? 0 }},
-                                {{ $timeUsageData['DEC'] ?? 0 }}
-                            ],
-                            borderColor: '#FFDE15',
-                            backgroundColor: 'rgba(255, 222, 21, 0.1)',
-                            tension: 0.4
-                        }]
-                    },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        scales: {
-                            y: {
-                                beginAtZero: true,
-                                max: 8,
-                                ticks: {
-                                    stepSize: 1
-                                }
-                            }
+            'use strict';
+
+            const chartUrlBase = @json(route('child_devices.usage-chart', $device));
+
+            window.childTimeUsageChartInstance = window.childTimeUsageChartInstance ?? null;
+            window.currentChildUsageChartRange = window.currentChildUsageChartRange ?? 'yearly';
+            window.__childUsageChartRefreshImpl = null;
+
+            document.addEventListener('DOMContentLoaded', function() {
+                const ctx = document.getElementById('timeUsageChart');
+                if (!ctx || typeof Chart === 'undefined') return;
+
+                const filterButtons = document.querySelectorAll('[data-child-usage-chart-range]');
+                const setActiveFilter = (range) => {
+                    window.currentChildUsageChartRange = range;
+                    filterButtons.forEach((btn) => {
+                        const isActive = btn.dataset.childUsageChartRange === range;
+                        btn.classList.toggle('js-child-usage-chart-filter-active', isActive);
+                        if (isActive) {
+                            btn.classList.add('border-[#FFDE15]', 'bg-[#FFDE15]');
+                            btn.classList.remove('border-gray-300', 'bg-white');
+                        } else {
+                            btn.classList.remove('border-[#FFDE15]', 'bg-[#FFDE15]');
+                            btn.classList.add('border-gray-300', 'bg-white');
                         }
+                    });
+                };
+
+                const activeBtn = document.querySelector('.js-child-usage-chart-filter-active[data-child-usage-chart-range]');
+                if (activeBtn) {
+                    setActiveFilter(activeBtn.dataset.childUsageChartRange);
+                } else {
+                    setActiveFilter('yearly');
+                }
+
+                const makeBorderColor = (index) => {
+                    const hue = (index * 55) % 360;
+                    return `hsl(${hue} 70% 35%)`;
+                };
+
+                const destroyChartIfNeeded = () => {
+                    if (window.childTimeUsageChartInstance) {
+                        window.childTimeUsageChartInstance.destroy();
+                        window.childTimeUsageChartInstance = null;
                     }
+                };
+
+                const buildDatasets = (series) => {
+                    return series.map((item, idx) => {
+                        const borderColor = makeBorderColor(idx);
+                        return {
+                            label: item.device_name,
+                            data: item.values,
+                            borderColor,
+                            backgroundColor: 'rgba(255, 222, 21, 0.10)',
+                            borderWidth: 2.5,
+                            fill: false,
+                            tension: 0.35,
+                            pointRadius: 4,
+                            pointHoverRadius: 7,
+                            pointBackgroundColor: '#FFDE15',
+                            pointBorderColor: borderColor,
+                            pointBorderWidth: 2
+                        };
+                    });
+                };
+
+                const renderChart = (payload) => {
+                    const labels = payload.labels ?? [];
+                    const series = payload.series ?? [];
+
+                    destroyChartIfNeeded();
+
+                    const allValues = series.flatMap((s) => Array.isArray(s.values) ? s.values : []);
+                    const maxVal = Math.max(...allValues, 0);
+                    const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
+                    const dailyFixedMax = payload.range === 'daily' ? 60 : null;
+
+                    // Per-bucket caps (same as dashboard): match max usable time in one bucket, not whole chart.
+                    const maxByRangeInChartUnit = (() => {
+                        if (payload.range === 'daily') return 60;
+                        if (payload.range === 'weekly') return 24;
+                        if (payload.range === 'monthly') return 168;
+                        if (payload.range === 'yearly') return 31 * 24;
+                        return null;
+                    })();
+
+                    const showLegend = series.length > 0 && series.length <= 6;
+                    const datasets = buildDatasets(series);
+
+                    window.childTimeUsageChartInstance = new Chart(ctx, {
+                        type: 'line',
+                        data: { labels, datasets },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                                legend: {
+                                    display: showLegend,
+                                    position: 'bottom',
+                                    labels: {
+                                        font: { family: 'Montserrat', size: 11, weight: 'bold' },
+                                        boxWidth: 10
+                                    }
+                                },
+                                tooltip: {
+                                    enabled: true,
+                                    backgroundColor: 'rgba(0, 0, 0, 0.85)',
+                                    titleColor: '#fff',
+                                    bodyColor: '#fff',
+                                    borderColor: '#FFDE15',
+                                    borderWidth: 2,
+                                    padding: 12,
+                                    cornerRadius: 8,
+                                    callbacks: {
+                                        label: (context) => {
+                                            const label = context.dataset?.label ? context.dataset.label + ': ' : '';
+                                            const unit = payload.unit === 'hours' ? ' hr' : ' min';
+                                            return label + context.parsed.y + unit;
+                                        }
+                                    }
+                                }
+                            },
+                            scales: {
+                                y: {
+                                    beginAtZero: true,
+                                    ...(dailyFixedMax !== null
+                                        ? { max: dailyFixedMax }
+                                        : (maxByRangeInChartUnit !== null ? { max: maxByRangeInChartUnit } : { suggestedMax })),
+                                    title: {
+                                        display: true,
+                                        text: payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)',
+                                        font: { family: 'Montserrat', size: 12, weight: 'bold' },
+                                        color: '#000000',
+                                        padding: { top: 6, bottom: 6 }
+                                    },
+                                    ticks: {
+                                        font: { size: 12, weight: 'bold', family: 'Montserrat' },
+                                        ...(dailyFixedMax !== null ? { stepSize: 10 } : {}),
+                                        color: '#000000',
+                                        padding: 8
+                                    },
+                                    grid: { color: 'rgba(0, 0, 0, 0.1)', lineWidth: 1.3 }
+                                },
+                                x: {
+                                    ticks: {
+                                        font: { size: 11, weight: 'bold', family: 'Montserrat' },
+                                        color: '#000000',
+                                        padding: 6
+                                    },
+                                    grid: { display: false }
+                                }
+                            },
+                            interaction: { intersect: false, mode: 'index' },
+                            animation: { duration: 600, easing: 'easeInOutQuart' }
+                        }
+                    });
+                };
+
+                const fetchChildUsageChart = async (range) => {
+                    const url = chartUrlBase + (chartUrlBase.includes('?') ? '&' : '?') + 'range=' + encodeURIComponent(range);
+                    const res = await fetch(url, {
+                        method: 'GET',
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                        credentials: 'same-origin'
+                    });
+                    if (!res.ok) {
+                        throw new Error('Usage chart request failed: ' + res.status);
+                    }
+                    return await res.json();
+                };
+
+                let refreshInFlight = false;
+                window.__childUsageChartRefreshImpl = async (reason) => {
+                    if (refreshInFlight) return;
+                    refreshInFlight = true;
+                    try {
+                        const range = window.currentChildUsageChartRange || 'yearly';
+                        const payload = await fetchChildUsageChart(range);
+                        renderChart(payload);
+                    } catch (e) {
+                        console.error('Failed to refresh child device usage chart', reason, e);
+                    } finally {
+                        refreshInFlight = false;
+                    }
+                };
+
+                filterButtons.forEach((btn) => {
+                    btn.addEventListener('click', () => {
+                        setActiveFilter(btn.dataset.childUsageChartRange);
+                        window.__childUsageChartRefreshImpl('filter-change');
+                    });
                 });
-            }
+
+                window.__childUsageChartRefreshImpl('initial-load');
+
+                setInterval(() => {
+                    if (window.currentChildUsageChartRange !== 'daily') return;
+                    if (document.visibilityState !== 'visible') return;
+                    window.__childUsageChartRefreshImpl('daily-timer');
+                }, 60000);
+
+                const userIdMeta = document.querySelector('meta[name="auth-user-id"]');
+                const userId = userIdMeta ? userIdMeta.getAttribute('content') : '';
+                if (typeof window.Echo !== 'undefined' && userId) {
+                    window.Echo.private('user.' + userId)
+                        .listen('.device.connected', () => {
+                            if (typeof window.__childUsageChartRefreshImpl === 'function') {
+                                window.__childUsageChartRefreshImpl('device.connected');
+                            }
+                        })
+                        .listen('.device.disconnected', () => {
+                            if (typeof window.__childUsageChartRefreshImpl === 'function') {
+                                window.__childUsageChartRefreshImpl('device.disconnected');
+                            }
+                        })
+                        .listen('.time.expired', () => {
+                            if (typeof window.__childUsageChartRefreshImpl === 'function') {
+                                window.__childUsageChartRefreshImpl('time.expired');
+                            }
+                        })
+                        .listen('.time.granted', () => {
+                            if (typeof window.__childUsageChartRefreshImpl === 'function') {
+                                window.__childUsageChartRefreshImpl('time.granted');
+                            }
+                        });
+                }
+            });
+
+            window.addEventListener('beforeunload', function() {
+                if (window.childTimeUsageChartInstance) {
+                    window.childTimeUsageChartInstance.destroy();
+                    window.childTimeUsageChartInstance = null;
+                }
+            });
         })();
-        @endif
     </script>
+    @endif
     @endpush
 </x-app-layout>
 
