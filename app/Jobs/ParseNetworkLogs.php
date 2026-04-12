@@ -4,34 +4,35 @@ namespace App\Jobs;
 
 use App\Models\BrowsingLog;
 use App\Models\Device;
+use App\Services\BlockedAccessAttemptRecorder;
+use App\Services\FlaggedAccessAttemptRecorder;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Parse Network Logs Job
- * 
+ *
  * This background job periodically parses network traffic logs to extract browsing
  * history and create BrowsingLog records. It reads tcpdump or iptables log files,
  * extracts HTTP requests, matches them to devices by MAC address, and stores the
  * browsing history in the database.
- * 
+ *
  * What is a Background Job?
  * - A background job is code that runs automatically without user interaction
  * - Think of it like a "robot assistant" that works in the background
  * - It runs on a schedule (every 10 minutes) to parse network logs
  * - This ensures browsing history is captured and stored in the database
- * 
+ *
  * Why Do We Need This Job?
  * - Network traffic logs contain information about websites visited
  * - We need to extract this information and store it in the database
  * - Parents can review browsing history through the dashboard
  * - This job processes logs periodically to avoid real-time processing overhead
- * 
+ *
  * How It Works:
  * 1. Job runs automatically every 10 minutes (via Laravel scheduler)
  * 2. Reads network log files (DNS logs, tcpdump, or iptables logs)
@@ -43,7 +44,7 @@ use Illuminate\Support\Facades\Storage;
  * 8. Matches requests to devices by MAC address (tcpdump) or IP address (DNS logs)
  * 9. Creates BrowsingLog records in database
  * 10. Handles log rotation (marks processed logs)
- * 
+ *
  * What Information is Extracted:
  * - URL: Full website URL visited (e.g., "https://example.com" or "http://example.com/page")
  * - Domain: Website domain (e.g., "example.com", "youtube.com", "google.com")
@@ -54,39 +55,39 @@ use Illuminate\Support\Facades\Storage;
  * - User Agent: Browser information (if available in HTTP traffic)
  * - Timestamp: When the request was made
  * - Bandwidth: Bytes sent and received (if available)
- * 
+ *
  * Integration with Other Services:
  * - BrowsingLog Model: Stores browsing history records
  * - Device Model: Matches requests to devices by MAC address
  * - Storage Facade: Reads log files from storage
- * 
+ *
  * Error Handling:
  * - If log file doesn't exist, job logs warning and continues
  * - If parsing fails for one entry, job continues with next entry
  * - Errors are logged but don't crash the job
  * - Job will retry failed operations on next run
- * 
+ *
  * Scheduling:
  * - Registered in routes/console.php (Laravel 11+) or app/Console/Kernel.php (Laravel 10)
  * - Runs every 10 minutes to balance processing frequency and performance
  * - Uses Laravel's scheduler to run automatically
- * 
+ *
  * Why Every 10 Minutes?
  * - Logs accumulate over time, don't need real-time parsing
  * - Too frequent (every 1 minute): Wastes server resources
  * - Too infrequent (every 30 minutes): Browsing history becomes stale
  * - 10 minutes is a good balance: Recent history without overloading server
- * 
+ *
  * Log File Locations:
  * - tcpdump logs: /var/log/tcpdump/network.log (or configured path)
  * - iptables logs: /var/log/iptables.log (or configured path)
  * - Logs are rotated automatically by system
- * 
+ *
  * Usage Example:
  * ```php
  * // Job runs automatically via scheduler
  * // No manual call needed - Laravel handles it
- * 
+ *
  * // To test manually:
  * use App\Jobs\ParseNetworkLogs;
  * ParseNetworkLogs::dispatch();
@@ -98,7 +99,7 @@ class ParseNetworkLogs implements ShouldQueue
 
     /**
      * Execute the job to parse network logs and create browsing history.
-     * 
+     *
      * This is the main method that runs when the job executes. It:
      * 1. Reads network log files (tcpdump or iptables)
      * 2. Parses log entries to extract HTTP requests
@@ -106,7 +107,7 @@ class ParseNetworkLogs implements ShouldQueue
      * 4. Matches requests to devices by MAC address
      * 5. Creates BrowsingLog records in database
      * 6. Handles log rotation
-     * 
+     *
      * How It Works Step-by-Step:
      * - Step 1: Determine which log files to process
      * - Step 2: Read log file content
@@ -115,20 +116,22 @@ class ParseNetworkLogs implements ShouldQueue
      * - Step 5: Match request to device by MAC address
      * - Step 6: Create BrowsingLog record
      * - Step 7: Mark log as processed
-     * 
+     *
      * Error Handling:
      * - If log file doesn't exist, job logs warning and exits
      * - If parsing fails for one entry, job continues with next entry
      * - Errors are logged but don't crash the job
-     * 
+     *
      * @return void No return value
-     * 
+     *
      * Usage:
      * This method is called automatically by Laravel when the job runs.
      * You don't need to call it manually - the scheduler handles it.
      */
-    public function handle(): void
-    {
+    public function handle(
+        BlockedAccessAttemptRecorder $blockedAccessRecorder,
+        FlaggedAccessAttemptRecorder $flaggedAccessRecorder,
+    ): void {
         // Log that the job started running
         // This helps us track when the job executes and debug any issues
         Log::info('ParseNetworkLogs job started - parsing network traffic logs');
@@ -139,27 +142,28 @@ class ParseNetworkLogs implements ShouldQueue
         // - tcpdump logs: /var/log/tcpdump/network.log
         // - iptables logs: /var/log/iptables.log
         // - Custom location: config('network.log_path')
-        // 
+        //
         // For now, we'll use a configurable path from environment
         // In production, this would be configured in .env file
         $logPath = config('network.log_path', '/var/log/tcpdump/network.log');
 
         // Check if log file exists
         // If log file doesn't exist, there's nothing to process
-        if (!file_exists($logPath)) {
+        if (! file_exists($logPath)) {
             Log::debug('ParseNetworkLogs job completed - log file does not exist', [
                 'log_path' => $logPath,
             ]);
+
             return; // Exit early - no log file to process
         }
 
         // Step 2: Read log file content
         // We read the entire log file into memory
         // For large log files, this might need to be optimized to read line by line
-        // 
+        //
         // Why Read Entire File?
         // - Simpler implementation for now
-         // - Log files are typically rotated before they get too large
+        // - Log files are typically rotated before they get too large
         // - Can be optimized later if needed (read line by line)
         try {
             $logContent = file_get_contents($logPath);
@@ -170,6 +174,7 @@ class ParseNetworkLogs implements ShouldQueue
                 'log_path' => $logPath,
                 'error' => $e->getMessage(),
             ]);
+
             return; // Exit early - can't read log file
         }
 
@@ -178,17 +183,18 @@ class ParseNetworkLogs implements ShouldQueue
             Log::debug('ParseNetworkLogs job completed - log file is empty', [
                 'log_path' => $logPath,
             ]);
+
             return; // Exit early - no content to process
         }
 
         // Step 3: Parse log entries
         // Log files typically have one entry per line
         // We split the content into lines and process each line
-        // 
+        //
         // Log Format Examples:
         // - tcpdump: "2024-01-15 15:30:00 IP 192.168.4.5.54321 > 93.184.216.34.80: GET /page HTTP/1.1"
         // - iptables: "Jan 15 15:30:00 kernel: IN=wlan0 OUT=eth0 MAC=AA:BB:CC:DD:EE:FF SRC=192.168.4.5 DST=93.184.216.34"
-        // 
+        //
         // We need to parse these formats to extract:
         // - MAC address (to match to device)
         // - Source IP (device IP)
@@ -227,16 +233,17 @@ class ParseNetworkLogs implements ShouldQueue
                 $parsedEntry = $this->parseLogEntry($line);
 
                 // If parsing failed, skip this entry
-                if (!$parsedEntry) {
+                if (! $parsedEntry) {
                     $entriesSkipped++;
+
                     continue; // Continue with next entry
                 }
 
                 // Step 5: Match request to device by MAC address or IP address
                 // DNS logs use IP addresses, tcpdump logs use MAC addresses
                 $device = null;
-                
-                if (!empty($parsedEntry['is_dns_log']) && !empty($parsedEntry['source_ip'])) {
+
+                if (! empty($parsedEntry['is_dns_log']) && ! empty($parsedEntry['source_ip'])) {
                     // DNS log: Match by IP address
                     $sourceIp = $parsedEntry['source_ip'];
                     if (isset($devicesByIp[$sourceIp])) {
@@ -248,14 +255,15 @@ class ParseNetworkLogs implements ShouldQueue
                 } else {
                     // tcpdump/iptables log: Match by MAC address
                     $macAddress = strtoupper(str_replace(['-', '_'], ':', $parsedEntry['mac_address'] ?? ''));
-                    if (!empty($macAddress) && isset($devices[$macAddress])) {
+                    if (! empty($macAddress) && isset($devices[$macAddress])) {
                         $device = $devices[$macAddress];
                     }
                 }
 
                 // If device not found, skip this entry
-                if (!$device) {
+                if (! $device) {
                     $entriesSkipped++;
+
                     continue; // Continue with next entry
                 }
 
@@ -270,6 +278,7 @@ class ParseNetworkLogs implements ShouldQueue
                 if ($existingLog) {
                     // Log already exists, skip it
                     $entriesSkipped++;
+
                     continue; // Continue with next entry
                 }
 
@@ -287,6 +296,24 @@ class ParseNetworkLogs implements ShouldQueue
                     'visited_at' => $parsedEntry['visited_at'],
                 ]);
 
+                // If this hostname is blocked for the device, log AccessAttempt → BlockedWebsiteAccessed → email/Echo.
+                $clientIp = $parsedEntry['source_ip'] ?? $parsedEntry['ip_address'] ?? $device->ip_address;
+                $blockedAccessRecorder->recordIfBlocked(
+                    $device,
+                    (string) $parsedEntry['domain'],
+                    (string) $parsedEntry['url'],
+                    $clientIp ? (string) $clientIp : null,
+                    $parsedEntry['visited_at']
+                );
+
+                $flaggedAccessRecorder->recordIfFlagged(
+                    $device,
+                    (string) $parsedEntry['domain'],
+                    (string) $parsedEntry['url'],
+                    $clientIp ? (string) $clientIp : null,
+                    $parsedEntry['visited_at']
+                );
+
                 $entriesCreated++;
                 $entriesProcessed++;
 
@@ -300,6 +327,7 @@ class ParseNetworkLogs implements ShouldQueue
                 ]);
 
                 $entriesSkipped++;
+
                 continue; // Continue with next entry
             }
         }
@@ -321,7 +349,7 @@ class ParseNetworkLogs implements ShouldQueue
 
     /**
      * Parse a single log entry to extract HTTP/HTTPS request information.
-     * 
+     *
      * This method parses a log line to extract:
      * - MAC address (to match to device)
      * - URL (website visited)
@@ -332,19 +360,19 @@ class ParseNetworkLogs implements ShouldQueue
      * - Timestamp (when request was made)
      * - User agent (browser information, if available in HTTP traffic)
      * - Bandwidth (bytes sent/received, if available)
-     * 
+     *
      * HTTPS Domain Extraction:
      * - Uses SNI (Server Name Indication) from TLS ClientHello packets
      * - SNI contains the domain name in plain text before encryption
      * - Works with tcpdump -A flag output which shows readable packet content
      * - Extracts domains like "google.com", "youtube.com", "facebook.com"
-     * 
+     *
      * This parser handles both HTTP (plain text) and HTTPS (SNI extraction)
      * traffic to provide accurate domain capture for parental monitoring.
-     * 
-     * @param string $line The log line to parse
+     *
+     * @param  string  $line  The log line to parse
      * @return array|null Parsed entry data or null if parsing failed
-     * 
+     *
      * Usage:
      * This method is called internally by handle() method.
      * You don't need to call it manually.
@@ -366,14 +394,14 @@ class ParseNetworkLogs implements ShouldQueue
             $isDnsLog = true;
             $domain = $dnsMatches[1];
             $sourceIp = $dnsMatches[2];
-            
+
             // DNS logs don't have MAC addresses directly - we'll match by IP later
             // For now, set macAddress to null - we'll resolve it in handle() method
             $macAddress = null; // Will be resolved from IP address
-            
+
             // Construct URL (assume HTTPS for DNS queries, as most modern sites use HTTPS)
-            $url = 'https://' . $domain;
-            
+            $url = 'https://'.$domain;
+
             // Extract timestamp from DNS log format: "Dec 22 04:30:15"
             $visitedAt = now();
             if (preg_match('/([A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/', $line, $timeMatches)) {
@@ -387,7 +415,7 @@ class ParseNetworkLogs implements ShouldQueue
                     // Parsing failed, use default (now())
                 }
             }
-            
+
             // Return DNS log entry (mac_address will be resolved in handle() method)
             return [
                 'mac_address' => null, // Will be resolved from IP
@@ -417,7 +445,7 @@ class ParseNetworkLogs implements ShouldQueue
         $url = null;
         $domain = null;
         $isHttps = false;
-        
+
         // Step 1: Try to extract HTTP/HTTPS URLs (works for HTTP traffic)
         if (preg_match('/https?:\/\/([^\s\/]+)/', $line, $urlMatches)) {
             $url = $urlMatches[0];
@@ -434,38 +462,38 @@ class ParseNetworkLogs implements ShouldQueue
         // Check if this is HTTPS traffic (port 443)
         elseif (preg_match('/\.443[^:>]*?[>:]/', $line) || preg_match('/:443[^>]*?[>:]/', $line)) {
             $isHttps = true;
-            
+
             // SNI extraction: Look for domain names in TLS handshake context
             // SNI domain appears as readable text in TLS ClientHello with -A flag
             // Pattern 1: Look for domain patterns near port 443 connections
             // Pattern 2: Look for SNI extension format (domain appears after TLS handshake data)
-            
+
             // Extract domain from TLS handshake - look for readable domain strings
             // Domains in SNI are often visible in tcpdump -A output
             if (preg_match('/([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}/', $line, $domainMatches)) {
                 $domain = $domainMatches[0];
-                
+
                 // Filter out common false positives (IP addresses, MAC addresses, etc.)
                 // Valid domain should not start with numbers and should have proper TLD
-                if (!preg_match('/^\d+\./', $domain) && 
-                    !preg_match('/^[0-9A-Fa-f]{2}[:-]/', $domain) &&
+                if (! preg_match('/^\d+\./', $domain) &&
+                    ! preg_match('/^[0-9A-Fa-f]{2}[:-]/', $domain) &&
                     preg_match('/\.[a-zA-Z]{2,}$/', $domain)) {
                     // Clean domain: remove common prefixes that might be false positives
                     $domain = preg_replace('/^(www|api|cdn|static|img|images|media|m|mobile|www2|www3)\./', '', $domain);
-                    $url = 'https://' . $domain;
+                    $url = 'https://'.$domain;
                 } else {
                     $domain = null;
                 }
             }
-            
+
             // If domain extraction failed, try alternative SNI patterns
-            if (!$domain) {
+            if (! $domain) {
                 // Look for SNI in TLS extension format
                 // SNI extension type is 0x0000, followed by length, then domain
                 // In ASCII output, this might appear as readable domain strings
                 if (preg_match('/\x00\x00[^\x00]{0,50}?([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}/', $line, $sniMatches)) {
                     $domain = $sniMatches[1];
-                    $url = 'https://' . $domain;
+                    $url = 'https://'.$domain;
                 }
             }
         }
@@ -473,22 +501,22 @@ class ParseNetworkLogs implements ShouldQueue
         // This catches domains that might appear in other contexts
         elseif (preg_match('/([a-zA-Z0-9]([a-zA-Z0-9\-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}/', $line, $domainMatches)) {
             $domain = $domainMatches[0];
-            
+
             // Determine if HTTPS based on port 443 in the line
             $isHttps = (strpos($line, '.443') !== false || strpos($line, ':443') !== false);
-            
+
             // Filter out false positives
-            if (!preg_match('/^\d+\./', $domain) && 
-                !preg_match('/^[0-9A-Fa-f]{2}[:-]/', $domain) &&
+            if (! preg_match('/^\d+\./', $domain) &&
+                ! preg_match('/^[0-9A-Fa-f]{2}[:-]/', $domain) &&
                 preg_match('/\.[a-zA-Z]{2,}$/', $domain)) {
-                $url = ($isHttps ? 'https://' : 'http://') . $domain;
+                $url = ($isHttps ? 'https://' : 'http://').$domain;
             } else {
                 $domain = null;
             }
         }
-        
+
         // If no domain found after all attempts, can't create browsing log
-        if (!$domain || !$url) {
+        if (! $domain || ! $url) {
             return null;
         }
 
@@ -546,7 +574,7 @@ class ParseNetworkLogs implements ShouldQueue
         // tcpdump shows packet length in "length X" format
         $bytesSent = 0;
         $bytesReceived = 0;
-        
+
         // Try tcpdump format: "length 1234"
         if (preg_match('/length\s+(\d+)/', $line, $lengthMatches)) {
             // For outbound packets (device -> server), this is bytes sent
@@ -575,4 +603,3 @@ class ParseNetworkLogs implements ShouldQueue
         ];
     }
 }
-

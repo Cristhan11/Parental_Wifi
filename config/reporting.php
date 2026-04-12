@@ -21,4 +21,29 @@ return [
 
     'default_timezone' => env('REPORTING_DEFAULT_TIMEZONE', 'Asia/Manila'),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Blocked-domain immediate alerts (ParseNetworkLogs)
+    |--------------------------------------------------------------------------
+    |
+    | When the same child queries the same blocked hostname repeatedly, dnsmasq may
+    | log many lines per minute. Skip creating duplicate AccessAttempt rows (and
+    | duplicate emails) within this window. Set to 0 to disable throttling.
+    |
+    */
+
+    'blocked_access_alert_throttle_minutes' => (int) env('BLOCKED_ACCESS_ALERT_THROTTLE_MINUTES', 15),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Flagged-domain immediate alerts (ParseNetworkLogs)
+    |--------------------------------------------------------------------------
+    |
+    | Same idea as blocked throttling: dnsmasq may log many queries for one hostname.
+    | Set to 0 to disable throttling.
+    |
+    */
+
+    'flagged_access_alert_throttle_minutes' => (int) env('FLAGGED_ACCESS_ALERT_THROTTLE_MINUTES', 15),
+
 ];
