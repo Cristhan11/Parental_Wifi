@@ -204,6 +204,20 @@ class ParseNetworkLogs implements ShouldQueue
         // - URL/domain (from HTTP request)
         // - Timestamp (when request was made)
         $logLines = explode("\n", $logContent);
+        $logLinesTotal = count($logLines);
+        $logLinesOmitted = 0;
+        $maxLines = (int) config('network.log_max_lines', 25000);
+        if ($maxLines > 0 && $logLinesTotal > $maxLines) {
+            $logLinesOmitted = $logLinesTotal - $maxLines;
+            $logLines = array_slice($logLines, -$maxLines);
+            Log::info('ParseNetworkLogs processing only the most recent log lines', [
+                'log_path' => $logPath,
+                'total_lines_in_file' => $logLinesTotal,
+                'lines_processing' => $maxLines,
+                'lines_omitted_older' => $logLinesOmitted,
+            ]);
+        }
+
         $entriesProcessed = 0;
         $entriesCreated = 0;
         $entriesSkipped = 0;
@@ -338,6 +352,9 @@ class ParseNetworkLogs implements ShouldQueue
         // This helps us monitor job execution and understand processing results
         Log::info('ParseNetworkLogs job completed', [
             'log_path' => $logPath,
+            'log_lines_total' => $logLinesTotal,
+            'log_lines_scanned' => count($logLines),
+            'log_lines_omitted_older' => $logLinesOmitted,
             'entries_processed' => $entriesProcessed,
             'entries_created' => $entriesCreated,
             'entries_skipped' => $entriesSkipped,

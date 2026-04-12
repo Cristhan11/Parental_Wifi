@@ -8,6 +8,7 @@ use App\Jobs\TrackActiveSessions;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Schedule;
 
 /**
@@ -41,10 +42,19 @@ Artisan::command('inspire', function () {
  * Run {@see ParseNetworkLogs} once in the current PHP process (no queue worker).
  * Use this on the Pi to verify NETWORK_LOG_PATH and parsing after `config:cache` / worker restarts.
  */
-Artisan::command('network:parse-logs', function () {
+Artisan::command('network:parse-logs {--lines= : Process at most this many lines from the end of the file (overrides NETWORK_LOG_MAX_LINES for this run)}', function () {
     $path = config('network.log_path');
     $this->line('network.log_path = '.$path);
     $this->line('file_exists = '.(file_exists($path) ? 'yes' : 'no'));
+
+    $linesOption = $this->option('lines');
+    if ($linesOption !== null && $linesOption !== '') {
+        Config::set('network.log_max_lines', max(0, (int) $linesOption));
+    }
+
+    $this->line('log_max_lines (this run) = '.config('network.log_max_lines').' (0 = entire file)');
+    $this->warn('Large dnsmasq logs can take a while; use --lines=5000 for a quick test.');
+
     Bus::dispatchSync(new ParseNetworkLogs);
     $this->info('ParseNetworkLogs finished (see storage/logs for entries_created).');
 })->purpose('Run ParseNetworkLogs synchronously using current config');
