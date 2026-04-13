@@ -24,9 +24,9 @@
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             {{-- Info Banner --}}
             <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p class="text-sm text-blue-800">
-                    <strong>What is Flagging?</strong> Flagged websites are monitored but not blocked. 
-                    When a child visits a flagged website, it's logged and you'll be notified, but access is still allowed.
+                <p class="text-sm text-blue-800 space-y-2">
+                    <span class="block"><strong>What is flagging?</strong> The site stays <strong>reachable</strong> for children. The Pi records DNS lookups that match this domain (and subdomains like <code>www.</code>) for <strong>any</strong> of your child devices.</span>
+                    <span class="block"><strong>Timing:</strong> Alerts and log entries appear after DNS logs are processed (queue/scheduler on the Pi), not necessarily the same second as the visit.</span>
                 </p>
             </div>
 

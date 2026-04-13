@@ -78,6 +78,16 @@ The global file should match what you expect from the app. Legacy `blocked-domai
 
 **Parents do not need SSH.** They change blocked sites in the UI; Laravel calls the script with sudo as allowed by sudoers.
 
+## Flagged websites (monitoring, not blocking)
+
+Flagged domains are **not** written to dnsmasq. When a child visits a flagged site, the Pi records it from **DNS query logs** (`ParseNetworkLogs` job) and creates `access_attempts` (type `flagged_website`). For that to work on the Pi you still need:
+
+- **dnsmasq query logging** and the log path Laravel uses (`NETWORK_LOG_PATH` in `.env`, often `/var/log/dnsmasq.log`) — see `docs/BROWSING_LOGS_REFERENCE.md`
+- **Queue worker** running (`php artisan queue:work` or a systemd service) and/or **scheduler** (`schedule:run` cron) so `ParseNetworkLogs` actually runs
+
+The flagged list in the UI is **household-wide** (`user_id`), same as blocked sites. Any child device under that parent can trigger a flagged visit.
+
 ## More detail
 
-See `docs/SUDOERS_UPDATE_DNS_BLOCKING.md` for manual sudoers editing and troubleshooting.
+See `docs/SUDOERS_UPDATE_DNS_BLOCKING.md` for manual sudoers editing and troubleshooting.  
+See `docs/FLAGGED_WEBSITES_QUICK_TEST.md` for quick flagged-site checks.

@@ -7,11 +7,24 @@
 
 ---
 
+## April 2026 — current behavior (read this first)
+
+- **Scope:** Flagged domains are stored **per parent** (`user_id`). They apply to **every child device** for that account. There is **no per-device** row or dropdown in the UI.
+- **Blocking:** Flagged domains are **not** added to dnsmasq. Only **blocked** sites change `/etc/dnsmasq.d/parental-global-blocklist.conf`.
+- **Detection:** When `ParseNetworkLogs` processes a line for a child device’s DNS lookup, it calls `FlaggedAccessAttemptRecorder::recordIfFlagged()` for hostnames that match your flagged list (`FlaggedWebsite` where `user_id` = device’s parent). If the hostname is **also** blocked for that household, **blocked** logic wins and **no** flagged `AccessAttempt` is created.
+- **Pi requirements for monitoring:** dnsmasq (or configured) log file readable by Laravel, `NETWORK_LOG_PATH` set, and **queue worker / scheduler** so `ParseNetworkLogs` runs. See `docs/BROWSING_LOGS_REFERENCE.md` and `docs/PI_DNSMASQ_ONE_TIME_SETUP.md` (flagged section).
+- **Quick checklist:** `docs/FLAGGED_WEBSITES_QUICK_TEST.md`
+
+**Note:** Sections below that mention a **device dropdown** or **`device_id`** on `flagged_websites` describe an **older** UI/schema. Ignore those steps; use the household-wide flow above.
+
+---
+
 ## Quick Start
 
 1. **Access the application**: `http://[PI_IP]/flagged-websites`
-2. **Create a flagged website**: Click "Flag Website" → Fill form → Submit
-3. **Verify it works**: Check database, test access from device
+2. **Create a flagged website**: Click "Flag Website" → URL (+ optional reason) → Submit
+3. **Verify UI**: List shows URL, domain, reason; **no** device column
+4. **Verify monitoring** (on Pi): child visits site → after log job runs, check Logs / `access_attempts` (`type = flagged_website`)
 
 ---
 
@@ -24,7 +37,7 @@ This guide provides step-by-step instructions to manually test flagged website f
 
 **Key Difference:**
 - Flagged websites should be **accessible** (not blocked)
-- Visits to flagged websites should be **logged** (monitoring functionality - part of TODO21)
+- Visits to flagged websites should be **logged** when **ParseNetworkLogs** runs on DNS log lines
 - No DNS blocking is applied to flagged websites
 
 ---
@@ -67,17 +80,16 @@ Before testing, ensure:
 
 ### Step 2: Fill in the Form
 
-1. **Device:** Select a child device from dropdown (e.g., `CP_ChildDev01`)
-   - If no devices appear, create one first via `/accounts/create`
-
-2. **URL:** Enter a test URL:
+1. **URL:** Enter a test URL:
    - Example: `https://example.com/page`
    - Or: `https://www.facebook.com`
    - Or: `http://test-site.com/some-page`
 
-3. **Reason (optional):** Enter a reason:
+2. **Reason (optional):** Enter a reason:
    - Example: "Test monitoring"
    - Or leave blank (reason is optional)
+
+*(There is no device picker: the rule applies to all child devices for your account.)*
 
 ### Step 3: Submit and Verify
 
@@ -91,7 +103,6 @@ Before testing, ensure:
 3. **Verify in List:**
    - URL should be displayed
    - Domain should be extracted (e.g., `example.com` from `https://example.com/page`)
-   - Device name should be shown
    - Reason should be displayed (or "-" if empty)
 
 ### Step 4: Verify Database Record
