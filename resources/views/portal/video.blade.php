@@ -7,32 +7,34 @@
     <title>Video - {{ $video->title }}</title>
     <link rel="stylesheet" href="/css/portal-captive.css">
     <style>
-        #videoPlayer {
-            pointer-events: auto !important;
-        }
+        /* Overlay must never steal taps from the video (dictionary cards are non-interactive). */
         #wordOverlayContainer {
             pointer-events: none !important;
         }
-        video::-webkit-media-controls-timeline {
-            display: none !important;
+        #videoPlayer {
+            pointer-events: auto !important;
+            touch-action: manipulation;
         }
-        video::-webkit-media-controls-current-time-display {
-            display: none !important;
-        }
-        video::-webkit-media-controls-time-remaining-display {
-            display: none !important;
-        }
-        video::-webkit-media-controls-playback-rate-button {
-            display: none !important;
-        }
-        video::-webkit-media-controls-overlay-play-button {
-            display: none !important;
-        }
-        video::-webkit-media-controls-enclosure {
-            overflow: hidden;
+        /*
+         * Do NOT hide ::-webkit-media-controls-overlay-play-button or clip the controls enclosure:
+         * on iOS/Android WebKit that removes the main play target and can break the control bar.
+         * Hiding the timeline (desktop only) still discourages scrubbing on large screens.
+         */
+        @media (min-width: 768px) {
+            #videoPlayer::-webkit-media-controls-timeline {
+                display: none !important;
+            }
+            #videoPlayer::-webkit-media-controls-current-time-display {
+                display: none !important;
+            }
+            #videoPlayer::-webkit-media-controls-time-remaining-display {
+                display: none !important;
+            }
+            #videoPlayer::-webkit-media-controls-playback-rate-button {
+                display: none !important;
+            }
         }
         @if($video->dictionary_words_enabled)
-        /* Native fullscreen = video only; dictionary overlays live outside <video>, so hide it when words are used. */
         #videoPlayer::-webkit-media-controls-fullscreen-button {
             display: none !important;
         }
@@ -66,8 +68,10 @@
                     <video
                         id="videoPlayer"
                         controls
-                        preload="metadata"
+                        preload="auto"
                         playsinline
+                        webkit-playsinline
+                        x5-playsinline
                         ontimeupdate="handleTimeUpdate()"
                         onended="handleVideoEnded()"
                         onerror="handleVideoError(event)"
@@ -81,6 +85,12 @@
                             Fullscreen
                         </button>
                     @endif
+                </div>
+
+                <div class="portal-video-fallback-controls">
+                    <button type="button" id="portalVideoPlayPauseBtn" class="portal-video-play-btn">
+                        Play
+                    </button>
                 </div>
 
                 <div class="portal-video-info">
@@ -188,6 +198,33 @@
             document.addEventListener('MSFullscreenChange', portalOnFullscreenChange);
         }
 
+        const playPauseBtn = document.getElementById('portalVideoPlayPauseBtn');
+
+        function syncPlayPauseLabel() {
+            if (!playPauseBtn || !videoPlayer) {
+                return;
+            }
+            playPauseBtn.textContent = videoPlayer.paused ? 'Play' : 'Pause';
+            playPauseBtn.setAttribute('aria-label', videoPlayer.paused ? 'Play video' : 'Pause video');
+        }
+
+        if (playPauseBtn && videoPlayer) {
+            playPauseBtn.addEventListener('click', function () {
+                if (videoPlayer.paused) {
+                    videoPlayer.play().catch(function (err) {
+                        console.warn('play() failed:', err);
+                        alert('Could not start playback. Try again or use the controls on the video.');
+                    });
+                } else {
+                    videoPlayer.pause();
+                }
+            });
+            videoPlayer.addEventListener('play', syncPlayPauseLabel);
+            videoPlayer.addEventListener('pause', syncPlayPauseLabel);
+            videoPlayer.addEventListener('ended', syncPlayPauseLabel);
+            videoPlayer.addEventListener('loadeddata', syncPlayPauseLabel);
+        }
+
         function handleVideoError(event) {
             const video = event.target;
             console.error('Video error:', {
@@ -213,31 +250,9 @@
         }
 
         function handleVideoCanPlay() {
-            console.log('Video can play - ready for playback');
-            console.log('Video duration:', videoPlayer.duration, 'seconds');
             videoPlayer.style.pointerEvents = 'auto';
+            syncPlayPauseLabel();
         }
-
-        videoPlayer.addEventListener('click', function(e) {
-            console.log('Video element clicked', e);
-        });
-
-        videoPlayer.addEventListener('play', function() {
-            console.log('Video play event - video should be playing');
-        });
-
-        videoPlayer.addEventListener('playing', function() {
-            console.log('Video is actually playing');
-        });
-
-        videoPlayer.addEventListener('pause', function() {
-            console.log('Video paused');
-        });
-
-        videoPlayer.addEventListener('loadedmetadata', function() {
-            console.log('Video metadata loaded');
-            console.log('Video controls visible:', videoPlayer.controls);
-        });
 
         function handleTimeUpdate() {
             const currentTime = Math.floor(videoPlayer.currentTime);
@@ -255,6 +270,7 @@
                 videoPlayer.pause();
                 console.log('Video paused to show word:', wordData.word);
             }
+            syncPlayPauseLabel();
 
             const overlay = document.createElement('div');
             overlay.className = 'word-overlay';
@@ -271,11 +287,15 @@
             setTimeout(() => {
                 overlay.remove();
                 if (videoPlayer.paused && videoPlayer.readyState >= 3) {
-                    videoPlayer.play().then(() => {
+                    videoPlayer.play().then(function () {
                         console.log('Video resumed after word display');
-                    }).catch(err => {
+                        syncPlayPauseLabel();
+                    }).catch(function (err) {
                         console.warn('Could not auto-resume video:', err);
+                        syncPlayPauseLabel();
                     });
+                } else {
+                    syncPlayPauseLabel();
                 }
             }, 8000);
         }
@@ -297,6 +317,8 @@
                 window.location.href = '{{ route("portal.landing", ["mac" => $device->mac_address]) }}';
             }
         }
+
+        syncPlayPauseLabel();
     </script>
 </body>
 </html>
