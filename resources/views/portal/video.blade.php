@@ -31,6 +31,12 @@
         video::-webkit-media-controls-enclosure {
             overflow: hidden;
         }
+        @if($video->dictionary_words_enabled)
+        /* Native fullscreen = video only; dictionary overlays live outside <video>, so hide it when words are used. */
+        #videoPlayer::-webkit-media-controls-fullscreen-button {
+            display: none !important;
+        }
+        @endif
     </style>
 </head>
 <body class="portal">
@@ -56,7 +62,7 @@
                     <p class="portal-video-desc">{{ $video->description }}</p>
                 @endif
 
-                <div class="portal-video-frame">
+                <div id="portalVideoStage" class="portal-video-frame">
                     <video
                         id="videoPlayer"
                         controls
@@ -66,11 +72,15 @@
                         onended="handleVideoEnded()"
                         onerror="handleVideoError(event)"
                         oncanplay="handleVideoCanPlay()">
-                        <source src="{{ $video->getVideoUrl() }}" type="video/mp4">
-                        <source src="{{ $video->getVideoUrl() }}" type="video/mpeg">
+                        <source src="{{ route('portal.video.stream', ['video' => $video->id, 'mac' => $device->mac_address], false) }}" type="{{ $video->getMimeType() }}">
                         Your browser does not support the video tag.
                     </video>
                     <div id="wordOverlayContainer" class="portal-video-overlay-host"></div>
+                    @if($video->dictionary_words_enabled)
+                        <button type="button" id="portalVideoFsBtn" class="portal-video-fs-btn" aria-pressed="false">
+                            Fullscreen
+                        </button>
+                    @endif
                 </div>
 
                 <div class="portal-video-info">
@@ -79,6 +89,9 @@
                         <p style="margin:0;">
                             <strong>Watch carefully!</strong> {{ $video->word_count }} dictionary words will appear during the video.
                             You must remember and enter them at the end.
+                        </p>
+                        <p class="portal-video-fs-hint">
+                            For fullscreen, use the yellow <strong>Fullscreen</strong> on the video (not the player’s own fullscreen button) so word pop-ups stay visible.
                         </p>
                     @endif
                 </div>
@@ -116,10 +129,64 @@
 
     <script>
         const videoPlayer = document.getElementById('videoPlayer');
+        const videoStage = document.getElementById('portalVideoStage');
+        const portalFsBtn = document.getElementById('portalVideoFsBtn');
         const wordOverlayContainer = document.getElementById('wordOverlayContainer');
         const wordSubmissionForm = document.getElementById('wordSubmissionForm');
         const wordsData = @json($wordsData);
         const shownWords = [];
+
+        function portalFullscreenElement() {
+            return document.fullscreenElement
+                || document.webkitFullscreenElement
+                || document.mozFullScreenElement
+                || document.msFullscreenElement;
+        }
+
+        function portalToggleStageFullscreen() {
+            if (!videoStage) {
+                return;
+            }
+            if (!portalFullscreenElement()) {
+                const req = videoStage.requestFullscreen
+                    || videoStage.webkitRequestFullscreen
+                    || videoStage.mozRequestFullScreen
+                    || videoStage.msRequestFullscreen;
+                if (req) {
+                    req.call(videoStage).catch(function (err) {
+                        console.warn('Fullscreen failed:', err);
+                    });
+                }
+            } else {
+                const exit = document.exitFullscreen
+                    || document.webkitExitFullscreen
+                    || document.mozCancelFullScreen
+                    || document.msExitFullscreen;
+                if (exit) {
+                    exit.call(document);
+                }
+            }
+        }
+
+        function portalOnFullscreenChange() {
+            if (!portalFsBtn) {
+                return;
+            }
+            const on = portalFullscreenElement() === videoStage;
+            portalFsBtn.textContent = on ? 'Exit fullscreen' : 'Fullscreen';
+            portalFsBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+
+        if (portalFsBtn && videoStage) {
+            portalFsBtn.addEventListener('click', function (e) {
+                e.stopPropagation();
+                portalToggleStageFullscreen();
+            });
+            document.addEventListener('fullscreenchange', portalOnFullscreenChange);
+            document.addEventListener('webkitfullscreenchange', portalOnFullscreenChange);
+            document.addEventListener('mozfullscreenchange', portalOnFullscreenChange);
+            document.addEventListener('MSFullscreenChange', portalOnFullscreenChange);
+        }
 
         function handleVideoError(event) {
             const video = event.target;

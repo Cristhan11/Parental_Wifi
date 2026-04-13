@@ -13,7 +13,9 @@ use App\Services\VideoWordService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PortalController extends Controller
 {
@@ -691,6 +693,46 @@ class PortalController extends Controller
      * @param Video $video The video to display (found by ID from URL)
      * @return View|RedirectResponse Video player interface or redirect if validation fails
      */
+    /**
+     * Stream video bytes for the portal HTML5 player (same host + /portal prefix as other captive traffic).
+     *
+     * Uses BinaryFileResponse so Range requests work (required for reliable playback on many mobile browsers).
+     */
+    public function streamVideo(Request $request, Video $video): BinaryFileResponse
+    {
+        $device = $this->getDevice($request);
+
+        if (! $device) {
+            abort(403, 'Device not found');
+        }
+
+        if (! $video->is_active) {
+            abort(403, 'Video not available');
+        }
+
+        $hasAccess = $device->videos()->where('videos.id', $video->id)->exists();
+        if (! $hasAccess) {
+            abort(403, 'Access denied');
+        }
+
+        $disk = Storage::disk('public');
+        if (! $disk->exists($video->video_path)) {
+            Log::warning('Portal video file missing', [
+                'video_id' => $video->id,
+                'path' => $video->video_path,
+            ]);
+            abort(404, 'Video file not found');
+        }
+
+        $absolutePath = $disk->path($video->video_path);
+        $mime = @mime_content_type($absolutePath) ?: $video->getMimeType();
+
+        return response()->file($absolutePath, [
+            'Content-Type' => $mime,
+            'Content-Disposition' => 'inline; filename="' . str_replace('"', '', basename($video->video_path)) . '"',
+        ]);
+    }
+
     public function showVideo(Request $request, Video $video): View|RedirectResponse
     {
         // Get device from MAC address in request

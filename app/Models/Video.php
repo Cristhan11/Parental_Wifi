@@ -116,9 +116,22 @@ class Video extends Model
      */
     public function getFullPath(): string
     {
-        // storage_path() gets Laravel's storage directory path
-        // 'app/' is the storage/app directory
-        return storage_path('app/' . $this->video_path);
+        // Files are stored on the public disk: storage/app/public/...
+        return storage_path('app/public/' . $this->video_path);
+    }
+
+    /**
+     * MIME type for the HTML video type attribute (matches StoreVideoRequest mimes).
+     */
+    public function getMimeType(): string
+    {
+        $ext = strtolower(pathinfo($this->video_path, PATHINFO_EXTENSION));
+
+        return match ($ext) {
+            'webm' => 'video/webm',
+            'ogg', 'ogv' => 'video/ogg',
+            default => 'video/mp4',
+        };
     }
 
     /**
@@ -138,9 +151,8 @@ class Video extends Model
      */
     public function getVideoUrl(): string
     {
-        // asset() generates a URL to a public asset
-        // 'storage/' is the public storage symlink
-        return asset('storage/' . $this->video_path);
+        // Root-relative URL so playback works when APP_URL does not match the client host (e.g. captive gateway).
+        return '/storage/' . ltrim($this->video_path, '/');
     }
 
     /**

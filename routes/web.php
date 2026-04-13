@@ -173,7 +173,8 @@ Route::prefix('portal')->name('portal.')->group(function () {
     Route::post('/quiz/submit', [PortalController::class, 'submitQuiz'])->name('quiz.submit'); // Process quiz submission
     Route::get('/quiz/result/{attempt}', [PortalController::class, 'quizResult'])->name('quiz.result'); // Show quiz results
     
-    // Video routes
+    // Video routes (stream must be registered before /video/{video} so "stream" is not captured as an id)
+    Route::get('/video/{video}/stream', [PortalController::class, 'streamVideo'])->name('video.stream');
     Route::get('/video/{video}', [PortalController::class, 'showVideo'])->name('video.show'); // Display video for child
     Route::post('/video/submit-words', [PortalController::class, 'submitVideoWords'])->name('video.submit'); // Process word submission
     Route::get('/video/result/{completion}', [PortalController::class, 'videoResult'])->name('video.result'); // Show video results
