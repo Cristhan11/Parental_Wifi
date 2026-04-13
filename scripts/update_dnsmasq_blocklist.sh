@@ -6,6 +6,19 @@
 # Purpose: Regenerate the complete dnsmasq blocklist for a device from
 #          the database. This ensures the dnsmasq config matches the database state.
 #
+# IMPORTANT — per-device scope vs dnsmasq behaviour:
+# dnsmasq loads every *.conf under /etc/dnsmasq.d/. Each line
+#   address=/example.com/127.0.0.1
+# (or address=/.example.com/127.0.0.1 for subdomains) applies to EVERY client
+# that uses this dnsmasq as its DNS resolver. The MAC in the filename is only
+# for organisation; it does NOT limit which clients receive that answer.
+# So if Honey Laptop has facebook.com blocked and CP_ChildDev01 does not, both
+# will still be blocked as long as both configs are loaded — that matches what
+# you see when two children have different rows in the UI but share one Pi DNS.
+# Fixing true per-child DNS blocking requires a different design (e.g. separate
+# dnsmasq instances on different listen IPs with DHCP option 6 per device/group,
+# or firewall/nftables policy), not more per-MAC config files alone.
+#
 # Usage:   ./update_dnsmasq_blocklist.sh <MAC_ADDRESS>
 # Example: ./update_dnsmasq_blocklist.sh AA:BB:CC:DD:EE:FF
 #

@@ -405,6 +405,12 @@ class DomainBlockingService
      * 
      * This method regenerates the complete dnsmasq blocklist for a device from
      * the database. It ensures that the dnsmasq config matches the database state.
+     *
+     * Dnsmasq limitation: every `address=/domain/127.0.0.1` line in any file
+     * under `/etc/dnsmasq.d/` applies to all clients using this resolver.
+     * Per-MAC filenames do not create per-client DNS policy. Different children need
+     * either separate DNS endpoints (e.g. multiple dnsmasq listen addresses + DHCP
+     * option 6) or non-dnsmasq enforcement if blocks must differ by device.
      * 
      * Why This Method?
      * - Database is the source of truth for blocked domains
