@@ -11,15 +11,27 @@ This document explains how to update the sudoers configuration on Raspberry Pi t
 
 **Important:** This must be done on Raspberry Pi, not on local development machine.
 
+**Quick path:** After deploying the app, run the one-time installer (as a sudo user on the Pi):
+
+```bash
+cd /var/www/parental_wifi
+sudo bash scripts/pi-setup-dnsmasq-global-sudo.sh
+```
+
+See **`docs/PI_DNSMASQ_ONE_TIME_SETUP.md`** for full steps and verification.
+
 ---
 
 ## Scripts That Need Sudo Access
 
 The following scripts need to be added to sudoers:
 
-1. `block_domain.sh` - Adds domain to dnsmasq blocklist
-2. `unblock_domain.sh` - Removes domain from dnsmasq blocklist
-3. `update_dnsmasq_blocklist.sh` - Regenerates complete blocklist from database
+1. `block_domain.sh` - Adds domain to dnsmasq blocklist (legacy per-MAC flow)
+2. `unblock_domain.sh` - Removes domain from dnsmasq blocklist (legacy per-MAC flow)
+3. `update_dnsmasq_blocklist.sh` - Regenerates per-device blocklist (expects MAC as argument; legacy)
+4. **`update_dnsmasq_global_blocklist.sh`** - **Household-wide block list** used by the Laravel app today. Writes `/etc/dnsmasq.d/parental-global-blocklist.conf` from stdin (`domain:0|1` lines). If this script is **not** in sudoers, the UI can show the correct list in the database while **dnsmasq still blocks old domains** (for example Facebook removed in the app but still blocked on the child device).
+
+Keep the legacy entries if you still rely on old per-MAC configs; the global script is what `DomainBlockingService::syncDnsmasqBlocklistForUser` invokes.
 
 ---
 
@@ -68,6 +80,7 @@ Add the following lines to the file (replace `/var/www/parental_wifi` with your 
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/block_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/unblock_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_blocklist.sh
+www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
 ```
 
 **Note:** If your web server runs as a different user (e.g., `snasna`), replace `www-data` with that user.
@@ -105,6 +118,10 @@ sudo -u www-data sudo /var/www/parental_wifi/scripts/unblock_domain.sh test.com 
 
 # Test update_dnsmasq_blocklist.sh
 echo "test.com:0" | sudo -u www-data sudo /var/www/parental_wifi/scripts/update_dnsmasq_blocklist.sh AA:BB:CC:DD:EE:FF
+
+# Test update_dnsmasq_global_blocklist.sh (household-wide; no MAC argument — domains on stdin only)
+echo "test.com:1" | sudo -u www-data sudo /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
+sudo cat /etc/dnsmasq.d/parental-global-blocklist.conf
 ```
 
 ---
@@ -128,6 +145,7 @@ www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/monitor_traffic.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/block_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/unblock_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_blocklist.sh
+www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
 ```
 
 ---
@@ -141,6 +159,7 @@ If your web server runs as a different user (e.g., `snasna`), use this format:
 snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/block_domain.sh
 snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/unblock_domain.sh
 snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_blocklist.sh
+snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
 ```
 
 **To find your web server user:**
@@ -224,7 +243,11 @@ After updating sudoers, test DNS blocking from Laravel:
    - Select device and domain
    - Click "Block Website"
 
-2. **Verify dnsmasq Config:**
+2. **Verify dnsmasq config (household global list):**
+   ```bash
+   sudo cat /etc/dnsmasq.d/parental-global-blocklist.conf
+   ```
+   If you still use legacy per-MAC files:
    ```bash
    sudo cat /etc/dnsmasq.d/blocked-domains-{MAC}.conf
    ```

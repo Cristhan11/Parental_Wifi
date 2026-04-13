@@ -46,6 +46,12 @@
                 </div>
             @endif
 
+            @if(session('warning'))
+                <div class="mb-4 p-4 rounded-lg border border-amber-400" style="background-color: #FEF3C7; color: #92400E;">
+                    {{ session('warning') }}
+                </div>
+            @endif
+
             {{-- Filters --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">
                 <form method="GET" action="{{ route('blocked-websites.index') }}" class="grid grid-cols-1 md:grid-cols-3 gap-4">

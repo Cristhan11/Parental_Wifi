@@ -16,11 +16,11 @@ use Illuminate\View\View;
 
 /**
  * Blocked Website Controller
- * 
+ *
  * This controller handles all blocked website management operations for parents.
  * It provides CRUD operations, domain/app-level blocking, and integration with
  * DNS enforcement via DomainBlockingService.
- * 
+ *
  * Key Responsibilities:
  * 1. List blocked websites (household-wide; filterable by block_type)
  * 2. Create new blocked websites (URL/Domain/App-level blocking)
@@ -28,12 +28,12 @@ use Illuminate\View\View;
  * 4. Delete blocked websites
  * 5. Suggest related domains for apps (AJAX endpoint)
  * 6. Bulk import/export blocked websites
- * 
+ *
  * Authorization:
  * - All methods require authentication (user must be logged in)
  * - BlockedWebsitePolicy ensures users can only manage their own household block list
  * - Uses $this->authorize() to check permissions before operations
- * 
+ *
  * Integration Points:
  * - DomainBlockingService: For DNS-based domain blocking
  * - BlockedWebsitePolicy: For authorization checks
@@ -42,32 +42,63 @@ class BlockedWebsiteController extends Controller
 {
     use AuthorizesRequests;
 
-    /**
-     * DomainBlockingService instance for domain/app blocking operations.
-     * 
-     * @var DomainBlockingService
-     */
-    protected DomainBlockingService $domainBlockingService;
+    public function __construct(
+        protected DomainBlockingService $domainBlockingService
+    ) {}
 
     /**
-     * Constructor - Initialize BlockedWebsiteController with DomainBlockingService.
-     * 
-     * @param DomainBlockingService $domainBlockingService Domain blocking service (injected by Laravel)
+     * @return bool True when dnsmasq sync script reported success
      */
-    public function __construct(DomainBlockingService $domainBlockingService)
+    protected function runDnsSyncForCurrentUser(): bool
     {
-        $this->domainBlockingService = $domainBlockingService;
+        try {
+            return $this->domainBlockingService->syncDnsmasqBlocklistForUser(Auth::user());
+        } catch (\Throwable $e) {
+            Log::warning('DNS sync exception: '.$e->getMessage(), ['user_id' => Auth::id()]);
+
+            return false;
+        }
+    }
+
+    /**
+     * @return bool True when dnsmasq sync script reported success
+     */
+    protected function runDnsSyncForUser(?\App\Models\User $user): bool
+    {
+        if (! $user) {
+            return true;
+        }
+        try {
+            return $this->domainBlockingService->syncDnsmasqBlocklistForUser($user);
+        } catch (\Throwable $e) {
+            Log::warning('DNS sync exception: '.$e->getMessage(), ['user_id' => $user->id]);
+
+            return false;
+        }
+    }
+
+    protected function redirectToIndexWithDnsNotice(string $successMessage, bool $dnsSyncOk, int $parentUserId): RedirectResponse
+    {
+        $flash = ['success' => $successMessage];
+
+        if (! $dnsSyncOk && config('services.dnsmasq.warn_when_sync_fails')) {
+            $flash['warning'] = 'The list was saved, but dnsmasq may still be using an older block list, so removed sites can stay blocked. '
+                .'On the Raspberry Pi, add scripts/update_dnsmasq_global_blocklist.sh to sudoers (see docs/SUDOERS_UPDATE_DNS_BLOCKING.md), '
+                ."then run: php artisan dnsmasq:sync-blocklist {$parentUserId}";
+        }
+
+        return redirect()->route('blocked-websites.index')->with($flash);
     }
 
     /**
      * Display a listing of blocked websites.
-     * 
+     *
      * Route: GET /blocked-websites
-     * 
+     *
      * Shows all blocked websites for the authenticated user (all child devices).
      * Filterable by block_type.
-     * 
-     * @param Request $request HTTP request (may contain filter parameters)
+     *
+     * @param  Request  $request  HTTP request (may contain filter parameters)
      * @return View The blocked websites index view
      */
     public function index(Request $request): View
@@ -84,7 +115,7 @@ class BlockedWebsiteController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('domain', 'like', "%{$search}%")
-                  ->orWhere('url', 'like', "%{$search}%");
+                    ->orWhere('url', 'like', "%{$search}%");
             });
         }
 
@@ -96,9 +127,9 @@ class BlockedWebsiteController extends Controller
 
     /**
      * Show the form for creating a new blocked website.
-     * 
+     *
      * Route: GET /blocked-websites/create
-     * 
+     *
      * @return View The create blocked website form
      */
     public function create(): View
@@ -108,12 +139,12 @@ class BlockedWebsiteController extends Controller
 
     /**
      * Store a newly created blocked website.
-     * 
+     *
      * Route: POST /blocked-websites
-     * 
+     *
      * Creates a new blocked website and enforces DNS blocking.
-     * 
-     * @param StoreBlockedWebsiteRequest $request Validated form request
+     *
+     * @param  StoreBlockedWebsiteRequest  $request  Validated form request
      * @return RedirectResponse Redirect to index with success message
      */
     public function store(StoreBlockedWebsiteRequest $request): RedirectResponse
@@ -127,140 +158,121 @@ class BlockedWebsiteController extends Controller
                 $validated['domain'],
                 $request->input('app_name')
             );
-            
+
             // Merge with user-provided related domains
             $userRelatedDomains = $validated['related_domains'] ?? [];
             $validated['related_domains'] = array_unique(array_merge($relatedDomains, $userRelatedDomains));
         }
-        
+
         // Set defaults
         $validated['block_subdomains'] = $validated['block_subdomains'] ?? false;
-        
+
         // Create blocked website
         $blockedWebsite = BlockedWebsite::create($validated);
-        
-        // Enforce DNS blocking (only on Raspberry Pi, skip on local/testing)
-        // DNS blocking requires dnsmasq and shell scripts which don't work on Windows
-        try {
-            $dnsBlocked = $this->domainBlockingService->syncDnsmasqBlocklistForUser(Auth::user());
-            if (! $dnsBlocked) {
-                Log::warning('DNS blocking failed, but blocked website record created', [
-                    'blocked_website_id' => $blockedWebsite->id,
-                    'user_id' => Auth::id(),
-                ]);
-            }
-        } catch (\Exception $e) {
-            Log::warning('DNS blocking exception (expected on local/Windows): '.$e->getMessage(), [
+
+        $dnsOk = $this->runDnsSyncForCurrentUser();
+        if (! $dnsOk) {
+            Log::warning('DNS sync failed after create; blocked_website saved', [
                 'blocked_website_id' => $blockedWebsite->id,
                 'user_id' => Auth::id(),
             ]);
         }
-        
-        return redirect()->route('blocked-websites.index')
-            ->with('success', 'Website blocked successfully.');
+
+        return $this->redirectToIndexWithDnsNotice('Website blocked successfully.', $dnsOk, (int) Auth::id());
     }
 
     /**
      * Show the form for editing the specified blocked website.
-     * 
+     *
      * Route: GET /blocked-websites/{blockedWebsite}/edit
-     * 
-     * @param BlockedWebsite $blockedWebsite The blocked website to edit (route model binding)
+     *
+     * @param  BlockedWebsite  $blockedWebsite  The blocked website to edit (route model binding)
      * @return View The edit blocked website form
      */
     public function edit(BlockedWebsite $blockedWebsite): View
     {
         // Check authorization
         $this->authorize('update', $blockedWebsite);
-        
+
         return view('blocked-websites.edit', compact('blockedWebsite'));
     }
 
     /**
      * Update the specified blocked website.
-     * 
+     *
      * Route: PUT /blocked-websites/{blockedWebsite}
-     * 
+     *
      * Updates a blocked website and refreshes DNS blocking if domain changed.
-     * 
-     * @param UpdateBlockedWebsiteRequest $request Validated form request
-     * @param BlockedWebsite $blockedWebsite The blocked website to update (route model binding)
+     *
+     * @param  UpdateBlockedWebsiteRequest  $request  Validated form request
+     * @param  BlockedWebsite  $blockedWebsite  The blocked website to update (route model binding)
      * @return RedirectResponse Redirect to index with success message
      */
     public function update(UpdateBlockedWebsiteRequest $request, BlockedWebsite $blockedWebsite): RedirectResponse
     {
         // Check authorization
         $this->authorize('update', $blockedWebsite);
-        
+
         $validated = $request->validated();
 
         // Extract domain from URL if block_type is 'url'
         if ($validated['block_type'] === 'url' && isset($validated['url'])) {
             $validated['domain'] = $this->domainBlockingService->normalizeDomain($validated['url']);
         }
-        
+
         // Detect related domains if block_type is 'app'
         if ($validated['block_type'] === 'app' && isset($validated['domain'])) {
             $relatedDomains = $this->domainBlockingService->detectRelatedDomains(
                 $validated['domain'],
                 $request->input('app_name')
             );
-            
+
             // Merge with user-provided related domains
             $userRelatedDomains = $validated['related_domains'] ?? [];
             $validated['related_domains'] = array_unique(array_merge($relatedDomains, $userRelatedDomains));
         }
-        
+
         $blockedWebsite->update($validated);
 
-        $this->domainBlockingService->syncDnsmasqBlocklistForUser(Auth::user());
-        
-        return redirect()->route('blocked-websites.index')
-            ->with('success', 'Blocked website updated successfully.');
+        $dnsOk = $this->runDnsSyncForCurrentUser();
+
+        return $this->redirectToIndexWithDnsNotice('Blocked website updated successfully.', $dnsOk, (int) Auth::id());
     }
 
     /**
      * Remove the specified blocked website.
-     * 
+     *
      * Route: DELETE /blocked-websites/{blockedWebsite}
-     * 
+     *
      * Deletes a blocked website and removes DNS blocking.
-     * 
-     * @param BlockedWebsite $blockedWebsite The blocked website to delete (route model binding)
+     *
+     * @param  BlockedWebsite  $blockedWebsite  The blocked website to delete (route model binding)
      * @return RedirectResponse Redirect to index with success message
      */
     public function destroy(BlockedWebsite $blockedWebsite): RedirectResponse
     {
         // Check authorization
         $this->authorize('delete', $blockedWebsite);
-        
+
         $user = $blockedWebsite->user;
+        $parentUserId = (int) ($user?->id ?? Auth::id());
 
         $blockedWebsite->delete();
 
-        try {
-            if ($user) {
-                $this->domainBlockingService->syncDnsmasqBlocklistForUser($user);
-            }
-        } catch (\Exception $e) {
-            Log::warning('Failed to update dnsmasq blocklist after deletion', [
-                'error' => $e->getMessage(),
-            ]);
-        }
-        
-        return redirect()->route('blocked-websites.index')
-            ->with('success', 'Blocked website removed successfully.');
+        $dnsOk = $this->runDnsSyncForUser($user);
+
+        return $this->redirectToIndexWithDnsNotice('Blocked website removed successfully.', $dnsOk, $parentUserId);
     }
 
     /**
      * Suggest related domains for an app (AJAX endpoint).
-     * 
+     *
      * Route: POST /blocked-websites/suggest-domains
-     * 
+     *
      * Returns JSON array of related domains for a given domain/app name.
      * Used by frontend for auto-suggestion when blocking apps.
-     * 
-     * @param Request $request HTTP request (contains 'domain' or 'app_name')
+     *
+     * @param  Request  $request  HTTP request (contains 'domain' or 'app_name')
      * @return JsonResponse JSON array of related domains
      */
     public function suggestRelatedDomains(Request $request): JsonResponse
@@ -271,28 +283,28 @@ class BlockedWebsiteController extends Controller
                 'domain' => 'nullable|string|max:255',
                 'app_name' => 'nullable|string|max:255',
             ]);
-            
+
             $domain = $request->input('domain');
             $appName = $request->input('app_name');
-            
+
             // If no domain provided, return empty array
-            if (!$domain) {
+            if (! $domain) {
                 return response()->json(['domains' => []]);
             }
-            
+
             // If app_name provided but no domain, try to infer domain
-            if ($appName && !$domain) {
+            if ($appName && ! $domain) {
                 // Simple mapping (could be enhanced)
-                $domain = strtolower($appName) . '.com';
+                $domain = strtolower($appName).'.com';
             }
-            
-            if (!$domain) {
+
+            if (! $domain) {
                 return response()->json(['domains' => []]);
             }
-            
+
             // Detect related domains
             $relatedDomains = $this->domainBlockingService->detectRelatedDomains($domain, $appName);
-            
+
             return response()->json(['domains' => $relatedDomains]);
         } catch (\Illuminate\Validation\ValidationException $e) {
             // Return JSON validation errors instead of HTML
@@ -308,7 +320,7 @@ class BlockedWebsiteController extends Controller
                 'domain' => $request->input('domain'),
                 'app_name' => $request->input('app_name'),
             ]);
-            
+
             return response()->json([
                 'domains' => [],
                 'error' => 'An error occurred while fetching related domains',
@@ -318,10 +330,10 @@ class BlockedWebsiteController extends Controller
 
     /**
      * Bulk import blocked websites from CSV/JSON file.
-     * 
+     *
      * Route: POST /blocked-websites/bulk-import
-     * 
-     * @param Request $request HTTP request (contains file)
+     *
+     * @param  Request  $request  HTTP request (contains file)
      * @return RedirectResponse Redirect with import results
      */
     public function bulkImport(Request $request): RedirectResponse
@@ -329,20 +341,20 @@ class BlockedWebsiteController extends Controller
         $request->validate([
             'file' => 'required|file|mimes:csv,txt,json|max:10240', // 10MB max
         ]);
-        
+
         // TODO: Implement bulk import logic
         // This would parse CSV/JSON file and create multiple BlockedWebsite records
-        
+
         return redirect()->route('blocked-websites.index')
             ->with('success', 'Bulk import completed.');
     }
 
     /**
      * Export blocked websites to CSV/JSON.
-     * 
+     *
      * Route: GET /blocked-websites/export
-     * 
-     * @param Request $request HTTP request (may contain filters)
+     *
+     * @param  Request  $request  HTTP request (may contain filters)
      * @return \Symfony\Component\HttpFoundation\StreamedResponse CSV/JSON download
      */
     public function bulkExport(Request $request)
@@ -353,26 +365,26 @@ class BlockedWebsiteController extends Controller
         if ($request->filled('block_type')) {
             $query->where('block_type', $request->block_type);
         }
-        
+
         $blockedWebsites = $query->get();
-        
+
         $format = $request->input('format', 'csv');
-        
+
         if ($format === 'json') {
             return response()->json($blockedWebsites);
         }
-        
+
         // CSV export
-        $filename = 'blocked-websites-' . date('Y-m-d') . '.csv';
-        
+        $filename = 'blocked-websites-'.date('Y-m-d').'.csv';
+
         $headers = [
             'Content-Type' => 'text/csv',
             'Content-Disposition' => "attachment; filename=\"{$filename}\"",
         ];
-        
+
         $callback = function () use ($blockedWebsites) {
             $file = fopen('php://output', 'w');
-            
+
             // Header row
             fputcsv($file, ['URL', 'Domain', 'Block Type', 'Block Subdomains', 'Related Domains', 'Reason', 'Created At']);
 
@@ -388,10 +400,10 @@ class BlockedWebsiteController extends Controller
                     $blockedWebsite->created_at->format('Y-m-d H:i:s'),
                 ]);
             }
-            
+
             fclose($file);
         };
-        
+
         return response()->stream($callback, 200, $headers);
     }
 }

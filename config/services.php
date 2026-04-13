@@ -35,4 +35,15 @@ return [
         ],
     ],
 
+    /*
+    | When true, blocked-website actions show a flash if dnsmasq sync fails (e.g. missing sudoers).
+    | Defaults to false on Windows so local dev is not noisy; set DNSMASQ_WARN_WHEN_SYNC_FAILS=true to test.
+    */
+    'dnsmasq' => [
+        'warn_when_sync_fails' => env(
+            'DNSMASQ_WARN_WHEN_SYNC_FAILS',
+            PHP_OS_FAMILY !== 'Windows'
+        ),
+    ],
+
 ];
