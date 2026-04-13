@@ -2,8 +2,8 @@
 
 namespace Database\Factories;
 
-use App\Models\Device;
 use App\Models\FlaggedWebsite;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
@@ -32,7 +32,7 @@ class FlaggedWebsiteFactory extends Factory
         $url = 'https://' . $domain . '/' . fake()->slug();
 
         return [
-            'device_id' => Device::factory(),
+            'user_id' => User::factory(),
             'url' => $url,
             'domain' => $domain,
             'reason' => fake()->optional()->sentence(),

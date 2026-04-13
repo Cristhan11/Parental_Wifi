@@ -1,7 +1,7 @@
 {{-- 
     Flagged Websites: Index View
     
-    This view displays all flagged websites for the authenticated user's devices.
+    Household-wide flagged websites for the authenticated parent (all child devices).
     Flagged websites are monitored (not blocked) - they're allowed but logged when visited.
 --}}
 <x-app-layout>
@@ -55,18 +55,7 @@
 
             {{-- Filters --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">
-                <form method="GET" action="{{ route('flagged-websites.index') }}" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label for="device_id" class="block text-sm font-medium text-gray-700 mb-1">Device</label>
-                        <select name="device_id" id="device_id" class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                            <option value="">All Devices</option>
-                            @foreach($devices as $device)
-                                <option value="{{ $device->id }}" {{ request('device_id') == $device->id ? 'selected' : '' }}>
-                                    {{ $device->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                <form method="GET" action="{{ route('flagged-websites.index') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
                         <input type="text" name="search" id="search" value="{{ request('search') }}" 
@@ -89,7 +78,6 @@
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead class="bg-gray-50">
                                     <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
@@ -100,9 +88,6 @@
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     @foreach($flaggedWebsites as $flaggedWebsite)
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {{ $flaggedWebsite->device->name }}
-                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 <a href="{{ $flaggedWebsite->url }}" target="_blank" class="text-blue-600 hover:underline">
                                                     {{ Str::limit($flaggedWebsite->url, 50) }}

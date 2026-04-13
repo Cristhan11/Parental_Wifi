@@ -119,6 +119,7 @@ class ScriptExecutor
         'block_domain.sh',
         'unblock_domain.sh',
         'update_dnsmasq_blocklist.sh',
+        'update_dnsmasq_global_blocklist.sh',
     ];
 
     /**

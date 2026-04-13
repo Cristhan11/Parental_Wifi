@@ -19,9 +19,7 @@ use App\Models\User;
  *   like $this->authorize() in controllers
  * 
  * How It Works:
- * - Each method in this policy checks if the user owns the device that the
- *   blocked website belongs to
- * - Ownership is determined by checking if blockedWebsite->device->user_id === user->id
+ * - Each method checks that the blocked website belongs to the same parent account (user_id)
  * - If user owns device: return true (allow action)
  * - If user doesn't own device: return false (deny action)
  * 
@@ -62,7 +60,7 @@ class BlockedWebsitePolicy
     public function view(User $user, BlockedWebsite $blockedWebsite): bool
     {
         // Check if the device that this blocked website belongs to is owned by the user
-        return $blockedWebsite->device->user_id === $user->id;
+        return (int) $blockedWebsite->user_id === (int) $user->id;
     }
 
     /**
@@ -71,8 +69,7 @@ class BlockedWebsitePolicy
      * This method checks if a user can create new blocked websites. In our system,
      * all authenticated parents can create blocked websites for their own devices.
      * 
-     * Note: Device ownership is validated in the form request (StoreBlockedWebsiteRequest),
-     * so we just return true here. The form request ensures the device belongs to the user.
+     * Block list is always scoped to the authenticated parent account in the controller.
      * 
      * @param User $user The authenticated user (parent)
      * @return bool True if user can create blocked websites, false otherwise
@@ -97,7 +94,7 @@ class BlockedWebsitePolicy
     public function update(User $user, BlockedWebsite $blockedWebsite): bool
     {
         // Check if the device that this blocked website belongs to is owned by the user
-        return $blockedWebsite->device->user_id === $user->id;
+        return (int) $blockedWebsite->user_id === (int) $user->id;
     }
 
     /**
@@ -113,7 +110,7 @@ class BlockedWebsitePolicy
     public function delete(User $user, BlockedWebsite $blockedWebsite): bool
     {
         // Check if the device that this blocked website belongs to is owned by the user
-        return $blockedWebsite->device->user_id === $user->id;
+        return (int) $blockedWebsite->user_id === (int) $user->id;
     }
 }
 

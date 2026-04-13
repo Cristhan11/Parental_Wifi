@@ -537,23 +537,26 @@ class LogsController extends Controller
         $entries = collect();
 
         $blocked = BlockedWebsite::query()
-            ->with('device.user')
+            ->with('user')
             ->where(function ($query) use ($from, $to) {
                 $query->whereBetween('created_at', [$from, $to])
                     ->orWhereBetween('updated_at', [$from, $to]);
             });
 
-        if (!$isAdmin) {
-            $blocked->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
+        if (! $isAdmin) {
+            $blocked->where('user_id', Auth::id());
         }
         if ($deviceId) {
-            $blocked->where('device_id', $deviceId);
+            $filterDevice = Device::query()->find($deviceId);
+            if ($filterDevice) {
+                $blocked->where('user_id', $filterDevice->user_id);
+            }
         }
 
         // Project CRUD timestamps into human-readable policy-change events.
         $entries = $entries->merge($blocked->get()->flatMap(function (BlockedWebsite $item) use ($from, $to): array {
             $rows = [];
-            $actorRole = $item->device?->user?->role;
+            $actorRole = $item->user?->role;
 
             if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
                 $rows[] = [
@@ -563,16 +566,16 @@ class LogsController extends Controller
                     'event_type' => 'policy-change',
                     'status' => 'success',
                     'role' => $actorRole,
-                    'device_id' => $item->device_id,
-                    'device_name' => $item->device?->name,
+                    'device_id' => null,
+                    'device_name' => 'All child devices',
                     'target' => $item->domain,
-                    'summary' => "Blocked website added for {$item->device?->name}",
+                    'summary' => 'Blocked website added (all child devices)',
                 ];
             }
 
             if (
                 $item->updated_at &&
-                !$item->updated_at->equalTo($item->created_at) &&
+                ! $item->updated_at->equalTo($item->created_at) &&
                 Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
             ) {
                 $rows[] = [
@@ -582,10 +585,10 @@ class LogsController extends Controller
                     'event_type' => 'policy-change',
                     'status' => 'info',
                     'role' => $actorRole,
-                    'device_id' => $item->device_id,
-                    'device_name' => $item->device?->name,
+                    'device_id' => null,
+                    'device_name' => 'All child devices',
                     'target' => $item->domain,
-                    'summary' => "Blocked website updated for {$item->device?->name}",
+                    'summary' => 'Blocked website updated (all child devices)',
                 ];
             }
 
@@ -593,22 +596,25 @@ class LogsController extends Controller
         }));
 
         $flagged = FlaggedWebsite::query()
-            ->with('device.user')
+            ->with('user')
             ->where(function ($query) use ($from, $to) {
                 $query->whereBetween('created_at', [$from, $to])
                     ->orWhereBetween('updated_at', [$from, $to]);
             });
 
-        if (!$isAdmin) {
-            $flagged->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
+        if (! $isAdmin) {
+            $flagged->where('user_id', Auth::id());
         }
         if ($deviceId) {
-            $flagged->where('device_id', $deviceId);
+            $filterDevice = Device::query()->find($deviceId);
+            if ($filterDevice) {
+                $flagged->where('user_id', $filterDevice->user_id);
+            }
         }
 
         $entries = $entries->merge($flagged->get()->flatMap(function (FlaggedWebsite $item) use ($from, $to): array {
             $rows = [];
-            $actorRole = $item->device?->user?->role;
+            $actorRole = $item->user?->role;
 
             if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
                 $rows[] = [
@@ -618,16 +624,16 @@ class LogsController extends Controller
                     'event_type' => 'policy-change',
                     'status' => 'success',
                     'role' => $actorRole,
-                    'device_id' => $item->device_id,
-                    'device_name' => $item->device?->name,
+                    'device_id' => null,
+                    'device_name' => 'All child devices',
                     'target' => $item->domain,
-                    'summary' => "Flagged website added for {$item->device?->name}",
+                    'summary' => 'Flagged website added (all child devices)',
                 ];
             }
 
             if (
                 $item->updated_at &&
-                !$item->updated_at->equalTo($item->created_at) &&
+                ! $item->updated_at->equalTo($item->created_at) &&
                 Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
             ) {
                 $rows[] = [
@@ -637,10 +643,10 @@ class LogsController extends Controller
                     'event_type' => 'policy-change',
                     'status' => 'info',
                     'role' => $actorRole,
-                    'device_id' => $item->device_id,
-                    'device_name' => $item->device?->name,
+                    'device_id' => null,
+                    'device_name' => 'All child devices',
                     'target' => $item->domain,
-                    'summary' => "Flagged website updated for {$item->device?->name}",
+                    'summary' => 'Flagged website updated (all child devices)',
                 ];
             }
 

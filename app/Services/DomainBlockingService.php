@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\BlockedWebsite;
 use App\Models\Device;
+use App\Models\User;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -326,8 +327,8 @@ class DomainBlockingService
             // 2. Generate complete config file with all domains
             // 3. Reload dnsmasq once (with proper error handling)
             
-            // Update dnsmasq blocklist (regenerates from database, reloads once)
-            return $this->updateDnsmasqBlocklist($device);
+            // Regenerate global household blocklist from database (reloads dnsmasq once)
+            return $this->syncDnsmasqBlocklistForUser($blockedWebsite->user);
             
         } catch (\Exception $e) {
             Log::error("Exception while blocking domain for device", [
@@ -387,8 +388,7 @@ class DomainBlockingService
             // (see BlockedWebsiteController::destroy()), so updateDnsmasqBlocklist() will
             // regenerate the config without the deleted domains.
             
-            // Update dnsmasq blocklist (regenerates from database, reloads once)
-            return $this->updateDnsmasqBlocklist($device);
+            return $this->syncDnsmasqBlocklistForUser($blockedWebsite->user);
             
         } catch (\Exception $e) {
             Log::error("Exception while unblocking domain for device", [
@@ -396,6 +396,54 @@ class DomainBlockingService
                 'blocked_website_id' => $blockedWebsite->id,
                 'error' => $e->getMessage(),
             ]);
+            return false;
+        }
+    }
+
+    /**
+     * Regenerate dnsmasq blocklist for all blocked sites owned by this parent (household-wide).
+     *
+     * Writes a single include file and removes legacy per-MAC blocklist files; see
+     * scripts/update_dnsmasq_global_blocklist.sh.
+     */
+    public function syncDnsmasqBlocklistForUser(User $user): bool
+    {
+        try {
+            Log::info('Updating global dnsmasq blocklist for user', [
+                'user_id' => $user->id,
+            ]);
+
+            $blockedWebsites = BlockedWebsite::where('user_id', $user->id)->get();
+
+            $domainsInput = '';
+            foreach ($blockedWebsites as $blockedWebsite) {
+                $domainsToBlock = $blockedWebsite->getDomainsToBlock();
+                $blockSubdomains = $blockedWebsite->shouldBlockSubdomains() ? '1' : '0';
+
+                foreach ($domainsToBlock as $domain) {
+                    $domainsInput .= $domain.':'.$blockSubdomains."\n";
+                }
+            }
+
+            $result = $this->scriptExecutor->execute('update_dnsmasq_global_blocklist.sh', [], $domainsInput);
+
+            if (! $result['success']) {
+                Log::error('Failed to update global dnsmasq blocklist', [
+                    'user_id' => $user->id,
+                    'error' => $result['error'] ?? 'Unknown error',
+                    'output' => $result['output'] ?? '',
+                ]);
+
+                return false;
+            }
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error('Exception while updating global dnsmasq blocklist', [
+                'user_id' => $user->id,
+                'error' => $e->getMessage(),
+            ]);
+
             return false;
         }
     }
@@ -444,61 +492,14 @@ class DomainBlockingService
      */
     public function updateDnsmasqBlocklist(Device $device): bool
     {
-        try {
-            Log::info("Updating dnsmasq blocklist for device", [
-                'device_id' => $device->id,
-                'device_name' => $device->name,
-                'mac_address' => $device->mac_address,
-            ]);
-            
-            // Get all blocked websites for this device
-            $blockedWebsites = BlockedWebsite::where('device_id', $device->id)->get();
-            
-            // Format domains for script input: DOMAIN:BLOCK_SUBDOMAINS (one per line)
-            // The script expects format: domain.com:1 (1 = block subdomains, 0 = main domain only)
-            $domainsInput = '';
-            foreach ($blockedWebsites as $blockedWebsite) {
-                $domainsToBlock = $blockedWebsite->getDomainsToBlock();
-                $blockSubdomains = $blockedWebsite->shouldBlockSubdomains() ? '1' : '0';
-                
-                foreach ($domainsToBlock as $domain) {
-                    // Format: DOMAIN:BLOCK_SUBDOMAINS
-                    // Example: facebook.com:0 (blocks only facebook.com)
-                    // Example: facebook.com:1 (blocks facebook.com and *.facebook.com)
-                    $domainsInput .= $domain . ':' . $blockSubdomains . "\n";
-                }
-            }
-            
-            Log::debug("Domains to block for device", [
-                'device_id' => $device->id,
-                'domains_input' => trim($domainsInput),
-                'domain_count' => substr_count($domainsInput, "\n"),
-            ]);
-            
-            // Execute update_dnsmasq_blocklist.sh script with stdin input
-            // The script reads domains from stdin in format: DOMAIN:BLOCK_SUBDOMAINS
-            $result = $this->scriptExecutor->execute('update_dnsmasq_blocklist.sh', [
-                $device->mac_address,
-            ], $domainsInput);
-            
-            if (!$result['success']) {
-                Log::error("Failed to update dnsmasq blocklist for device", [
-                    'device_id' => $device->id,
-                    'error' => $result['error'] ?? 'Unknown error',
-                    'output' => $result['output'] ?? '',
-                ]);
-                return false;
-            }
-            
-            return true;
-            
-        } catch (\Exception $e) {
-            Log::error("Exception while updating dnsmasq blocklist for device", [
-                'device_id' => $device->id,
-                'error' => $e->getMessage(),
-            ]);
+        $user = $device->user;
+        if (! $user) {
+            Log::warning('updateDnsmasqBlocklist: device has no user', ['device_id' => $device->id]);
+
             return false;
         }
+
+        return $this->syncDnsmasqBlocklistForUser($user);
     }
 
     /**
@@ -530,8 +531,7 @@ class DomainBlockingService
     {
         $allDomains = [];
         
-        // Get all blocked websites for this device
-        $blockedWebsites = BlockedWebsite::where('device_id', $device->id)->get();
+        $blockedWebsites = BlockedWebsite::where('user_id', $device->user_id)->get();
         
         // Collect all domains (main + related)
         foreach ($blockedWebsites as $blockedWebsite) {

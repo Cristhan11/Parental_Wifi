@@ -25,7 +25,7 @@ class FlaggedAccessAttemptRecorderTest extends TestCase
         $device = Device::factory()->create(['user_id' => $user->id]);
 
         FlaggedWebsite::create([
-            'device_id' => $device->id,
+            'user_id' => $user->id,
             'url' => 'https://example.com/',
             'domain' => 'example.com',
             'reason' => null,
@@ -57,7 +57,7 @@ class FlaggedAccessAttemptRecorderTest extends TestCase
         $device = Device::factory()->create(['user_id' => $user->id]);
 
         FlaggedWebsite::create([
-            'device_id' => $device->id,
+            'user_id' => $user->id,
             'url' => 'https://news.test/',
             'domain' => 'news.test',
             'reason' => null,
@@ -93,7 +93,7 @@ class FlaggedAccessAttemptRecorderTest extends TestCase
         $device = Device::factory()->create(['user_id' => $user->id]);
 
         BlockedWebsite::create([
-            'device_id' => $device->id,
+            'user_id' => $user->id,
             'url' => null,
             'domain' => 'badsite.test',
             'reason' => null,
@@ -103,7 +103,7 @@ class FlaggedAccessAttemptRecorderTest extends TestCase
         ]);
 
         FlaggedWebsite::create([
-            'device_id' => $device->id,
+            'user_id' => $user->id,
             'url' => 'https://badsite.test/',
             'domain' => 'badsite.test',
             'reason' => null,

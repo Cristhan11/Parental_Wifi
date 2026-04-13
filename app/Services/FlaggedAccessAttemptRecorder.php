@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * When network log parsing sees a DNS/TCP query for a hostname, record a flagged-site visit
- * if that hostname matches a {@see FlaggedWebsite} for the device (and the host is not blocked).
+ * if that hostname matches a household {@see FlaggedWebsite} for the device's parent (and the host is not blocked).
  *
  * Creates {@see AccessAttempt} with type {@code flagged_website}, which fires
  * {@see \App\Events\FlaggedWebsiteVisited} and immediate digest reporting.
@@ -43,7 +43,7 @@ class FlaggedAccessAttemptRecorder
         }
 
         $flaggedWebsites = FlaggedWebsite::query()
-            ->where('device_id', $device->id)
+            ->where('user_id', $device->user_id)
             ->get();
 
         if ($flaggedWebsites->isEmpty()) {

@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Flagged Website Model
  * 
- * Stores websites that parents want to monitor/flag (not block).
+ * Stores websites parents monitor for all child devices (household-wide list per user).
  */
 class FlaggedWebsite extends Model
 {
@@ -21,28 +21,18 @@ class FlaggedWebsite extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'device_id',
+        'user_id',
         'url',
         'domain',
         'reason',
     ];
 
     /**
-     * Get the device this flagged website belongs to.
-     * 
-     * Relationship: belongsTo - One flagged website belongs to one device
-     * 
-     * Usage Example:
-     * $flagged = FlaggedWebsite::find(1);
-     * $device = $flagged->device; // Gets the Device this site is flagged for
-     * echo "Website '{$flagged->url}' is flagged (monitored) for device: {$device->name}";
-     * 
-     * // When child visits this site, allow access but log it and notify parent
-     * // Flagged sites are allowed but monitored, unlike blocked sites
+     * Parent account that owns this flag rule (applies to all of their child devices).
      */
-    public function device(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(Device::class);
+        return $this->belongsTo(User::class);
     }
 }
 

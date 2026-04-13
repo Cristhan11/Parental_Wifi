@@ -341,7 +341,7 @@ class TestWebsiteManagement extends Command
             if ($device) {
                 // Create a test blocked website
                 $blockedWebsite = BlockedWebsite::create([
-                    'device_id' => $device->id,
+                    'user_id' => $device->user_id,
                     'url' => null, // URL not needed for domain/app blocking
                     'domain' => 'test-' . time() . '.com',
                     'block_type' => 'domain',
@@ -356,7 +356,7 @@ class TestWebsiteManagement extends Command
                     
                     // Test app-level blocking with related domains
                     $appBlock = BlockedWebsite::create([
-                        'device_id' => $device->id,
+                        'user_id' => $device->user_id,
                         'url' => null, // URL not needed for domain/app blocking
                         'domain' => 'test-app-' . time() . '.com',
                         'block_type' => 'app',

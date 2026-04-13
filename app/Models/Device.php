@@ -117,39 +117,6 @@ class Device extends Model
     }
 
     /**
-     * Get all blocked websites for this device.
-     * 
-     * Relationship: hasMany - One device can have many blocked websites
-     * 
-     * Usage Example:
-     * $device = Device::find(1);
-     * $blocked = $device->blockedWebsites; // Collection of BlockedWebsite models
-     * foreach ($blocked as $site) {
-     *     echo $site->url; // "https://facebook.com"
-     *     echo $site->domain; // "facebook.com"
-     * }
-     */
-    public function blockedWebsites(): HasMany
-    {
-        return $this->hasMany(BlockedWebsite::class);
-    }
-
-    /**
-     * Get all flagged websites for this device.
-     * 
-     * Relationship: hasMany - One device can have many flagged websites
-     * 
-     * Usage Example:
-     * $device = Device::find(1);
-     * $flagged = $device->flaggedWebsites; // Websites to monitor (not block)
-     * // Flagged sites are allowed but logged for parent review
-     */
-    public function flaggedWebsites(): HasMany
-    {
-        return $this->hasMany(FlaggedWebsite::class);
-    }
-
-    /**
      * Get all schedules for this device.
      * 
      * Relationship: hasMany - One device can have many time schedules

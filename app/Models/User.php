@@ -70,6 +70,22 @@ class User extends Authenticatable
     }
 
     /**
+     * Blocked websites for this parent (apply to all child devices).
+     */
+    public function blockedWebsites(): HasMany
+    {
+        return $this->hasMany(BlockedWebsite::class);
+    }
+
+    /**
+     * Flagged websites for this parent (monitoring applies to all child devices).
+     */
+    public function flaggedWebsites(): HasMany
+    {
+        return $this->hasMany(FlaggedWebsite::class);
+    }
+
+    /**
      * Get all quizzes created by this user (parent).
      * 
      * Relationship: hasMany - One user can create many quizzes

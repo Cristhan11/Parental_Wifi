@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Log;
 
 /**
  * When network log parsing sees a DNS/TCP query for a hostname, record a blocked-site access attempt
- * if that hostname matches a {@see BlockedWebsite} rule for the device.
+ * if that hostname matches a {@see BlockedWebsite} rule for the device's parent (household block list).
  *
  * This bridges DNS-level blocking to {@see AccessAttempt}, which fires {@see \App\Events\BlockedWebsiteAccessed}
  * and therefore immediate parent email + websocket alerts.
@@ -35,7 +35,7 @@ class BlockedAccessAttemptRecorder
         }
 
         $blockedWebsites = BlockedWebsite::query()
-            ->where('device_id', $device->id)
+            ->where('user_id', $device->user_id)
             ->get();
 
         if ($blockedWebsites->isEmpty()) {
@@ -82,7 +82,7 @@ class BlockedAccessAttemptRecorder
     }
 
     /**
-     * True when any {@see BlockedWebsite} rule on the device covers this hostname (e.g. for skipping flagged alerts).
+     * True when any household {@see BlockedWebsite} rule covers this hostname (e.g. for skipping flagged alerts).
      */
     public function hostMatchesAnyBlock(Device $device, string $domainFromLog): bool
     {
@@ -92,7 +92,7 @@ class BlockedAccessAttemptRecorder
         }
 
         $blockedWebsites = BlockedWebsite::query()
-            ->where('device_id', $device->id)
+            ->where('user_id', $device->user_id)
             ->get();
 
         foreach ($blockedWebsites as $rule) {

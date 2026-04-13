@@ -1,8 +1,8 @@
 {{-- 
     Blocked Websites: Index View
     
-    This view displays all blocked websites for the authenticated user's devices.
-    Shows table with filters by device and block_type, search functionality,
+    Household-wide blocked websites for the authenticated parent.
+    Filters by block_type and search; applies to all child devices.
     and displays blocking type indicators and related domains.
 --}}
 <x-app-layout>
@@ -48,18 +48,7 @@
 
             {{-- Filters --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">
-                <form method="GET" action="{{ route('blocked-websites.index') }}" class="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div>
-                        <label for="device_id" class="block text-sm font-medium text-gray-700 mb-1">Device</label>
-                        <select name="device_id" id="device_id" class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                            <option value="">All Devices</option>
-                            @foreach($devices as $device)
-                                <option value="{{ $device->id }}" {{ request('device_id') == $device->id ? 'selected' : '' }}>
-                                    {{ $device->name }}
-                                </option>
-                            @endforeach
-                        </select>
-                    </div>
+                <form method="GET" action="{{ route('blocked-websites.index') }}" class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <label for="block_type" class="block text-sm font-medium text-gray-700 mb-1">Block Type</label>
                         <select name="block_type" id="block_type" class="w-full px-3 py-2 border border-gray-300 rounded-md">
@@ -90,7 +79,6 @@
                             <table class="min-w-full divide-y divide-gray-200">
                                 <thead class="bg-gray-50">
                                     <tr>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Device</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Block Type</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subdomains</th>
@@ -102,9 +90,6 @@
                                 <tbody class="bg-white divide-y divide-gray-200">
                                     @foreach($blockedWebsites as $blockedWebsite)
                                         <tr>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {{ $blockedWebsite->device->name }}
-                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 <span class="font-mono">{{ $blockedWebsite->domain }}</span>
                                             </td>

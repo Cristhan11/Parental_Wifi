@@ -5,7 +5,6 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreBlockedWebsiteRequest;
 use App\Http\Requests\UpdateBlockedWebsiteRequest;
 use App\Models\BlockedWebsite;
-use App\Models\Device;
 use App\Services\DomainBlockingService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
@@ -23,7 +22,7 @@ use Illuminate\View\View;
  * DNS enforcement via DomainBlockingService.
  * 
  * Key Responsibilities:
- * 1. List blocked websites (filterable by device, block_type)
+ * 1. List blocked websites (household-wide; filterable by block_type)
  * 2. Create new blocked websites (URL/Domain/App-level blocking)
  * 3. Update existing blocked websites
  * 4. Delete blocked websites
@@ -32,7 +31,7 @@ use Illuminate\View\View;
  * 
  * Authorization:
  * - All methods require authentication (user must be logged in)
- * - BlockedWebsitePolicy ensures users can only manage websites for their own devices
+ * - BlockedWebsitePolicy ensures users can only manage their own household block list
  * - Uses $this->authorize() to check permissions before operations
  * 
  * Integration Points:
@@ -65,26 +64,15 @@ class BlockedWebsiteController extends Controller
      * 
      * Route: GET /blocked-websites
      * 
-     * Shows all blocked websites for the authenticated user's devices.
-     * Filterable by device and block_type.
+     * Shows all blocked websites for the authenticated user (all child devices).
+     * Filterable by block_type.
      * 
      * @param Request $request HTTP request (may contain filter parameters)
      * @return View The blocked websites index view
      */
     public function index(Request $request): View
     {
-        // Get all devices for the authenticated user
-        $devices = Auth::user()->devices()->orderBy('name')->get();
-
-        // Build query for blocked websites
-        $query = BlockedWebsite::whereHas('device', function ($q) {
-            $q->where('user_id', Auth::id());
-        })->with('device');
-
-        // Filter by device if provided
-        if ($request->filled('device_id')) {
-            $query->where('device_id', $request->device_id);
-        }
+        $query = BlockedWebsite::where('user_id', Auth::id());
 
         // Filter by block_type if provided
         if ($request->filled('block_type')) {
@@ -103,7 +91,7 @@ class BlockedWebsiteController extends Controller
         // Order by created date (newest first)
         $blockedWebsites = $query->orderBy('created_at', 'desc')->paginate(20);
 
-        return view('blocked-websites.index', compact('blockedWebsites', 'devices'));
+        return view('blocked-websites.index', compact('blockedWebsites'));
     }
 
     /**
@@ -115,10 +103,7 @@ class BlockedWebsiteController extends Controller
      */
     public function create(): View
     {
-        // Get all devices for the authenticated user
-        $devices = Auth::user()->devices()->orderBy('name')->get();
-
-        return view('blocked-websites.create', compact('devices'));
+        return view('blocked-websites.create');
     }
 
     /**
@@ -134,10 +119,8 @@ class BlockedWebsiteController extends Controller
     public function store(StoreBlockedWebsiteRequest $request): RedirectResponse
     {
         $validated = $request->validated();
-        
-        // Get device
-        $device = Device::findOrFail($validated['device_id']);
-        
+        $validated['user_id'] = Auth::id();
+
         // Detect related domains if block_type is 'app'
         if ($validated['block_type'] === 'app' && isset($validated['domain'])) {
             $relatedDomains = $this->domainBlockingService->detectRelatedDomains(
@@ -159,21 +142,17 @@ class BlockedWebsiteController extends Controller
         // Enforce DNS blocking (only on Raspberry Pi, skip on local/testing)
         // DNS blocking requires dnsmasq and shell scripts which don't work on Windows
         try {
-            $dnsBlocked = $this->domainBlockingService->blockDomainForDevice($blockedWebsite, $device);
-            if (!$dnsBlocked) {
-                // DNS blocking failed, but record is still created
-                // This is okay for local testing - DNS blocking will work on Raspberry Pi
-                Log::warning("DNS blocking failed, but blocked website record created", [
+            $dnsBlocked = $this->domainBlockingService->syncDnsmasqBlocklistForUser(Auth::user());
+            if (! $dnsBlocked) {
+                Log::warning('DNS blocking failed, but blocked website record created', [
                     'blocked_website_id' => $blockedWebsite->id,
-                    'device_id' => $device->id,
+                    'user_id' => Auth::id(),
                 ]);
             }
         } catch (\Exception $e) {
-            // DNS blocking failed (likely on local/Windows environment)
-            // Still allow the record to be created for local testing
-            Log::warning("DNS blocking exception (expected on local/Windows): " . $e->getMessage(), [
+            Log::warning('DNS blocking exception (expected on local/Windows): '.$e->getMessage(), [
                 'blocked_website_id' => $blockedWebsite->id,
-                'device_id' => $device->id,
+                'user_id' => Auth::id(),
             ]);
         }
         
@@ -194,10 +173,7 @@ class BlockedWebsiteController extends Controller
         // Check authorization
         $this->authorize('update', $blockedWebsite);
         
-        // Get all devices for the authenticated user
-        $devices = Auth::user()->devices()->orderBy('name')->get();
-        
-        return view('blocked-websites.edit', compact('blockedWebsite', 'devices'));
+        return view('blocked-websites.edit', compact('blockedWebsite'));
     }
 
     /**
@@ -217,13 +193,7 @@ class BlockedWebsiteController extends Controller
         $this->authorize('update', $blockedWebsite);
         
         $validated = $request->validated();
-        
-        // Get device
-        $device = $blockedWebsite->device;
-        
-        // Check if domain changed (need to update DNS blocking)
-        $domainChanged = $blockedWebsite->domain !== ($validated['domain'] ?? $blockedWebsite->domain);
-        
+
         // Extract domain from URL if block_type is 'url'
         if ($validated['block_type'] === 'url' && isset($validated['url'])) {
             $validated['domain'] = $this->domainBlockingService->normalizeDomain($validated['url']);
@@ -241,13 +211,9 @@ class BlockedWebsiteController extends Controller
             $validated['related_domains'] = array_unique(array_merge($relatedDomains, $userRelatedDomains));
         }
         
-        // Update blocked website
         $blockedWebsite->update($validated);
-        
-        // Update DNS blocking if domain changed or if it's a new block
-        if ($domainChanged || $blockedWebsite->wasRecentlyCreated) {
-            $this->domainBlockingService->updateDnsmasqBlocklist($device);
-        }
+
+        $this->domainBlockingService->syncDnsmasqBlocklistForUser(Auth::user());
         
         return redirect()->route('blocked-websites.index')
             ->with('success', 'Blocked website updated successfully.');
@@ -268,22 +234,16 @@ class BlockedWebsiteController extends Controller
         // Check authorization
         $this->authorize('delete', $blockedWebsite);
         
-        // Get device before deletion
-        $device = $blockedWebsite->device;
-        
-        // Delete blocked website from database first
+        $user = $blockedWebsite->user;
+
         $blockedWebsite->delete();
-        
-        // Update dnsmasq blocklist to regenerate from database
-        // This ensures the config file matches the database state after deletion
-        // If no domains remain, the config file will be removed or emptied
+
         try {
-            $this->domainBlockingService->updateDnsmasqBlocklist($device);
+            if ($user) {
+                $this->domainBlockingService->syncDnsmasqBlocklistForUser($user);
+            }
         } catch (\Exception $e) {
-            // Log error but don't fail the deletion
-            // Database deletion succeeded, DNS update is secondary
-            Log::warning("Failed to update dnsmasq blocklist after deletion", [
-                'device_id' => $device->id,
+            Log::warning('Failed to update dnsmasq blocklist after deletion', [
                 'error' => $e->getMessage(),
             ]);
         }
@@ -388,15 +348,8 @@ class BlockedWebsiteController extends Controller
     public function bulkExport(Request $request)
     {
         // Build query (same as index)
-        $query = BlockedWebsite::whereHas('device', function ($q) {
-            $q->where('user_id', Auth::id());
-        })->with('device');
-        
-        // Apply filters
-        if ($request->filled('device_id')) {
-            $query->where('device_id', $request->device_id);
-        }
-        
+        $query = BlockedWebsite::where('user_id', Auth::id());
+
         if ($request->filled('block_type')) {
             $query->where('block_type', $request->block_type);
         }
@@ -421,12 +374,11 @@ class BlockedWebsiteController extends Controller
             $file = fopen('php://output', 'w');
             
             // Header row
-            fputcsv($file, ['Device', 'URL', 'Domain', 'Block Type', 'Block Subdomains', 'Related Domains', 'Reason', 'Created At']);
-            
+            fputcsv($file, ['URL', 'Domain', 'Block Type', 'Block Subdomains', 'Related Domains', 'Reason', 'Created At']);
+
             // Data rows
             foreach ($blockedWebsites as $blockedWebsite) {
                 fputcsv($file, [
-                    $blockedWebsite->device->name,
                     $blockedWebsite->url,
                     $blockedWebsite->domain,
                     $blockedWebsite->block_type,

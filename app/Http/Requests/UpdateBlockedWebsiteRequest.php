@@ -2,7 +2,6 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Device;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -58,20 +57,6 @@ class UpdateBlockedWebsiteRequest extends FormRequest
         $blockType = $this->input('block_type', 'domain');
         
         return [
-            // Device ID - required, must exist in devices table, user must own device
-            'device_id' => [
-                'required',
-                'integer',
-                'exists:devices,id',
-                function ($attribute, $value, $fail) {
-                    // Check if user owns the device
-                    $device = Device::find($value);
-                    if ($device && $device->user_id !== $this->user()->id) {
-                        $fail('You can only block websites for your own devices.');
-                    }
-                },
-            ],
-
             // Domain - required if block_type is 'domain' or 'app', must be valid domain format
             'domain' => [
                 Rule::requiredIf(in_array($blockType, ['domain', 'app'])),
@@ -123,10 +108,6 @@ class UpdateBlockedWebsiteRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'device_id.required' => 'Please select a device.',
-            'device_id.exists' => 'The selected device does not exist.',
-            'device_id.integer' => 'Device ID must be a valid number.',
-
             'domain.required' => 'Domain is required.',
             'domain.regex' => 'Please enter a valid domain name (e.g., example.com).',
             'domain.max' => 'Domain cannot exceed 255 characters.',

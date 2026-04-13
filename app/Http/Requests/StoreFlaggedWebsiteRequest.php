@@ -2,92 +2,50 @@
 
 namespace App\Http\Requests;
 
-use App\Models\Device;
 use App\Models\FlaggedWebsite;
 use App\Services\DomainBlockingService;
 use Illuminate\Foundation\Http\FormRequest;
 
 /**
  * Store Flagged Website Request
- * 
- * This form request handles validation for creating new flagged websites.
- * Flagged websites are monitored (not blocked) - they're allowed but logged.
- * 
- * Validation Rules:
- * - device_id: Required, must exist in devices table, user must own the device
- * - url: Required, must be valid URL format
- * - domain: Auto-extracted from URL (not required in form)
- * - reason: Optional, string, max 500 characters
+ *
+ * Validation for creating flagged websites (household-wide per parent user).
  */
 class StoreFlaggedWebsiteRequest extends FormRequest
 {
-    /**
-     * Determine if the user is authorized to make this request.
-     * 
-     * @return bool True if user can create flagged websites, false otherwise
-     */
     public function authorize(): bool
     {
-        // All authenticated users (parents) can create flagged websites
-        // Device ownership is validated in rules() method
         return true;
     }
 
-    /**
-     * Get the validation rules that apply to the request.
-     * 
-     * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array|string>
-     */
     public function rules(): array
     {
         return [
-            // Device ID - required, must exist in devices table, user must own device
-            'device_id' => [
-                'required',
-                'integer',
-                'exists:devices,id',
-                function ($attribute, $value, $fail) {
-                    // Check if user owns the device
-                    $device = Device::find($value);
-                    $user = $this->user();
-                    if ($device && $user && $device->user_id !== $user->id) {
-                        $fail('You can only flag websites for your own devices.');
-                    }
-                },
-            ],
-
-            // URL - required, must be valid URL format
             'url' => [
                 'required',
                 'string',
                 'url',
                 'max:500',
                 function ($attribute, $value, $fail) {
-                    // Check for unique domain constraint
-                    // Domain is extracted in controller, but we need to check here
-                    // to provide better error message
                     try {
                         $domainBlockingService = app(DomainBlockingService::class);
                         $domain = $domainBlockingService->normalizeDomain($value);
-                        
-                        $deviceId = $this->input('device_id');
-                        if ($deviceId) {
-                            $exists = FlaggedWebsite::where('device_id', $deviceId)
+                        $user = $this->user();
+                        if ($user && $domain !== '') {
+                            $exists = FlaggedWebsite::where('user_id', $user->id)
                                 ->where('domain', $domain)
                                 ->exists();
-                            
+
                             if ($exists) {
-                                $fail('This domain is already flagged for this device.');
+                                $fail('This domain is already flagged for your household.');
                             }
                         }
                     } catch (\Exception $e) {
-                        // Ignore errors during validation (e.g., invalid URL format)
-                        // The 'url' rule will catch invalid URLs
+                        // Invalid URL handled by url rule
                     }
                 },
             ],
 
-            // Reason - optional, string, max 500 characters
             'reason' => [
                 'nullable',
                 'string',
@@ -96,18 +54,9 @@ class StoreFlaggedWebsiteRequest extends FormRequest
         ];
     }
 
-    /**
-     * Get custom error messages for validation rules.
-     * 
-     * @return array<string, string>
-     */
     public function messages(): array
     {
         return [
-            'device_id.required' => 'Please select a device.',
-            'device_id.exists' => 'The selected device does not exist.',
-            'device_id.integer' => 'Device ID must be a valid number.',
-
             'url.required' => 'URL is required.',
             'url.url' => 'Please enter a valid URL (e.g., https://example.com).',
             'url.max' => 'URL cannot exceed 500 characters.',
@@ -116,4 +65,3 @@ class StoreFlaggedWebsiteRequest extends FormRequest
         ];
     }
 }
-

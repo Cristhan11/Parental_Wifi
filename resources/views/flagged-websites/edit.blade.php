@@ -27,22 +27,6 @@
                         @csrf
                         @method('PUT')
 
-                        {{-- Device Selection --}}
-                        <div class="mb-6">
-                            <label for="device_id" class="block text-sm font-medium text-gray-700 mb-2">Device *</label>
-                            <select name="device_id" id="device_id" required
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
-                                @foreach($devices as $device)
-                                    <option value="{{ $device->id }}" {{ old('device_id', $flaggedWebsite->device_id) == $device->id ? 'selected' : '' }}>
-                                        {{ $device->name }} ({{ $device->mac_address }})
-                                    </option>
-                                @endforeach
-                            </select>
-                            @error('device_id')
-                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                            @enderror
-                        </div>
-
                         {{-- URL Input --}}
                         <div class="mb-6">
                             <label for="url" class="block text-sm font-medium text-gray-700 mb-2">URL *</label>

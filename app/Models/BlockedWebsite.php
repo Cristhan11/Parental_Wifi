@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 /**
  * Blocked Website Model
  * 
- * Stores websites that parents want to block for specific devices.
+ * Stores websites blocked for all of a parent's child devices (household-wide list per user).
  * Supports three types of blocking:
  * - URL-level: Block specific URLs (e.g., https://facebook.com/page)
  * - Domain-level: Block entire domain + subdomains (e.g., facebook.com blocks *.facebook.com)
@@ -32,7 +32,7 @@ class BlockedWebsite extends Model
      * @var array<int, string>
      */
     protected $fillable = [
-        'device_id',
+        'user_id',
         'url',
         'domain',
         'reason',
@@ -59,20 +59,11 @@ class BlockedWebsite extends Model
     }
 
     /**
-     * Get the device this blocked website belongs to.
-     * 
-     * Relationship: belongsTo - One blocked website belongs to one device
-     * 
-     * Usage Example:
-     * $blocked = BlockedWebsite::find(1);
-     * $device = $blocked->device; // Gets the Device this site is blocked for
-     * echo "Website '{$blocked->url}' is blocked for device: {$device->name}";
-     * 
-     * // When child tries to access this site, block them and log access attempt
+     * Parent account that owns this block rule (applies to all of their child devices).
      */
-    public function device(): BelongsTo
+    public function user(): BelongsTo
     {
-        return $this->belongsTo(Device::class);
+        return $this->belongsTo(User::class);
     }
 
     /**

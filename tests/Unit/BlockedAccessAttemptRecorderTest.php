@@ -23,7 +23,7 @@ class BlockedAccessAttemptRecorderTest extends TestCase
         $device = Device::factory()->create(['user_id' => $user->id]);
 
         BlockedWebsite::create([
-            'device_id' => $device->id,
+            'user_id' => $user->id,
             'url' => null,
             'domain' => 'youtube.com',
             'reason' => null,
@@ -58,7 +58,7 @@ class BlockedAccessAttemptRecorderTest extends TestCase
         $device = Device::factory()->create(['user_id' => $user->id]);
 
         BlockedWebsite::create([
-            'device_id' => $device->id,
+            'user_id' => $user->id,
             'url' => null,
             'domain' => 'facebook.com',
             'reason' => null,
