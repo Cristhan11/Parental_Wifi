@@ -1,0 +1,500 @@
+/**
+ * Parent/auth pages — same-host only (no CDN). For dashboard login on local gateway / captive.
+ */
+:root {
+    --auth-cream: #ffffcc;
+    --auth-yellow: #ffde15;
+    --auth-yellow-dark: #ffc107;
+    --auth-black: #111;
+    --auth-muted: #666;
+    --auth-border: #e5e7eb;
+    --auth-red: #c9282d;
+    --auth-green: #16a34a;
+    --touch-min: 48px;
+}
+
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
+html {
+    -webkit-text-size-adjust: 100%;
+}
+
+/* —— Dashboard login (split layout) —— */
+.login-page {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif;
+    color: var(--auth-black);
+    line-height: 1.5;
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.08);
+}
+
+.login-page a,
+.login-page button {
+    touch-action: manipulation;
+}
+
+.login-split {
+    display: flex;
+    flex-direction: column-reverse;
+    min-height: 100vh;
+    width: 100%;
+}
+
+@media (min-width: 1024px) {
+    .login-split {
+        flex-direction: row;
+    }
+}
+
+.login-form-col {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem;
+    background: var(--auth-cream);
+}
+
+.login-form-card {
+    width: 100%;
+    max-width: 28rem;
+    background: #fff;
+    border-radius: 12px;
+    border: 4px solid var(--auth-yellow);
+    padding: 2rem 1.5rem;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.12);
+}
+
+.login-logo-wrap {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 1.5rem;
+}
+
+.login-logo {
+    width: 4rem;
+    height: 4rem;
+    display: block;
+    color: var(--auth-yellow);
+}
+
+.login-heading {
+    margin: 0 0 0.35rem;
+    font-size: clamp(1.65rem, 4vw, 1.85rem);
+    font-weight: 800;
+    text-align: center;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.login-lead {
+    margin: 0 0 1.5rem;
+    text-align: center;
+    font-weight: 600;
+    color: var(--auth-muted);
+    font-size: 0.95rem;
+}
+
+.login-alert {
+    margin-bottom: 1rem;
+    padding: 0.85rem 1rem;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 600;
+}
+
+.login-alert--ok {
+    background: #dcfce7;
+    border: 2px solid #4ade80;
+    color: #166534;
+}
+
+.login-alert--err {
+    background: #fee2e2;
+    border: 2px solid #f87171;
+    color: #991b1b;
+}
+
+.login-alert--err ul {
+    margin: 0.35rem 0 0;
+    padding-left: 1.25rem;
+}
+
+.login-form-fields > * + * {
+    margin-top: 1.25rem;
+}
+
+.login-label {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: var(--auth-black);
+    margin-bottom: 0.35rem;
+}
+
+.login-input-shell {
+    display: flex;
+    align-items: center;
+    gap: 0.65rem;
+    border: 2px solid var(--auth-yellow);
+    border-radius: 9999px;
+    padding: 0.5rem 1rem;
+    min-height: var(--touch-min);
+    background: #fff;
+}
+
+.login-input-shell:focus-within {
+    outline: 2px solid var(--auth-yellow);
+    outline-offset: 2px;
+}
+
+.login-input-icon {
+    width: 1.35rem;
+    height: 1.35rem;
+    flex-shrink: 0;
+    color: var(--auth-yellow);
+}
+
+.login-input-shell input {
+    flex: 1;
+    min-width: 0;
+    border: none;
+    background: transparent;
+    font-size: 1rem;
+    font-weight: 500;
+    outline: none;
+}
+
+.login-input-shell input::placeholder {
+    color: #9ca3af;
+}
+
+.login-field-error {
+    margin: 0.35rem 0 0 0.75rem;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--auth-red);
+}
+
+.login-remember {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.login-remember input {
+    width: 1.1rem;
+    height: 1.1rem;
+    accent-color: var(--auth-yellow);
+}
+
+.login-remember label {
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.login-submit {
+    width: 100%;
+    margin-top: 0.25rem;
+    min-height: var(--touch-min);
+    border: none;
+    border-radius: 9999px;
+    background: var(--auth-yellow);
+    color: var(--auth-black);
+    font-size: 1rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.login-submit:hover {
+    background: var(--auth-yellow-dark);
+}
+
+.login-submit:active {
+    transform: scale(0.99);
+}
+
+.login-submit:focus-visible {
+    outline: 3px solid var(--auth-black);
+    outline-offset: 2px;
+}
+
+.login-brand-col {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(145deg, var(--auth-yellow) 0%, var(--auth-yellow-dark) 100%);
+    color: var(--auth-black);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1.5rem;
+    text-align: center;
+}
+
+/* Decorative cubes (pure CSS, offline) */
+.login-brand-col::before,
+.login-brand-col::after {
+    content: "";
+    position: absolute;
+    width: min(45vw, 220px);
+    height: min(45vw, 220px);
+    border: 5px solid rgba(0, 0, 0, 0.2);
+    border-radius: 12px;
+    transform: rotate(-12deg) skewX(-6deg);
+    bottom: -8%;
+    pointer-events: none;
+    opacity: 0.55;
+}
+
+.login-brand-col::before {
+    left: -5%;
+}
+
+.login-brand-col::after {
+    right: -8%;
+    transform: rotate(18deg) skewX(8deg);
+    bottom: -12%;
+}
+
+.login-brand-inner {
+    position: relative;
+    z-index: 1;
+    max-width: 28rem;
+}
+
+.login-brand-logo {
+    width: 8rem;
+    height: 8rem;
+    margin: 0 auto 1.5rem;
+    display: block;
+    color: #000;
+}
+
+.login-brand-title {
+    margin: 0 0 0.75rem;
+    font-size: clamp(1.75rem, 5vw, 2.75rem);
+    font-weight: 800;
+    line-height: 1.15;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.login-brand-tagline {
+    margin: 0 0 1rem;
+    font-size: clamp(1.05rem, 3vw, 1.35rem);
+    font-weight: 700;
+}
+
+.login-brand-copy {
+    margin: 0;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: rgba(0, 0, 0, 0.72);
+    line-height: 1.45;
+}
+
+/* —— Guest layout (register, forgot password, etc.) —— */
+.guest-auth {
+    margin: 0;
+    min-height: 100vh;
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, Ubuntu, "Helvetica Neue", sans-serif;
+    color: var(--auth-black);
+    -webkit-tap-highlight-color: rgba(0, 0, 0, 0.08);
+}
+
+.guest-shell {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 1.5rem 1rem;
+}
+
+.guest-shell > div:first-child a {
+    display: inline-block;
+    line-height: 0;
+}
+
+.guest-logo-sm {
+    width: 5rem;
+    height: 5rem;
+    display: block;
+}
+
+.guest-card {
+    width: 100%;
+    max-width: 28rem;
+    margin-top: 1.5rem;
+    padding: 1.5rem 1.5rem;
+    background: #fff;
+    border-radius: 10px;
+    border: 1px solid var(--auth-border);
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+}
+
+.guest-card .mb-6 {
+    margin-bottom: 1.5rem;
+}
+
+.guest-card .mb-4 {
+    margin-bottom: 1rem;
+}
+
+.guest-card .mt-2 {
+    margin-top: 0.5rem;
+}
+
+.guest-card .mt-4 {
+    margin-top: 1rem;
+}
+
+.guest-card .mt-6 {
+    margin-top: 1.5rem;
+}
+
+.guest-card .text-2xl {
+    font-size: 1.5rem;
+}
+
+.guest-card .font-bold {
+    font-weight: 700;
+}
+
+.guest-card .font-medium {
+    font-weight: 500;
+}
+
+.guest-card .text-sm {
+    font-size: 0.875rem;
+}
+
+.guest-card .text-black {
+    color: #000;
+}
+
+.guest-card .flex {
+    display: flex;
+}
+
+.guest-card .items-center {
+    align-items: center;
+}
+
+.guest-card .justify-between {
+    justify-content: space-between;
+}
+
+.guest-card .justify-end {
+    justify-content: flex-end;
+}
+
+.guest-card .mt-6.flex {
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.guest-card .ms-4 {
+    margin-left: 1rem;
+}
+
+.guest-card label.block {
+    display: block;
+}
+
+.guest-card .mt-1 {
+    margin-top: 0.25rem;
+}
+
+.guest-card .w-full {
+    width: 100%;
+}
+
+.guest-card input[type="text"],
+.guest-card input[type="email"],
+.guest-card input[type="password"],
+.guest-card select {
+    display: block;
+    width: 100%;
+    margin-top: 0.25rem;
+    padding: 0.55rem 0.75rem;
+    font-size: 1rem;
+    border: 1px solid #d1d5db;
+    border-radius: 6px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    background: #fff;
+}
+
+.guest-card input:focus,
+.guest-card select:focus,
+.guest-card textarea:focus {
+    outline: none;
+    border-color: var(--auth-yellow);
+    box-shadow: 0 0 0 2px rgba(255, 222, 21, 0.45);
+}
+
+.guest-card ul.text-sm {
+    list-style: none;
+    padding: 0;
+    margin: 0.25rem 0 0;
+}
+
+.guest-card ul.text-sm li + li {
+    margin-top: 0.25rem;
+}
+
+.guest-card button[type="submit"]:not(.guest-link-btn) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0.5rem 1rem;
+    border: none;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    background: var(--auth-yellow);
+    color: #000;
+    cursor: pointer;
+    touch-action: manipulation;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.guest-card button[type="submit"]:not(.guest-link-btn):active {
+    opacity: 0.92;
+}
+
+.guest-card a.underline,
+.guest-card button.guest-link-btn {
+    background: transparent;
+    border: none;
+    padding: 0;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(0, 0, 0, 0.5);
+    text-decoration: underline;
+    cursor: pointer;
+    min-height: auto;
+    box-shadow: none;
+    text-transform: none;
+    letter-spacing: normal;
+}
+
+.guest-card a.underline:focus-visible,
+.guest-card button.guest-link-btn:focus-visible {
+    outline: 2px solid var(--auth-yellow);
+    outline-offset: 2px;
+}
