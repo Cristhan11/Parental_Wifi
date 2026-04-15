@@ -7,22 +7,18 @@ use App\Models\DeviceSession;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\Video;
-use App\Services\TimeTrackingService;
 use App\Services\UsageChartService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
 use Carbon\Carbon;
 
 class DashboardController extends Controller
 {
-    protected $timeTrackingService;
     protected $usageChartService;
 
-    public function __construct(TimeTrackingService $timeTrackingService, UsageChartService $usageChartService)
+    public function __construct(UsageChartService $usageChartService)
     {
-        $this->timeTrackingService = $timeTrackingService;
         $this->usageChartService = $usageChartService;
     }
 
@@ -35,24 +31,62 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
 
-        // Get user's devices with relationships
+        // Keep base device query lean; session data is loaded in two batched queries below.
         $devices = Device::where('user_id', $user->id)
-            ->with(['sessions', 'quizAttempts.quiz'])
             ->get();
+
+        $startOfDay = now()->startOfDay();
+        $now = now();
+        $deviceIds = $devices->pluck('id')->values();
+
+        $endedSessionsByDevice = collect();
+        $activeSessionByDevice = [];
+        if ($deviceIds->isNotEmpty()) {
+            $endedSessionsByDevice = DeviceSession::query()
+                ->whereIn('device_id', $deviceIds)
+                ->whereNotNull('ended_at')
+                ->where('started_at', '<', $now)
+                ->where('ended_at', '>', $startOfDay)
+                ->get(['device_id', 'started_at', 'ended_at'])
+                ->groupBy('device_id');
+
+            $activeSessionByDevice = DeviceSession::query()
+                ->whereIn('device_id', $deviceIds)
+                ->whereNull('ended_at')
+                ->orderByDesc('started_at')
+                ->get(['id', 'device_id', 'started_at'])
+                ->unique('device_id')
+                ->keyBy('device_id')
+                ->all();
+        }
 
         // Per-device usage: today's connected time only (app timezone; resets at midnight).
         $timeUsageData = [];
         foreach ($devices as $device) {
-            $todayUsage = $this->deviceUsageSecondsToday($device);
-            $totalSeconds = $todayUsage['total_seconds'];
-            $activeSession = $todayUsage['active_session'];
+            $totalSeconds = 0;
+            foreach ($endedSessionsByDevice->get($device->id, collect()) as $session) {
+                $segStart = $session->started_at->copy()->max($startOfDay);
+                $segEnd = $session->ended_at->copy()->min($now);
+                if ($segStart->lt($segEnd)) {
+                    $totalSeconds += $segStart->diffInSeconds($segEnd);
+                }
+            }
+
+            $activeSession = $activeSessionByDevice[$device->id] ?? null;
+            $remainingMinutes = $this->calculateRemainingMinutes($device, $activeSession);
+            $includeActiveUsage = $activeSession
+                && ($device->isWhitelisted() || $remainingMinutes > 0);
+
+            if ($includeActiveUsage) {
+                $segStart = $activeSession->started_at->copy()->max($startOfDay);
+                if ($segStart->lt($now)) {
+                    $totalSeconds += $segStart->diffInSeconds($now);
+                }
+            }
 
             // Convert to hours and minutes
             $hours = floor($totalSeconds / 3600);
             $minutes = floor(($totalSeconds % 3600) / 60);
-
-            // Calculate remaining time
-            $remainingMinutes = $this->timeTrackingService->calculateRemainingTime($device);
 
             $timeUsageData[] = [
                 'device' => $device,
@@ -63,7 +97,9 @@ class DashboardController extends Controller
                 'is_connected' => !empty($device->ip_address),
                 // Real-time UI (dashboard JS): DB pool + active session start for client-side countdown
                 'db_remaining_minutes' => (int) ($device->remaining_time_minutes ?? 0),
-                'active_session_started_at' => $activeSession?->started_at?->toIso8601String(),
+                'active_session_started_at' => $includeActiveUsage
+                    ? $activeSession?->started_at?->toIso8601String()
+                    : null,
                 'is_whitelisted' => $device->isWhitelisted(),
             ];
         }
@@ -149,56 +185,19 @@ class DashboardController extends Controller
         );
     }
 
-    /**
-     * Seconds of internet usage for this device that fall on the current calendar day (app timezone).
-     *
-     * Counts overlap of each ended session with [start of today, now], plus the active session’s
-     * overlap with the same window (handles sessions that span midnight).
-     *
-     * @return array{total_seconds: int, active_session: DeviceSession|null}
-     */
-    private function deviceUsageSecondsToday(Device $device): array
+    private function calculateRemainingMinutes(Device $device, ?DeviceSession $activeSession): int
     {
-        $startOfDay = now()->startOfDay();
-        $now = now();
-        $seconds = 0;
-
-        $endedSessions = DeviceSession::query()
-            ->where('device_id', $device->id)
-            ->whereNotNull('ended_at')
-            ->get();
-
-        foreach ($endedSessions as $session) {
-            $segStart = $session->started_at->copy()->max($startOfDay);
-            $segEnd = $session->ended_at->copy()->min($now);
-            if ($segStart->lt($segEnd)) {
-                $seconds += $segStart->diffInSeconds($segEnd);
-            }
+        if ($device->isWhitelisted()) {
+            return 999999;
         }
 
-        $activeSession = DeviceSession::query()
-            ->where('device_id', $device->id)
-            ->whereNull('ended_at')
-            ->first();
-
-        // Count usage only while internet time is still granted — not idle WiFi after quota
-        // is exhausted (session should be closed by jobs; this covers races before they run).
-        $deviceForExpiry = $device->fresh() ?? $device;
-        $includeActiveUsage = $activeSession
-            && ($deviceForExpiry->isWhitelisted()
-                || ! $this->timeTrackingService->hasTimeExpired($deviceForExpiry));
-
-        if ($includeActiveUsage) {
-            $segStart = $activeSession->started_at->copy()->max($startOfDay);
-            if ($segStart->lt($now)) {
-                $seconds += $segStart->diffInSeconds($now);
-            }
+        $baseRemaining = (int) ($device->remaining_time_minutes ?? 0);
+        if (!$activeSession) {
+            return max(0, $baseRemaining);
         }
 
-        return [
-            'total_seconds' => $seconds,
-            'active_session' => $includeActiveUsage ? $activeSession : null,
-        ];
+        $sessionDurationMinutes = $activeSession->getDurationMinutes();
+        return max(0, (int) floor($baseRemaining - $sessionDurationMinutes));
     }
 
     /**
