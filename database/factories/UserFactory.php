@@ -29,6 +29,8 @@ class UserFactory extends Factory
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
+            'role' => 'parent',
+            'approved_at' => now(),
         ];
     }
 
@@ -39,6 +41,25 @@ class UserFactory extends Factory
     {
         return $this->state(fn (array $attributes) => [
             'email_verified_at' => null,
+        ]);
+    }
+
+    /**
+     * Parent account still waiting for administrator approval (after migration).
+     */
+    public function unapprovedParent(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'approved_at' => null,
+            'rejected_at' => null,
+        ]);
+    }
+
+    public function admin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'admin',
+            'approved_at' => null,
         ]);
     }
 }

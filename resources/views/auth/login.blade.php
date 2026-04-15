@@ -4,6 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="csrf-token" content="{{ csrf_token() }}">
+    <link rel="icon" type="image/png" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
+    <link rel="shortcut icon" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
     <title>Login - Parental WiFi</title>
     <link rel="stylesheet" href="/css/auth-captive.css">
 </head>
@@ -12,7 +14,7 @@
         <div class="login-form-col">
             <div class="login-form-card">
                 <div class="login-logo-wrap">
-                    <x-application-logo class="login-logo fill-current" style="color: #FFDE15;" />
+                    <x-application-logo class="login-logo" />
                 </div>
 
                 <h2 class="login-heading">Welcome</h2>
@@ -87,6 +89,12 @@
                         <label for="remember_me"><span>Remember me</span></label>
                     </div>
 
+                    <p class="login-links-row" style="margin-top: 1rem; font-size: 0.875rem;">
+                        <a href="{{ route('register') }}" class="login-link-secondary">Create parent account</a>
+                        <span style="opacity:0.5;"> · </span>
+                        <a href="{{ route('password.request') }}" class="login-link-secondary">Forgot password?</a>
+                    </p>
+
                     <button type="submit" class="login-submit">
                         Log in
                     </button>
@@ -96,7 +104,7 @@
 
         <div class="login-brand-col">
             <div class="login-brand-inner">
-                <x-application-logo class="login-brand-logo fill-current" style="color: #000000;" />
+                <x-application-logo class="login-brand-logo" />
                 <h1 class="login-brand-title">Parental WiFi</h1>
                 <p class="login-brand-tagline">Parental control &amp; internet management</p>
                 <p class="login-brand-copy">

@@ -39,7 +39,7 @@ class SendDigestReports extends Command
         }
 
         // Start an Eloquent query: only users with role `parent` (not children/admins for this feature).
-        $query = User::query()->where('role', 'parent');
+        $query = User::query()->whereIn('role', ['parent', 'parent_admin']);
 
         // Optional filter: `--user_id=123` on the CLI becomes `$this->option('user_id')` as string "123" or null.
         $userId = $this->option('user_id');

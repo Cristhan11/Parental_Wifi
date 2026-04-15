@@ -6,12 +6,12 @@ use Illuminate\Foundation\Configuration\Middleware;
 
 /**
  * Bootstrap Application Configuration
- * 
+ *
  * This file configures the Laravel application:
  * - Routes (where URLs are defined)
  * - Middleware (code that runs before/after requests)
  * - Exception handling (how errors are handled)
- * 
+ *
  * This is one of the first files Laravel loads when starting the application
  */
 return Application::configure(basePath: dirname(__DIR__))
@@ -26,7 +26,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         // Register custom role-based middleware with aliases
         // This allows us to use short names like 'role.parent' instead of full class names
-        // 
+        //
         // How it works:
         // - 'role.parent' is the alias (short name we use in routes)
         // - \App\Http\Middleware\EnsureUserIsParent::class is the actual middleware class
@@ -35,8 +35,9 @@ return Application::configure(basePath: dirname(__DIR__))
         // Route::get('/devices', ...)->middleware('role.parent');
         // This will run EnsureUserIsParent middleware before the route handler
         $middleware->alias([
-            'role.parent' => \App\Http\Middleware\EnsureUserIsParent::class, // Restrict to parent role
-            'role.admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,     // Restrict to admin role
+            'role.parent' => \App\Http\Middleware\EnsureUserIsParent::class,
+            'role.admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
+            'parent.dashboard' => \App\Http\Middleware\EnsureParentDashboardAccess::class,
         ]);
     })
     // Configure exception handling - how errors are displayed/logged

@@ -178,7 +178,6 @@ class ReportsController extends Controller
      */
     private function ensureCanManageReports(string $role): void
     {
-        abort_unless(in_array($role, ['parent', 'admin'], true), 403);
+        abort_unless(in_array($role, ['parent', 'admin', 'parent_admin'], true), 403);
     }
 }
-

@@ -6,6 +6,8 @@
         <meta name="csrf-token" content="{{ csrf_token() }}">
         <!-- Expose auth user id so dashboard JS can subscribe to private user.{id} websocket channel. -->
         <meta name="auth-user-id" content="{{ auth()->id() }}">
+        <link rel="icon" type="image/png" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
+        <link rel="shortcut icon" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 

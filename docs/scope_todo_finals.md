@@ -53,20 +53,23 @@ Priority: High
 Expected output: Clear and enforced separation between child, parent, guest/visitor, and admin experiences across UI and backend permissions.  
 Traceability reference: `docs/panel_adjustment.md` (differentiate roles), `docs/consultation_manuscriptPART.md` (role definition across manuscript sections).
 
-- [ ] `acct-01` Finalize account separation rules for child devices, parent devices, guest/visitor devices, and admin.
-- [ ] `acct-02` Define permission matrix for dashboard modules by account type.
-- [ ] `acct-03` Enforce role-based navigation and page-level access controls in frontend.
-- [ ] `acct-04` Enforce backend authorization checks for all protected endpoints by role.
-- [ ] `acct-05` Add role labels and naming convention hints in device/account lists and forms.
+- [x] `acct-01` Finalize account separation rules for child devices, parent devices, guest/visitor devices, and admin.
+- [x] `acct-02` Define permission matrix for dashboard modules by account type.
+- [x] `acct-03` Enforce role-based navigation and page-level access controls in frontend.
+- [x] `acct-04` Enforce backend authorization checks for all protected endpoints by role.
+- [x] `acct-05` Add role labels and naming convention hints in device/account lists and forms.
 
 Account/access baseline to enforce:
 
 | Role type | Can access dashboard | Can manage devices | Can change policies/schedules | Can view logs | Can receive reports |
 | --- | --- | --- | --- | --- | --- |
-| Admin | Yes (full) | Yes (global) | Yes (global) | Yes (global) | Optional system-level |
-| Parent | Yes (own scope) | Yes (owned devices only) | Yes (owned devices only) | Yes (owned devices only) | Yes |
+| Admin | Yes (admin UI; global) | Yes (global) | Yes (global) | Yes (global) | Optional system-level |
+| Household operator (`parent_admin`) | Yes (parent + admin UI) | Yes (own + admin global tools) | Yes (own + admin global tools) | Yes (own + admin global) | Yes (own account) |
+| Parent | Yes (own scope; after email verify + admin approval) | Yes (owned devices only) | Yes (owned devices only) | Yes (owned devices only) | Yes |
 | Child device | No parent/admin dashboard | No | No | No (self-service only if designed) | No |
 | Guest/visitor device | No parent/admin dashboard | No | No | No | No |
+
+**Bootstrap and parent signup (implemented):** One seeded system admin (`DefaultUserSeeder`) signs in first. Parents self-register at `/register`, must verify email (`MustVerifyEmail`), then an admin approves the account (`approved_at`). Until approved, parent dashboard routes redirect to a pending-approval screen. Rejected registrations see an account-rejected screen. Admins may promote an approved parent to **household operator** (`parent_admin`) so one login has both parent and admin navigation without using the seed account long term.
 
 ### remote-dashboard-access
 
@@ -166,9 +169,9 @@ Use this evidence format for each completed mapping item:
 
 ### Account Separation
 
-- [ ] Admin, parent, child, and guest access boundaries are enforced at UI and backend levels.
-- [ ] Parent actions are constrained to parent-owned devices and settings.
-- [ ] Role labels and naming guidance are visible in relevant forms and lists.
+- [x] Admin, parent, child, and guest access boundaries are enforced at UI and backend levels (`parent.dashboard` + `role.admin` middleware, portal remains unauthenticated).
+- [x] Parent actions are constrained to parent-owned devices and settings (existing policies); admin routes use separate controllers for global parent/device management.
+- [x] Role labels and naming guidance are visible in relevant forms and lists (sidebar account type, device create/edit hints, admin UI).
 
 ### Remote Access
 

@@ -8,19 +8,19 @@ use Illuminate\Support\Facades\Hash;
 
 /**
  * Default User Seeder
- * 
+ *
  * Purpose: Creates a default admin account for initial system access
- * 
+ *
  * Security Note:
  * - This creates a hardcoded admin account for first-time setup
  * - Default credentials should be changed immediately after first login
  * - This account is required to access the system and create additional parent/admin accounts
- * 
+ *
  * Default Credentials:
  * - Email: admin@parentalwifi.local
  * - Password: admin123
  * - Role: admin
- * 
+ *
  * Usage:
  * - Runs automatically when executing: php artisan db:seed
  * - Uses firstOrCreate() to prevent duplicate accounts if seeder runs multiple times
@@ -30,7 +30,7 @@ class DefaultUserSeeder extends Seeder
 {
     /**
      * Run the database seeds.
-     * 
+     *
      * Creates a default admin user with hardcoded credentials.
      * This account is essential for initial system access and user management.
      */
@@ -60,4 +60,3 @@ class DefaultUserSeeder extends Seeder
         $this->command->warn('  ⚠️  Please change the password after first login!');
     }
 }
-

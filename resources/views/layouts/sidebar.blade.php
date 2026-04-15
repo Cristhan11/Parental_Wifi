@@ -15,8 +15,8 @@
        style="scrollbar-width: thin; scrollbar-color: #FFDE15 #F3F4F6;">
     <!-- Logo Section -->
     <div class="h-16 flex items-center justify-between border-b border-gray-200 px-4">
-        <a href="{{ route('dashboard') }}" class="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 rounded">
-            <x-application-logo class="block h-8 w-auto fill-current" style="color: #FFDE15;" />
+        <a href="{{ auth()->user()->canAccessParentDashboard() ? route('dashboard') : route('admin.dashboard') }}" class="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 rounded">
+            <x-application-logo class="block w-16 h-auto" />
             <span class="font-semibold text-lg text-black">Parental WiFi</span>
         </a>
         <!-- Close Button (Visible only on smaller screens when sidebar overlaps) -->
@@ -32,7 +32,40 @@
     <!-- Navigation Menu -->
     <nav class="flex-1 overflow-y-auto py-4" aria-label="Main navigation">
         <ul class="space-y-1 px-3">
+            @if (auth()->user()->hasAdminCapability())
+            <li>
+                <div class="px-4 py-2">
+                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Administration</span>
+                </div>
+            </li>
+            <li>
+                <a href="{{ route('admin.dashboard') }}"
+                   class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {{ request()->routeIs('admin.dashboard') ? 'bg-yellow-100 text-black' : 'text-gray-700 hover:bg-gray-100 hover:text-black' }}">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2V6zM14 6a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2V6zM4 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2H6a2 2 0 01-2-2v-2zM14 16a2 2 0 012-2h2a2 2 0 012 2v2a2 2 0 01-2 2h-2a2 2 0 01-2-2v-2z" /></svg>
+                    <span>Admin home</span>
+                </a>
+            </li>
+            <li>
+                <a href="{{ route('admin.parents.pending') }}"
+                   class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {{ request()->routeIs('admin.parents.pending') ? 'bg-yellow-100 text-black' : 'text-gray-700 hover:bg-gray-100 hover:text-black' }}">
+                    <span>Pending parents</span>
+                </a>
+            </li>
+            <li>
+                <a href="{{ route('admin.parents.index') }}"
+                   class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {{ request()->routeIs('admin.parents.index') ? 'bg-yellow-100 text-black' : 'text-gray-700 hover:bg-gray-100 hover:text-black' }}">
+                    <span>Parent accounts</span>
+                </a>
+            </li>
+            @endif
+
+            @if (auth()->user()->canAccessParentDashboard())
             <!-- Dashboard -->
+            <li>
+                <div class="px-4 py-2 mt-2">
+                    <span class="text-xs font-semibold text-gray-500 uppercase tracking-wider">Parent dashboard</span>
+                </div>
+            </li>
             <li>
                 <a href="{{ route('dashboard') }}" 
                    class="flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium transition-colors {{ request()->routeIs('dashboard') ? 'bg-yellow-100 text-black' : 'text-gray-700 hover:bg-gray-100 hover:text-black' }} focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2"
@@ -181,6 +214,7 @@
                     <span>Videos</span>
                 </a>
             </li>
+            @endif
         </ul>
     </nav>
 
@@ -195,6 +229,7 @@
                     <div class="flex-1 text-left">
                         <div class="font-medium">{{ Auth::user()->name }}</div>
                         <div class="text-xs text-gray-500">{{ Auth::user()->email }}</div>
+                        <div class="text-xs text-gray-400 mt-0.5">{{ Auth::user()->accountTypeLabel() }}</div>
                     </div>
                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />

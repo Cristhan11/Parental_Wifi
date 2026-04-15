@@ -8,21 +8,22 @@ use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
-use App\Http\Controllers\Auth\VerifyEmailController;
+use App\Http\Controllers\Auth\RegistrationStatusController;
+use App\Http\Controllers\Auth\VerifyEmailCodeController;
 use Illuminate\Support\Facades\Route;
 
 /**
  * Authentication Routes
- * 
+ *
  * This file defines all authentication-related routes (login, register, password reset, etc.)
  * Created automatically by Laravel Breeze
- * 
+ *
  * Route Structure:
  * - Route::get() = Display a page (form)
  * - Route::post() = Process form submission
  * - ->name() = Gives route a name (used in redirects, links)
  * - ->middleware() = Code that runs before route handler
- * 
+ *
  * Middleware Groups:
  * - 'guest' = Only accessible if user is NOT logged in
  * - 'auth' = Only accessible if user IS logged in
@@ -33,10 +34,10 @@ use Illuminate\Support\Facades\Route;
 // ============================================================================
 // If a logged-in user tries to access these, they'll be redirected to dashboard
 Route::middleware('guest')->group(function () {
-    // NOTE: Registration routes have been removed for security
-    // Public registration is disabled to prevent unauthorized account creation
-    // New accounts can only be created by existing admins/parents through the dashboard
-    // Default admin account is created via DefaultUserSeeder
+    Route::get('register', [RegisteredUserController::class, 'create'])
+        ->name('register');
+
+    Route::post('register', [RegisteredUserController::class, 'store']);
 
     // LOGIN ROUTES
     // GET /login - Shows login form
@@ -68,20 +69,26 @@ Route::middleware('guest')->group(function () {
 // AUTHENTICATED ROUTES - Only accessible to users who ARE logged in
 // ============================================================================
 // If a guest tries to access these, they'll be redirected to login page
+Route::middleware(['auth', 'verified'])->group(function () {
+    Route::get('registration/pending-approval', [RegistrationStatusController::class, 'pendingApproval'])
+        ->name('registration.pending-approval');
+
+    Route::get('registration/account-rejected', [RegistrationStatusController::class, 'accountRejected'])
+        ->name('registration.account-rejected');
+});
+
 Route::middleware('auth')->group(function () {
     // EMAIL VERIFICATION ROUTES
     // GET /verify-email - Shows email verification notice page
     Route::get('verify-email', EmailVerificationPromptController::class)
         ->name('verification.notice');
 
-    // GET /verify-email/{id}/{hash} - Verifies email when user clicks link
-    // 'signed' middleware ensures link hasn't been tampered with
-    // 'throttle:6,1' limits to 6 attempts per minute
-    Route::get('verify-email/{id}/{hash}', VerifyEmailController::class)
-        ->middleware(['signed', 'throttle:6,1'])
+    // POST /verify-email/code - Submit 6-digit code from email
+    Route::post('verify-email/code', [VerifyEmailCodeController::class, 'store'])
+        ->middleware('throttle:10,1')
         ->name('verification.verify');
 
-    // POST /email/verification-notification - Resends verification email
+    // POST /email/verification-notification - Resends verification code email
     Route::post('email/verification-notification', [EmailVerificationNotificationController::class, 'store'])
         ->middleware('throttle:6,1') // Limit to 6 emails per minute
         ->name('verification.send');

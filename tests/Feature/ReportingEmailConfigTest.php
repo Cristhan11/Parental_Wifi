@@ -11,6 +11,7 @@ use App\Models\Device;
 use App\Models\ReportingPreference;
 use App\Models\ReportingRecipient;
 use App\Models\User;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
@@ -176,11 +177,12 @@ class ReportingEmailConfigTest extends TestCase
             'is_enabled' => true,
         ]);
 
+        $digestDay = CarbonImmutable::now('UTC')->subDay()->startOfDay()->addHours(12);
         BrowsingLog::create([
             'device_id' => $device->id,
             'url' => 'https://example.com',
             'domain' => 'example.com',
-            'visited_at' => now()->subDay()->setTime(10, 0),
+            'visited_at' => $digestDay,
         ]);
 
         DispatchDigestReportJob::dispatchSync($parent->id, 'daily');
@@ -228,11 +230,12 @@ class ReportingEmailConfigTest extends TestCase
             'is_enabled' => true,
         ]);
 
+        $digestDay = CarbonImmutable::now('UTC')->subDay()->startOfDay()->addHours(12);
         BrowsingLog::create([
             'device_id' => $device->id,
             'url' => 'https://example.org',
             'domain' => 'example.org',
-            'visited_at' => now()->subDay()->setTime(10, 0),
+            'visited_at' => $digestDay,
         ]);
 
         DispatchDigestReportJob::dispatchSync($parent->id, 'daily', isManualTest: true);
@@ -244,4 +247,3 @@ class ReportingEmailConfigTest extends TestCase
         });
     }
 }
-

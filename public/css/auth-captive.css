@@ -77,10 +77,9 @@ html {
 }
 
 .login-logo {
-    width: 4rem;
-    height: 4rem;
+    width: 7rem;
+    height: auto;
     display: block;
-    color: var(--auth-yellow);
 }
 
 .login-heading {
@@ -274,11 +273,10 @@ html {
 }
 
 .login-brand-logo {
-    width: 8rem;
-    height: 8rem;
+    width: 12rem;
+    height: auto;
     margin: 0 auto 1.5rem;
     display: block;
-    color: #000;
 }
 
 .login-brand-title {
@@ -328,8 +326,8 @@ html {
 }
 
 .guest-logo-sm {
-    width: 5rem;
-    height: 5rem;
+    width: 8rem;
+    height: auto;
     display: block;
 }
 

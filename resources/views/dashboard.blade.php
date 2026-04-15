@@ -12,12 +12,10 @@
                     <p class="text-lg font-medium">{{ __("You're logged in!") }}</p>
                     @auth
                         <p class="mt-2 text-sm" style="color: #00000080;">
-                            Welcome, {{ Auth::user()->name }}! 
-                            @if(Auth::user()->isParent())
-                                <span class="inline-block px-2 py-1 rounded text-xs font-semibold" style="background-color: #FFDE15; color: #000000;">Parent</span>
-                            @elseif(Auth::user()->isAdmin())
-                                <span class="inline-block px-2 py-1 rounded text-xs font-semibold" style="background-color: #FFDE15; color: #000000;">Admin</span>
-                            @endif
+                            Welcome, {{ Auth::user()->name }}!
+                            <span class="inline-block px-2 py-1 rounded text-xs font-semibold ml-1" style="background-color: #FFDE15; color: #000000;" title="Your dashboard account type">
+                                {{ Auth::user()->accountTypeLabel() }}
+                            </span>
                         </p>
                     @endauth
                 </div>

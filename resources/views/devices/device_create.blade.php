@@ -84,7 +84,7 @@
                                 <option value="guest" {{ old('role', 'child') === 'guest' ? 'selected' : '' }}>GUEST</option>
                                 <option value="parent" {{ old('role', 'child') === 'parent' ? 'selected' : '' }}>PARENT</option>
                             </select>
-                            <p class="mt-1 text-sm text-gray-500">CHILD = Subject to time limits, GUEST = Temporary access, PARENT = Unrestricted access</p>
+                            <p class="mt-1 text-sm text-gray-500">This is the <strong>device</strong> role on the network (child / guest / parent device), not your dashboard login type. Child and guest devices use the portal only; they do not sign into the parent dashboard.</p>
                             @error('role')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                             @enderror
