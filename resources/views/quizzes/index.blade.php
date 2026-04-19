@@ -28,16 +28,19 @@
                     QUIZZES
                 </h2>
             </div>
-            {{-- Action buttons: Import Excel (green) and Create New (red) --}}
-            <div class="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-2">
+            {{-- Action buttons: Import Excel (green) and Create New (red). shrink-0 prevents flex from collapsing these below their content width. --}}
+            <div class="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-2 sm:pl-2">
                 <a href="{{ route('quizzes.import') }}"
-                   class="inline-flex w-full items-center justify-center rounded px-3 py-2 text-sm font-medium text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base"
+                   class="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base"
                    style="background-color: #10B981;"
                    aria-label="Import quizzes from Excel">
-                    <span class="sm:hidden">Import</span><span class="hidden sm:inline">Import Excel</span>
+                    <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"></path>
+                    </svg>
+                    <span>Import Excel</span>
                 </a>
                 <a href="{{ route('quizzes.create') }}"
-                   class="inline-flex w-full items-center justify-center gap-1 rounded px-3 py-2 text-sm font-medium text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base whitespace-nowrap"
+                   class="inline-flex w-full shrink-0 items-center justify-center gap-1 rounded px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base"
                    style="background-color: #EF4444;">
                     <span aria-hidden="true">+</span> New
                 </a>

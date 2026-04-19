@@ -22,8 +22,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreVideoRequest;
 use App\Http\Requests\UpdateVideoRequest;
-use App\Models\Device;
 use App\Models\Video;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -74,18 +74,14 @@ class VideoController extends Controller
      * - Displays an empty form where parents can create a new video
      * - Form includes fields for: title, description, video file, duration,
      *   dictionary words settings, time reward, device assignment
-     * - Gets all devices owned by the parent for device assignment dropdown
+     * - Gets child-role devices only (portal content is not assigned to parent/guest devices)
      * 
      * @return View The video creation form
      */
     public function create(): View
     {
-        // Get all devices owned by the logged-in parent
-        // This is used in the form to allow assigning video to devices
-        $devices = Auth::user()->devices()->get();
+        $devices = $this->videoAssignableDevices();
 
-        // Return create form with devices data
-        // compact('devices') creates ['devices' => $devices] for the view
         return view('videos.create', compact('devices'));
     }
 
@@ -146,13 +142,8 @@ class VideoController extends Controller
             'is_active' => $isActive,  // Properly handle checkbox state
         ]);
 
-        // Assign video to selected devices (if any)
-        // devices array contains device IDs selected in the form
-        // ->sync() creates/updates many-to-many relationships in pivot table
-        // If devices array is empty, no assignments are made
-        if (!empty($validated['devices'])) {
-            $video->devices()->sync($validated['devices']);
-        }
+        // Assign to selected child devices only (ignore tampered/non-child IDs)
+        $video->devices()->sync($this->sanitizedVideoDeviceIds($request));
 
         // Redirect to video list page with success message
         // ->with() stores a message in session that displays on next page
@@ -168,7 +159,7 @@ class VideoController extends Controller
      * What it does:
      * 1. Checks if parent owns this video (security check)
      * 2. Loads video data from database
-     * 3. Gets all devices owned by parent
+     * 3. Gets child-role devices for assignment options
      * 4. Gets currently assigned devices for this video
      * 5. Displays edit form pre-filled with existing video data
      * 
@@ -188,14 +179,12 @@ class VideoController extends Controller
             abort(403, 'Unauthorized action.');  // 403 = Forbidden
         }
 
-        // Get all devices owned by the logged-in parent
-        // Used in form to show all available devices for assignment
-        $devices = Auth::user()->devices()->get();
+        $devices = $this->videoAssignableDevices();
 
-        // Get currently assigned devices for this video
-        // ->pluck('id') extracts only the device IDs as an array
-        // This is used to pre-select devices in the form
-        $assignedDeviceIds = $video->devices()->pluck('devices.id')->toArray();
+        $assignedDeviceIds = $video->devices()
+            ->where('devices.role', 'child')
+            ->pluck('devices.id')
+            ->toArray();
 
         // Return edit form with video, devices, and assigned device IDs
         return view('videos.edit', compact('video', 'devices', 'assignedDeviceIds'));
@@ -275,13 +264,7 @@ class VideoController extends Controller
             'is_active' => $isActive,  // Properly handle unchecked checkbox
         ]);
 
-        // Update device assignments
-        // ->sync() replaces all existing assignments with new ones
-        // If devices array is empty, removes all assignments
-        // If devices array has IDs, creates new assignments
-        if (isset($validated['devices'])) {
-            $video->devices()->sync($validated['devices']);
-        }
+        $video->devices()->sync($this->sanitizedVideoDeviceIds($request));
 
         return redirect()->route('videos.index')
             ->with('success', 'Video updated successfully!');
@@ -387,6 +370,29 @@ class VideoController extends Controller
 
         return redirect()->route('videos.index')
             ->with('success', 'Video deleted successfully!');
+    }
+
+    /**
+     * Registered child devices for this parent (videos are not assigned to parent/guest roles).
+     */
+    protected function videoAssignableDevices(): Collection
+    {
+        return Auth::user()
+            ->devices()
+            ->where('role', 'child')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return list<int>
+     */
+    protected function sanitizedVideoDeviceIds(Request $request): array
+    {
+        $allowedIds = $this->videoAssignableDevices()->pluck('id')->all();
+        $submitted = array_map('intval', (array) $request->input('devices', []));
+
+        return array_values(array_intersect($allowedIds, $submitted));
     }
 }
 
