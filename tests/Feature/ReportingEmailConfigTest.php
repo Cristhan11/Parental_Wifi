@@ -230,7 +230,7 @@ class ReportingEmailConfigTest extends TestCase
             'is_enabled' => true,
         ]);
 
-        $digestDay = CarbonImmutable::now('UTC')->subDay()->startOfDay()->addHours(12);
+        $digestDay = CarbonImmutable::now('UTC')->startOfDay()->addHours(12);
         BrowsingLog::create([
             'device_id' => $device->id,
             'url' => 'https://example.org',
