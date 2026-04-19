@@ -259,9 +259,10 @@
                 const questionText = (questionData && questionData.question) ? String(questionData.question) : '';
                 let options = ['', '', '', ''];
                 if (questionData && questionData.options && Array.isArray(questionData.options)) {
-                    options = questionData.options.map(opt => String(opt || ''));
+                    options = questionData.options.map(opt => (opt === null || opt === undefined) ? '' : String(opt));
                 }
-                const correctAnswer = (questionData && questionData.correct_answer) ? String(questionData.correct_answer) : '';
+                const rawCorrect = questionData && questionData.correct_answer;
+                const correctAnswer = (rawCorrect === null || rawCorrect === undefined) ? '' : String(rawCorrect);
                 
                 console.log('Question data extracted:', { type, questionText, options, correctAnswer });
 
@@ -297,7 +298,7 @@
                     <div class="space-y-2">
                         ${optionIndices.map(i => `
                             <input type="text" name="questions[${window.quizQuestionIndex}][options][]" 
-                                value="${escapeHtml(options[i] || '')}" 
+                                value="${escapeHtml((options[i] !== undefined && options[i] !== null && (options[i] !== '' || options[i] === 0)) ? String(options[i]) : '')}" 
                                 placeholder="Option ${String.fromCharCode(65 + i)}" 
                                 ${type !== 'fill_blank' ? 'required' : ''}
                                 ${type === 'fill_blank' ? 'disabled' : ''}
@@ -355,9 +356,9 @@
                 // For multiple choice, correct answer is stored as the option value (e.g., "4")
                 // We need to find which option index matches the correct answer
                 let selectedIndex = -1;
-                if (correctAnswer && options) {
-                    selectedIndex = options.findIndex(opt => 
-                        opt && opt.toString().toLowerCase() === correctAnswer.toString().toLowerCase()
+                if (correctAnswer !== '' && options) {
+                    selectedIndex = options.findIndex(opt =>
+                        String(opt).toLowerCase() === String(correctAnswer).toLowerCase()
                     );
                 }
                 
@@ -367,7 +368,7 @@
                         <option value="">Select correct answer</option>
                         ${['a', 'b', 'c', 'd'].map((letter, i) => `
                             <option value="${i}" ${selectedIndex === i ? 'selected' : ''}>
-                                ${String.fromCharCode(65 + i)}${options[i] ? ': ' + options[i] : ''}
+                                ${String.fromCharCode(65 + i)}${(options[i] !== undefined && options[i] !== null && String(options[i]) !== '') || options[i] === 0 ? ': ' + options[i] : ''}
                             </option>
                         `).join('')}
                     </select>
@@ -465,11 +466,12 @@
                     return;
                 }
                 
-                const optionIndex = parseInt(select.value);
+                const optionIndex = parseInt(select.value, 10);
                 if (optionIndex >= 0 && optionIndex < 4) {
                     const optionInputs = document.querySelectorAll(`#options-${index} input`);
-                    if (optionInputs[optionIndex] && optionInputs[optionIndex].value) {
-                        hiddenInput.value = optionInputs[optionIndex].value;
+                    const input = optionInputs[optionIndex];
+                    if (input) {
+                        hiddenInput.value = input.value;
                     }
                 }
             };

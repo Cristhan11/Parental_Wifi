@@ -391,12 +391,13 @@
                     return;
                 }
                 
-                const optionIndex = parseInt(select.value);
+                const optionIndex = parseInt(select.value, 10);
                 
                 if (optionIndex >= 0 && optionIndex < 4) {
                     const optionInputs = document.querySelectorAll(`#options-${index} input`);
-                    if (optionInputs[optionIndex] && optionInputs[optionIndex].value) {
-                        hiddenInput.value = optionInputs[optionIndex].value;
+                    const input = optionInputs[optionIndex];
+                    if (input) {
+                        hiddenInput.value = input.value;
                     }
                 }
             };

@@ -10,12 +10,12 @@
  * making code more organized, testable, and reusable.
  * 
  * Excel Format Expected:
- * Row 1: Headers (Quiz Title, Description, Passing Score, Time Reward, Question, Type, Option A-D, Correct Answer)
- * Row 2: Quiz metadata (first row) + First question
- * Row 3+: Additional questions (quiz metadata columns left empty)
+ * Row 1: Headers (Quiz Title, Description, Passing Percentage, Time Reward, Question, Type, Option A-D, Correct Answer)
+ * Row 2: Quiz metadata (columns A–D) + first question (columns E–K)
+ * Row 3+: Additional questions only (columns A–D empty, E–K filled)
  * 
  * Example:
- * | Quiz Title | Description | Passing Score | Time Reward | Question | Type | Option A | Option B | Option C | Option D | Correct Answer |
+ * | Quiz Title | Description | Passing Percentage | Time Reward | Question | Type | Option A | Option B | Option C | Option D | Correct Answer |
  * | Math Quiz  | Basic math  | 70           | 15          | What is 2+2? | multiple_choice | 2 | 3 | 4 | 5 | 4 |
  * |            |             |              |             | Capital of France? | fill_blank |   |   |   |   | Paris |
  */
@@ -42,10 +42,11 @@ class QuizImportService
      * Process:
      * 1. Load Excel file using PhpSpreadsheet library
      * 2. Convert worksheet to array (rows and columns)
-     * 3. Parse first row → Quiz metadata (title, description, etc.)
-     * 4. Parse remaining rows → Questions
-     * 5. Normalize question types (handle variations like "Multiple Choice" → "multiple_choice")
-     * 6. Create quiz in database
+     * 3. Parse first data row → Quiz metadata (columns A–D)
+     * 4. Parse first data row → First question (columns E–K, same row as metadata)
+     * 5. Parse following rows → Additional questions
+     * 6. Normalize question types while parsing
+     * 7. Create quiz in database
      * 
      * Error Handling: Wraps in try-catch to handle file reading errors,
      * invalid formats, or missing data. Logs errors for debugging.
@@ -80,48 +81,30 @@ class QuizImportService
             }
 
             // Step 3: Parse quiz metadata from first data row
-            // Excel columns: A=0 (Title), B=1 (Description), C=2 (Passing Score), D=3 (Time Reward)
+            // Excel columns: A=0 (Title), B=1 (Description), C=2 (Passing Percentage), D=3 (Time Reward)
             $firstRow = $rows[0];
             $quizTitle = $firstRow[0] ?? 'Imported Quiz';        // Column A: Quiz title (default if empty)
             $description = $firstRow[1] ?? null;                 // Column B: Description (optional)
-            $passingScore = (int)($firstRow[2] ?? 70);           // Column C: Passing score % (default 70)
+            $passingScore = (int)($firstRow[2] ?? 70);           // Column C: Passing percentage (default 70)
             $timeReward = (int)($firstRow[3] ?? 15);             // Column D: Time reward minutes (default 15)
             // (int) converts string to integer (e.g., "70" → 70)
 
-            // Step 4: Parse questions from remaining rows
+            // Step 4: Parse questions — first question shares row 2 with quiz metadata (E–K), then row 3+
             // Excel columns: E=4 (Question), F=5 (Type), G-J=6-9 (Options A-D), K=10 (Correct Answer)
             $questions = [];
-            $questionRows = array_slice($rows, 1);  // Skip first row (quiz metadata), get remaining rows
-
-            foreach ($questionRows as $index => $row) {
-                // Skip rows where question text is empty (allows blank rows in Excel)
-                if (empty($row[4])) {
-                    continue;
+            $appendQuestion = function (array $row) use (&$questions): void {
+                $parsed = $this->parseQuestionFromExcelRow($row);
+                if ($parsed === null) {
+                    return;
                 }
+                $parsed['id'] = count($questions) + 1;
+                $questions[] = $parsed;
+            };
 
-                // Build question array
-                $question = [
-                    'id' => $index + 1,  // Sequential ID starting at 1
-                    'question' => $row[4] ?? '',  // Column E: Question text
-                    // Normalize type: "Multiple Choice" → "multiple_choice", "MC" → "multiple_choice", etc.
-                    'type' => $this->normalizeType($row[5] ?? 'multiple_choice'),
-                    'correct_answer' => $row[10] ?? '',  // Column K: Correct answer
-                ];
+            $appendQuestion($firstRow);
 
-                // Add options only for multiple_choice and true_false
-                // Fill-in-the-blank questions don't need options
-                if (in_array($question['type'], ['multiple_choice', 'true_false'])) {
-                    // Get options from columns G-J (Option A, B, C, D)
-                    // array_filter() removes empty options (allows fewer than 4 options)
-                    $question['options'] = array_filter([
-                        $row[6] ?? '',  // Column G: Option A
-                        $row[7] ?? '',  // Column H: Option B
-                        $row[8] ?? '',  // Column I: Option C
-                        $row[9] ?? '',  // Column J: Option D
-                    ]);
-                }
-
-                $questions[] = $question;
+            foreach (array_slice($rows, 1) as $row) {
+                $appendQuestion($row);
             }
 
             if (empty($questions)) {
@@ -197,6 +180,44 @@ class QuizImportService
     }
 
     /**
+     * Extract one question from columns E–K of a sheet row, or null if column E is empty.
+     *
+     * @param  array<int, mixed>  $row
+     * @return array<string, mixed>|null
+     */
+    protected function parseQuestionFromExcelRow(array $row): ?array
+    {
+        if (empty($row[4])) {
+            return null;
+        }
+
+        $question = [
+            'question' => $row[4] ?? '',
+            'type' => $this->normalizeType(trim((string) ($row[5] ?? 'multiple_choice'))),
+            // (string) preserves numeric 0 as "0" (0 ?? '' stays 0, then cast).
+            'correct_answer' => (string) ($row[10] ?? ''),
+        ];
+
+        if (in_array($question['type'], ['multiple_choice', 'true_false'], true)) {
+            // Do not use default array_filter(): it drops numeric/string zero, which is a valid option.
+            $question['options'] = array_map(static function ($cell) {
+                if ($cell === null || $cell === '') {
+                    return '';
+                }
+
+                return is_scalar($cell) ? (string) $cell : '';
+            }, [
+                $row[6] ?? null,
+                $row[7] ?? null,
+                $row[8] ?? null,
+                $row[9] ?? null,
+            ]);
+        }
+
+        return $question;
+    }
+
+    /**
      * Generate and download Excel template.
      * 
      * Creates an Excel file with the correct format for quiz import.
@@ -227,7 +248,7 @@ class QuizImportService
         $headers = [
             'Quiz Title',           // Column A: Quiz name
             'Description',          // Column B: Optional description
-            'Passing Score (%)',    // Column C: Percentage needed to pass (0-100)
+            'Passing Percentage',   // Column C: Percentage needed to pass (0-100)
             'Time Reward (minutes)', // Column D: Minutes granted if passed
             'Question',             // Column E: Question text
             'Type',                 // Column F: multiple_choice, fill_blank, or true_false

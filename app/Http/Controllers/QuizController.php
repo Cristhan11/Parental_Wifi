@@ -206,7 +206,10 @@ class QuizController extends Controller
         $devices = $this->quizAssignableDevices();
 
         // Pre-check only child devices (detach parent/guest from display; save will sync child subset only)
-        $assignedDeviceIds = $quiz->devices()->where('role', 'child')->pluck('id')->toArray();
+        $assignedDeviceIds = $quiz->devices()
+            ->where('devices.role', 'child')
+            ->pluck('devices.id')
+            ->toArray();
 
         return view('quizzes.edit', compact('quiz', 'devices', 'assignedDeviceIds'));
     }
@@ -371,7 +374,7 @@ class QuizController extends Controller
      * 4. Redirects with success or error message
      * 
      * Excel Format Expected:
-     * - Row 1: Headers (Quiz Title, Description, Passing Score, Time Reward, Question, Type, Options A-D, Correct Answer)
+     * - Row 1: Headers (Quiz Title, Description, Passing Percentage, Time Reward, Question, Type, Options A-D, Correct Answer)
      * - Row 2+: Quiz metadata (first row) and questions (remaining rows)
      * 
      * Error Handling: If import fails (invalid format, missing data, etc.),
