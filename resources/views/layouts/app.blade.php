@@ -11,29 +11,10 @@
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
-        <!-- Fonts -->
-        <link rel="preconnect" href="https://fonts.googleapis.com">
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-        <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-
-        <!-- Tailwind CSS -->
-        <script src="https://cdn.tailwindcss.com"></script>
-
-        <!-- Alpine.js -->
-        <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-        
-        <!-- Scripts -->
+        {{-- No external CDNs: captive-portal / Pi Wi‑Fi often has no WAN until the device is allowed through. --}}
         @vite(['resources/css/app.css', 'resources/js/app.js'])
-        
-        <!-- Styles -->
-        <style>
-            .font-montserrat {
-                font-family: 'Montserrat', sans-serif;
-            }
-        </style>
-        
     </head>
-    <body class="font-sans antialiased" style="font-family: 'Montserrat', sans-serif;">
+    <body class="font-sans antialiased">
         <div class="min-h-screen flex bg-[#FFFFCC]" 
              x-data="{ 
                  sidebarOpen: window.innerWidth >= 1280,

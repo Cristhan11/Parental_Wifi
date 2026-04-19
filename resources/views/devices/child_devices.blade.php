@@ -219,7 +219,6 @@
     {{-- Chart.js + usage-chart fetch (same ranges/units as dashboard graph) --}}
     @push('scripts')
     @if($device)
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         (function() {
             'use strict';
@@ -323,7 +322,7 @@
                                     display: showLegend,
                                     position: 'bottom',
                                     labels: {
-                                        font: { family: 'Montserrat', size: 11, weight: 'bold' },
+                                        font: { family: 'Montserrat Variable', size: 11, weight: 'bold' },
                                         boxWidth: 10
                                     }
                                 },
@@ -354,12 +353,12 @@
                                     title: {
                                         display: true,
                                         text: payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)',
-                                        font: { family: 'Montserrat', size: 12, weight: 'bold' },
+                                        font: { family: 'Montserrat Variable', size: 12, weight: 'bold' },
                                         color: '#000000',
                                         padding: { top: 6, bottom: 6 }
                                     },
                                     ticks: {
-                                        font: { size: 12, weight: 'bold', family: 'Montserrat' },
+                                        font: { size: 12, weight: 'bold', family: 'Montserrat Variable' },
                                         ...(dailyFixedMax !== null ? { stepSize: 10 } : {}),
                                         color: '#000000',
                                         padding: 8
@@ -368,7 +367,7 @@
                                 },
                                 x: {
                                     ticks: {
-                                        font: { size: 11, weight: 'bold', family: 'Montserrat' },
+                                        font: { size: 11, weight: 'bold', family: 'Montserrat Variable' },
                                         color: '#000000',
                                         padding: 6
                                     },

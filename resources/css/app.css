@@ -1,3 +1,5 @@
+@import '@fontsource-variable/montserrat/index.css';
+
 @import 'tailwindcss';
 
 @source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
@@ -6,9 +8,9 @@
 @source '../**/*.js';
 
 @theme {
-    /* Montserrat Font Family */
-    --font-sans: 'Montserrat', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
-        'Segoe UI Symbol', 'Noto Color Emoji';
+    /* Self-hosted via Vite (no CDN); variable font = one file per unicode range. */
+    --font-sans: 'Montserrat Variable', ui-sans-serif, system-ui, sans-serif, 'Segoe UI', 'Apple Color Emoji',
+        'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
 
     /* Custom Color Palette */
     --color-black: #000000;
@@ -27,6 +29,10 @@
     --color-success: var(--color-green);
     --color-danger: var(--color-red);
     --color-background: var(--color-cream);
+}
+
+@utility font-montserrat {
+    font-family: var(--font-sans);
 }
 
 /* Custom focus styles for inputs */

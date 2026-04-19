@@ -1,5 +1,5 @@
 <x-app-layout>
-    <main class="flex-1 w-full bg-[#FFFFCC] font-sans text-gray-900 overflow-x-hidden overflow-y-hidden pl-4 pr-4 sm:pl-6 sm:pr-6 lg:pl-10 lg:pr-10 py-4 sm:py-6" style="margin-top: 0; font-family: 'Montserrat', sans-serif; max-width: 100%; height: calc(100vh - 0px); display: flex; flex-direction: column;">
+    <main class="flex-1 w-full bg-[#FFFFCC] font-sans text-gray-900 overflow-x-hidden overflow-y-hidden pl-4 pr-4 sm:pl-6 sm:pr-6 lg:pl-10 lg:pr-10 py-4 sm:py-6" style="margin-top: 0; max-width: 100%; height: calc(100vh - 0px); display: flex; flex-direction: column;">
 
         <!-- Welcome Section -->
         <section class="mb-4 flex-shrink-0">
@@ -238,7 +238,6 @@
     </main>
 
     @push('scripts')
-    <script src="https://unpkg.com/feather-icons"></script>
     <style>
         .custom-scrollbar::-webkit-scrollbar {
             width: 6px;
@@ -255,7 +254,6 @@
             background: #FFC107;
         }
     </style>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script>
         // Multi-series dashboard usage chart (per device) driven by `/dashboard/usage-chart`.
         (function() {
@@ -384,7 +382,7 @@
                                     position: 'bottom',
                                     labels: {
                                         font: {
-                                            family: 'Montserrat',
+                                            family: 'Montserrat Variable',
                                             size: 11,
                                             weight: 'bold'
                                         },
@@ -420,7 +418,7 @@
                                         // Simple, parent-friendly label.
                                         text: payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)',
                                         font: {
-                                            family: 'Montserrat',
+                                            family: 'Montserrat Variable',
                                             size: 12,
                                             weight: 'bold'
                                         },
@@ -431,7 +429,7 @@
                                         font: {
                                             size: 12,
                                             weight: 'bold',
-                                            family: 'Montserrat'
+                                            family: 'Montserrat Variable'
                                         },
                                         ...(dailyFixedMax !== null ? { stepSize: 10 } : {}),
                                         color: '#000000',
@@ -447,7 +445,7 @@
                                         font: {
                                             size: 11,
                                             weight: 'bold',
-                                            family: 'Montserrat'
+                                            family: 'Montserrat Variable'
                                         },
                                         color: '#000000',
                                         padding: 6
