@@ -51,6 +51,7 @@ class UsageChartService
 
         $devicesQuery = Device::query()
             ->where('user_id', $parent->id)
+            ->forDashboardTimeUsage()
             ->orderBy('name');
 
         if ($onlyDeviceId !== null) {

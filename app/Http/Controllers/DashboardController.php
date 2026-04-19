@@ -33,6 +33,7 @@ class DashboardController extends Controller
 
         // Keep base device query lean; session data is loaded in two batched queries below.
         $devices = Device::where('user_id', $user->id)
+            ->forDashboardTimeUsage()
             ->get();
 
         $startOfDay = now()->startOfDay();

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -50,6 +51,16 @@ class Device extends Model
         return [
             'last_seen_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Child devices shown on the parent dashboard TIME USAGE card and chart (not parent/guest roles, not whitelisted).
+     */
+    public function scopeForDashboardTimeUsage(Builder $query): Builder
+    {
+        return $query
+            ->whereRaw("COALESCE(role, 'child') = 'child'")
+            ->where('status', '<>', 'whitelisted');
     }
 
     /**
