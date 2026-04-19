@@ -94,6 +94,7 @@
                 </div>
 
                 <div class="portal-video-info">
+                    <p class="portal-video-instruction-label">Instruction</p>
                     <p style="margin:0 0 0.35rem;">Duration: {{ $video->getDurationFormatted() }}</p>
                     @if($video->dictionary_words_enabled)
                         <p style="margin:0;">
@@ -145,6 +146,8 @@
         const wordSubmissionForm = document.getElementById('wordSubmissionForm');
         const wordsData = @json($wordsData);
         const shownWords = [];
+        /** How long each dictionary word overlay stays visible (8s + 3s). */
+        const dictionaryWordDisplayMs = 11000;
 
         function portalFullscreenElement() {
             return document.fullscreenElement
@@ -297,7 +300,7 @@
                 } else {
                     syncPlayPauseLabel();
                 }
-            }, 8000);
+            }, dictionaryWordDisplayMs);
         }
 
         function handleVideoEnded() {
