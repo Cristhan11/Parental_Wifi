@@ -25,44 +25,46 @@
 <x-app-layout>
     <x-slot name="header">
         {{-- Yellow header bar matching design colorway (Image 3) --}}
-        <div class="flex items-center justify-between" style="background-color: #FFDE15; padding: 1rem; border-radius: 0.5rem;">
-            <div class="flex items-center space-x-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0" style="background-color: #FFDE15; padding: 1rem; border-radius: 0.5rem;">
+            <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
                 {{-- Left arrow icon (back button) --}}
-                <a href="{{ route('dashboard') }}" class="text-black hover:opacity-75">
-                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <a href="{{ route('dashboard') }}" class="shrink-0 text-black hover:opacity-75">
+                    <svg class="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </a>
                 {{-- Smartphone icon (for Child Devices) --}}
-                <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="h-6 w-6 shrink-0 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path>
                 </svg>
-                <h2 class="font-semibold text-xl text-black leading-tight">
+                <h2 class="min-w-0 text-base font-semibold leading-tight text-black sm:text-xl">
                     CHILD DEVICES
                 </h2>
             </div>
             {{-- Action Buttons: Browsing History and Access Attempts --}}
             {{-- These buttons link to the detailed views with the selected device pre-filtered --}}
             @if($device)
-                <div class="flex space-x-2">
+                <div class="flex w-full min-w-0 flex-col gap-2 sm:w-auto sm:flex-row sm:items-center sm:justify-end sm:gap-2">
                     {{-- Browsing History Button: Links to browsing logs page with device_id parameter --}}
-                    <a href="{{ route('browsing-logs.index', ['device_id' => $device->id]) }}" 
-                       class="px-4 py-2 rounded text-white font-medium hover:opacity-90 flex items-center space-x-1" 
-                       style="background-color: #3B82F6;">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <a href="{{ route('browsing-logs.index', ['device_id' => $device->id]) }}"
+                       class="inline-flex w-full min-w-0 items-center justify-center gap-1.5 rounded px-3 py-2 text-sm font-medium text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base"
+                       style="background-color: #3B82F6;"
+                       aria-label="Browsing history for this child device">
+                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"></path>
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"></path>
                         </svg>
-                        <span>Browsing History</span>
+                        <span class="truncate sm:whitespace-nowrap"><span class="sm:hidden">History</span><span class="hidden sm:inline">Browsing History</span></span>
                     </a>
                     {{-- Access Attempts Button: Links to access attempts page with device_id parameter --}}
-                    <a href="{{ route('access-attempts.index', ['device_id' => $device->id]) }}" 
-                       class="px-4 py-2 rounded text-white font-medium hover:opacity-90 flex items-center space-x-1" 
-                       style="background-color: #EF4444;">
-                        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <a href="{{ route('access-attempts.index', ['device_id' => $device->id]) }}"
+                       class="inline-flex w-full min-w-0 items-center justify-center gap-1.5 rounded px-3 py-2 text-sm font-medium text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base"
+                       style="background-color: #EF4444;"
+                       aria-label="Access attempts for this child device">
+                        <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"></path>
                         </svg>
-                        <span>Access Attempts</span>
+                        <span class="truncate sm:whitespace-nowrap"><span class="sm:hidden">Attempts</span><span class="hidden sm:inline">Access Attempts</span></span>
                     </a>
                 </div>
             @endif
@@ -70,13 +72,13 @@
     </x-slot>
 
     <div class="py-12">
-        <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+        <div class="max-w-7xl mx-auto min-w-0 px-4 sm:px-6 lg:px-8">
             {{-- Child dropdown selector (matching Image 3) --}}
             @if($devices->count() > 0)
-                <div class="mb-6">
-                    <form method="GET" action="{{ route('child_devices.index') }}" class="flex items-center space-x-3">
-                        <label for="device" class="text-sm font-medium text-gray-700">CHILD:</label>
-                        <select name="device" id="device" onchange="this.form.submit()" class="rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500">
+                <div class="mb-6 min-w-0">
+                    <form method="GET" action="{{ route('child_devices.index') }}" class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                        <label for="device" class="shrink-0 text-sm font-medium text-gray-700">CHILD:</label>
+                        <select name="device" id="device" onchange="this.form.submit()" class="w-full min-w-0 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:max-w-md">
                             @foreach($devices as $d)
                                 <option value="{{ $d->id }}" {{ $device && $device->id === $d->id ? 'selected' : '' }}>
                                     {{ $d->name }}
@@ -88,7 +90,7 @@
             @endif
 
             @if($device)
-                <div class="grid grid-cols-1 gap-6">
+                <div class="grid min-w-0 grid-cols-1 gap-6">
                     {{-- Card 1: TIME USAGE (matching Image 3) --}}
                     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                         <div class="p-6">
@@ -122,8 +124,8 @@
                             </div>
                             
                             {{-- Full-width chart (same data source as dashboard usage graph) --}}
-                            <div class="relative w-full min-h-[280px] sm:min-h-[320px] lg:min-h-[380px]">
-                                <canvas id="timeUsageChart" class="w-full h-full" role="img" aria-label="Time usage for selected child device"></canvas>
+                            <div class="relative min-h-[280px] w-full min-w-0 overflow-x-auto sm:min-h-[320px] lg:min-h-[380px]">
+                                <canvas id="timeUsageChart" class="h-full min-w-[280px] w-full" role="img" aria-label="Time usage for selected child device"></canvas>
                             </div>
                         </div>
                     </div>
@@ -136,8 +138,8 @@
                             @if(count($quizScores) > 0)
                                 <div class="space-y-2">
                                     @foreach($quizScores as $index => $quizScore)
-                                        <div class="flex items-center justify-between p-3 bg-white rounded">
-                                            <span class="text-sm font-medium text-gray-900">
+                                        <div class="flex min-w-0 flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between rounded bg-white">
+                                            <span class="min-w-0 text-sm font-medium text-gray-900">
                                                 QUIZ {{ $index + 1 }}: {{ $quizScore['correct'] }}/{{ $quizScore['total'] }}
                                             </span>
                                             @if($quizScore['passed'])
@@ -159,12 +161,12 @@
                     {{-- Browsing logs are automatically created by the ParseNetworkLogs background job --}}
                     <div class="bg-gray-100 overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                         <div class="p-6">
-                            <div class="flex items-center justify-between mb-4">
+                            <div class="mb-4 flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                                 <h3 class="text-lg font-semibold text-gray-900">WEBSITE HISTORY</h3>
                                 {{-- View All Link: Links to full browsing logs page with device pre-filtered --}}
                                 @if($websiteHistory->count() > 0)
-                                    <a href="{{ route('browsing-logs.index', ['device_id' => $device->id]) }}" 
-                                       class="text-sm text-blue-600 hover:underline">
+                                    <a href="{{ route('browsing-logs.index', ['device_id' => $device->id]) }}"
+                                       class="shrink-0 text-sm text-blue-600 hover:underline sm:text-right">
                                         View All
                                     </a>
                                 @endif
@@ -174,18 +176,18 @@
                             @if($websiteHistory->count() > 0)
                                 <div class="space-y-2">
                                     @foreach($websiteHistory as $log)
-                                        <div class="p-3 bg-white rounded">
+                                        <div class="min-w-0 rounded bg-white p-3">
                                             {{-- Domain and URL: Shows which website was visited --}}
-                                            <div class="flex items-center justify-between">
-                                                <div class="flex-1">
+                                            <div class="flex min-w-0 flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
+                                                <div class="min-w-0 flex-1">
                                                     <span class="text-sm font-medium text-gray-900">{{ $log->domain }}</span>
                                                     {{-- URL: Truncated if too long, shows full URL on hover --}}
-                                                    <p class="text-xs text-gray-500 mt-1" title="{{ $log->url }}">
+                                                    <p class="mt-1 break-words text-xs text-gray-500" title="{{ $log->url }}">
                                                         {{ Str::limit($log->url, 60) }}
                                                     </p>
                                                 </div>
                                                 {{-- Visited At: Timestamp showing when the site was visited --}}
-                                                <span class="text-xs text-gray-400 ml-2">
+                                                <span class="shrink-0 text-xs text-gray-400 sm:ml-2 sm:text-right">
                                                     {{ $log->visited_at->format('M d, H:i') }}
                                                 </span>
                                             </div>

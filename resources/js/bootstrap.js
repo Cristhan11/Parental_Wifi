@@ -11,10 +11,17 @@ import Pusher from 'pusher-js';
 window.Pusher = Pusher;
 
 const reverbKey = import.meta.env.VITE_REVERB_APP_KEY;
+const clientFlag = String(import.meta.env.VITE_REVERB_CLIENT ?? '').toLowerCase();
+const truthy = ['true', '1', 'on', 'yes'];
+const falsy = ['false', '0', 'off', 'no'];
 
-// Only initialize realtime connection when env is configured.
-// This keeps local/dev/test environments from failing hard if Reverb is disabled.
-if (reverbKey) {
+// Production: connect when the key is set unless explicitly disabled.
+// Development (Vite dev server): opt-in only — avoids console WebSocket errors when Reverb is not running.
+const shouldConnectEcho =
+    !!reverbKey &&
+    (import.meta.env.PROD ? !falsy.includes(clientFlag) : truthy.includes(clientFlag));
+
+if (shouldConnectEcho) {
     window.Echo = new Echo({
         broadcaster: 'reverb',
         key: reverbKey,
@@ -24,4 +31,8 @@ if (reverbKey) {
         forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'https') === 'https',
         enabledTransports: ['ws', 'wss'],
     });
+} else if (import.meta.env.DEV && reverbKey && !truthy.includes(clientFlag)) {
+    console.debug(
+        '[Echo] Reverb client disabled in dev. Set VITE_REVERB_CLIENT=true while `php artisan reverb:start` is running for live updates.'
+    );
 }

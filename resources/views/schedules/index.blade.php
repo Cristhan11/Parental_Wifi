@@ -6,23 +6,23 @@
 --}}
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center justify-between" style="background-color: #FFDE15; padding: 1rem; border-radius: 0.5rem;">
-            <div class="flex items-center space-x-3">
-                <a href="{{ route('dashboard') }}" class="text-black hover:opacity-75">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between sm:gap-0" style="background-color: #FFDE15; padding: 1rem; border-radius: 0.5rem;">
+            <div class="flex min-w-0 flex-1 items-center gap-2 sm:gap-3">
+                <a href="{{ route('dashboard') }}" class="shrink-0 text-black hover:opacity-75">
                     <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
                     </svg>
                 </a>
-                <svg class="w-6 h-6 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg class="h-6 w-6 shrink-0 text-black" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path>
                 </svg>
-                <h2 class="font-semibold text-xl text-black leading-tight">
+                <h2 class="min-w-0 font-semibold text-base leading-tight text-black sm:text-xl">
                     DEVICE SCHEDULES
                 </h2>
             </div>
-            <div class="flex space-x-2">
-                <a href="{{ route('schedules.create') }}" class="px-4 py-2 rounded text-white font-medium hover:opacity-90 flex items-center space-x-1" style="background-color: #EF4444;">
-                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div class="flex shrink-0 items-center justify-end sm:pl-2">
+                <a href="{{ route('schedules.create') }}" class="inline-flex items-center gap-1 rounded px-3 py-2 text-sm font-medium text-white hover:opacity-90 sm:px-4 sm:text-base whitespace-nowrap" style="background-color: #EF4444;">
+                    <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
                     </svg>
                     <span>Create Schedule</span>
