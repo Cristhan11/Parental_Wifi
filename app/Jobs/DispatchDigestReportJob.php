@@ -98,7 +98,7 @@ class DispatchDigestReportJob implements ShouldQueue
         $payload = $digestService->buildDigestPayload($user, $periodStart, $periodEnd, $timezone);
 
         // Extra keys the Blade layout expects (service focuses on metrics; job adds presentation metadata).
-        $payload['dashboard_url'] = route('dashboard');
+        $payload['dashboard_url'] = config('reporting.email_dashboard_url');
         $payload['title'] = ucfirst($this->frequency).' Report';
         $payload['preheader'] = $this->resolvePreheader($payload);
 

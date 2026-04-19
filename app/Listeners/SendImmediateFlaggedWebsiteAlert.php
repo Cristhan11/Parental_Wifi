@@ -62,7 +62,7 @@ class SendImmediateFlaggedWebsiteAlert
             'device_name' => $event->deviceName,
             'ip_address' => null,
             'timezone' => $timezone,
-            'dashboard_url' => route('dashboard'),
+            'dashboard_url' => config('reporting.email_dashboard_url'),
         ];
 
         foreach ($recipients as $email) {

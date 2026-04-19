@@ -195,7 +195,7 @@ class SendDummyDigestPreview extends Command
             'registered_devices_count' => 2,
             'devices' => $devices,
             'has_activity' => true,
-            'dashboard_url' => route('dashboard'),
+            'dashboard_url' => config('reporting.email_dashboard_url'),
             'title' => $title,
             'preheader' => $preheader,
             'preview_banner' => $previewBanner,

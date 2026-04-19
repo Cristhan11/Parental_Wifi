@@ -46,4 +46,18 @@ return [
 
     'flagged_access_alert_throttle_minutes' => (int) env('FLAGGED_ACCESS_ALERT_THROTTLE_MINUTES', 10),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Dashboard link in reporting emails
+    |--------------------------------------------------------------------------
+    |
+    | "Open dashboard" in digest and immediate alert messages must reach the
+    | app where parents sign in (often a Tailscale IP on the Pi). route() alone
+    | uses APP_URL, which may be wrong for mail readers. Override per deploy
+    | with REPORTING_DASHBOARD_URL (full URL, including scheme and path).
+    |
+    */
+
+    'email_dashboard_url' => env('REPORTING_DASHBOARD_URL', 'http://100.102.52.117/dashboard'),
+
 ];

@@ -78,7 +78,7 @@ class SendDummyImmediateAlerts extends Command
             'ip_address' => '192.168.1.50',
             'timezone' => $timezone,
             // `route()` generates an absolute URL using APP_URL from .env — same helper real emails use.
-            'dashboard_url' => route('dashboard'),
+            'dashboard_url' => config('reporting.email_dashboard_url'),
         ];
         // Subject line includes “Preview” so inboxes never confuse this with a live security alert.
         $blockedSubject = '[Parental WiFi][Preview][Blocked] Sample alert — not a real event';
@@ -91,7 +91,7 @@ class SendDummyImmediateAlerts extends Command
             'device_name' => 'Child laptop B (sample)',
             'ip_address' => '192.168.1.51',
             'timezone' => $timezone,
-            'dashboard_url' => route('dashboard'),
+            'dashboard_url' => config('reporting.email_dashboard_url'),
         ];
         $flaggedSubject = '[Parental WiFi][Preview][Flagged] Sample alert — not a real event';
 
