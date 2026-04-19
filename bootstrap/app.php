@@ -24,6 +24,10 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     // Configure middleware - code that runs before requests reach controllers
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->web(prepend: [
+            \App\Http\Middleware\ForceRootUrlFromRequest::class,
+        ]);
+
         // Register custom role-based middleware with aliases
         // This allows us to use short names like 'role.parent' instead of full class names
         //

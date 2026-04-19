@@ -29,6 +29,7 @@ The rest of this file lists **only what this repository configures** in Laravel.
 
 ## What this project configures
 
+- **`App\Http\Middleware\ForceRootUrlFromRequest`** — Prepended on the **`web`** stack in `bootstrap/app.php`. Sets `URL::forceRootUrl()` from the incoming request’s scheme and host so redirects (for example to `/login`) use **the same host you opened** (`100.x`, MagicDNS, or `192.168.x.x`), not only `APP_URL`. Deploy with `git pull` on the Pi so Tailscale browsers are not sent to a fixed LAN IP in the `Location` header.
 - **`config/remote_access.php`** — Reads `.env`: `TRUSTED_PROXIES`, optional `TRUSTED_PROXY_HEADERS`, `TRUSTED_LOCAL_CIDRS` (defaults: `192.168.0.0/16,10.0.0.0/8,172.16.0.0/12`; Tailscale `100.x` is not in the default list so tailnet traffic is stored as **remote** in audits).
 - **Trusted proxies** — `App\Providers\AppServiceProvider` calls `TrustProxies::at(...)` when `TRUSTED_PROXIES` is set so `$request->ip()` is correct behind nginx/Caddy or a tunnel.
 - **LAN vs remote for logs** — `App\Support\RequestSource` sets `is_remote` on each audit row from `$request->ip()` and `TRUSTED_LOCAL_CIDRS`.
@@ -42,7 +43,7 @@ The rest of this file lists **only what this repository configures** in Laravel.
 
 ## `.env` keys this stack reads
 
-- **`APP_URL`** — Use the URL users type in the browser (important for sessions/cookies when you use HTTPS).
+- **`APP_URL`** — Fallback for CLI, mail, and asset helpers; **web redirects follow the request host** via `ForceRootUrlFromRequest`. Keep `SESSION_DOMAIN` empty (null) unless you know you need a shared cookie domain across hostnames.
 - **`TRUSTED_PROXIES`** — Comma-separated IPs, or `*`, when a reverse proxy sets `X-Forwarded-*`. Empty when the app sees the client IP directly.
 - **`TRUSTED_PROXY_HEADERS`** — Optional; only if you need a non-default forwarded-header bitmask.
 - **`TRUSTED_LOCAL_CIDRS`** — Comma-separated CIDRs counted as “local” for `is_remote = false` in `security_audit_events`.
@@ -91,7 +92,12 @@ The app does not change Reverb for you. If live updates fail over Tailscale, set
 
 ## Quick fixes
 
-- **Cannot load the site on Tailscale** — Confirm Tailscale on Pi and client (`tailscale status`), web server running, firewall allows the HTTP/HTTPS port.
+- **Cannot load the site on Tailscale** — Tailscale only provides the path; something on the Pi must **listen on `0.0.0.0`** (all interfaces) or the request never reaches Laravel. On the Pi over SSH, run:
+  - **`sudo ss -tlnp`** — Look for `LISTEN` on `:80`, `:443`, or `:8000`. If nothing listens on **80**, `http://100.x.x.x/` will never load (try the port you actually see, e.g. **8000**).
+  - **`curl -sS -o /dev/null -w "%{http_code}\n" http://127.0.0.1/`** and the same against **`http://$(tailscale ip -4)/`** — If localhost works but the Tailscale IP fails, nginx/Caddy may be bound only to a LAN address; set **`listen`** to **`0.0.0.0:80`** (and **`443`** if used), not only `192.168.x.x`.
+  - **`sudo ufw status`** — If `ufw` is active, allow the web port, e.g. **`sudo ufw allow 80/tcp`** (and **`443/tcp`** if you use HTTPS). Rules that only allow `eth0` can still block; allowing the port globally is simplest for home Pi.
+  - **`php artisan serve`** (dev only) binds to **127.0.0.1:8000** by default, so **Tailscale cannot reach it**. Use **`php artisan serve --host=0.0.0.0 --port=8000`** and open **`http://<tailscale-ip>:8000/`** on the phone, or use **nginx/Caddy** on port 80 in production.
+  - **HTTPS to a raw IP** often fails (no certificate for `100.x.x.x`). Use **`http://`** for tests, or use a name + valid cert / tailnet-only HTTP.
 - **Wrong IP in security rows** — Set `TRUSTED_PROXIES` to your proxy (or `*` only if you understand single-hop trust).
 - **LAN logins show as remote** — Add your home subnet to `TRUSTED_LOCAL_CIDRS`.
 - **Tailnet shows as local** — Remove `100.64.0.0/10` from `TRUSTED_LOCAL_CIDRS` if you added it and want tailnet labeled remote.
