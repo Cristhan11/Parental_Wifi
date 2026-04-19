@@ -439,6 +439,40 @@ class PortalController extends Controller
                 ->with('error', 'You do not have access to this quiz.');
         }
 
+        // Max passed completions per device per calendar day (only counts attempts where passed = true)
+        if ($quiz->max_passes_per_day) {
+            $passesToday = QuizAttempt::query()
+                ->where('device_id', $device->id)
+                ->where('quiz_id', $quiz->id)
+                ->where('passed', true)
+                ->whereDate('completed_at', now()->toDateString())
+                ->count();
+
+            if ($passesToday >= (int) $quiz->max_passes_per_day) {
+                return redirect()->route('portal.landing', ['mac' => $device->mac_address])
+                    ->with('error', 'You have reached the maximum successful completions for this quiz today. Try again tomorrow.');
+            }
+        }
+
+        // Minimum wait after any finished attempt before starting again
+        if ($quiz->retry_cooldown_minutes) {
+            $lastAttempt = QuizAttempt::query()
+                ->where('device_id', $device->id)
+                ->where('quiz_id', $quiz->id)
+                ->orderByDesc('completed_at')
+                ->first();
+
+            if ($lastAttempt && $lastAttempt->completed_at) {
+                $eligibleAt = $lastAttempt->completed_at->copy()->addMinutes((int) $quiz->retry_cooldown_minutes);
+                if (now()->lt($eligibleAt)) {
+                    $minutesLeft = max(1, (int) ceil(now()->diffInSeconds($eligibleAt) / 60));
+
+                    return redirect()->route('portal.landing', ['mac' => $device->mac_address])
+                        ->with('error', "Please wait {$minutesLeft} more minute(s) before starting this quiz again.");
+                }
+            }
+        }
+
         // Extract questions from quiz's JSON structure
         // Questions are stored as: {questions: [{id: 1, question: "...", ...}]}
         // We extract the inner array: [{id: 1, question: "...", ...}]

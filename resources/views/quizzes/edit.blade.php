@@ -22,6 +22,17 @@
                         @csrf
                         @method('PUT')
 
+                        @if ($errors->any())
+                            <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-md" role="alert">
+                                <p class="font-medium text-red-800">We could not save your quiz. Please fix the following:</p>
+                                <ul class="mt-2 list-disc list-inside text-sm text-red-700">
+                                    @foreach ($errors->all() as $message)
+                                        <li>{{ $message }}</li>
+                                    @endforeach
+                                </ul>
+                            </div>
+                        @endif
+
                         <!-- Quiz Metadata -->
                         <div class="mb-6">
                             <label for="title" class="block text-sm font-medium text-gray-700 mb-2">Quiz Title *</label>
@@ -43,7 +54,7 @@
 
                         <div class="grid grid-cols-2 gap-4 mb-6">
                             <div>
-                                <label for="passing_score" class="block text-sm font-medium text-gray-700 mb-2">Passing Score (%) *</label>
+                                <label for="passing_score" class="block text-sm font-medium text-gray-700 mb-2">Passing Percentage *</label>
                                 <input type="number" name="passing_score" id="passing_score" value="{{ old('passing_score', $quiz->passing_score) }}" min="0" max="100" required
                                     class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
                                 @error('passing_score')
@@ -56,6 +67,29 @@
                                 <input type="number" name="time_reward_minutes" id="time_reward_minutes" value="{{ old('time_reward_minutes', $quiz->time_reward_minutes) }}" min="1" required
                                     class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
                                 @error('time_reward_minutes')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                            <div>
+                                <label for="max_passes_per_day" class="block text-sm font-medium text-gray-700 mb-2">Max passed completions per day</label>
+                                <input type="number" name="max_passes_per_day" id="max_passes_per_day" value="{{ old('max_passes_per_day', $quiz->max_passes_per_day) }}" min="1" max="500"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                                    placeholder="Unlimited if empty">
+                                <p class="mt-1 text-sm text-gray-500">Only counts <strong>passed</strong> attempts today, per child device. Leave blank for no daily pass limit.</p>
+                                @error('max_passes_per_day')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label for="retry_cooldown_minutes" class="block text-sm font-medium text-gray-700 mb-2">Retry interval (minutes)</label>
+                                <input type="number" name="retry_cooldown_minutes" id="retry_cooldown_minutes" value="{{ old('retry_cooldown_minutes', $quiz->retry_cooldown_minutes) }}" min="0" max="10080"
+                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                                    placeholder="No wait if empty">
+                                <p class="mt-1 text-sm text-gray-500">Minimum minutes after <strong>any</strong> completed attempt before the child can start this quiz again.</p>
+                                @error('retry_cooldown_minutes')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
@@ -75,7 +109,7 @@
                         @if(isset($devices) && $devices->count() > 0)
                             <div class="mb-6">
                                 <label class="block text-sm font-medium text-gray-700 mb-2">Assign to Devices</label>
-                                <p class="text-sm text-gray-500 mb-3">Update which devices are allowed to take this quiz.</p>
+                                <p class="text-sm text-gray-500 mb-3">Update which registered <strong>child</strong> devices can take this quiz (parent and guest devices are not listed).</p>
                                 <div class="border border-gray-300 rounded-md p-4 max-h-48 overflow-y-auto">
                                     @foreach($devices as $device)
                                         <div class="flex items-center mb-2">
@@ -101,7 +135,7 @@
                         @else
                             <div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-md">
                                 <p class="text-sm text-yellow-800">
-                                    No devices available. Please add devices before assigning quizzes.
+                                    No registered <strong>child</strong> devices yet. Add a child-role device under Accounts before assigning quizzes.
                                 </p>
                             </div>
                         @endif
@@ -110,7 +144,7 @@
                         <div class="mb-6">
                             <div class="flex justify-between items-center mb-4">
                                 <h3 class="text-lg font-medium text-gray-900">Questions</h3>
-                                <button type="button" onclick="addQuestion()" class="px-4 py-2 rounded text-white font-medium hover:opacity-90" style="background-color: #10B981;">
+                                <button type="button" onclick="window.addQuestion()" class="px-4 py-2 rounded text-white font-medium hover:opacity-90" style="background-color: #10B981;">
                                     + Add Question
                                 </button>
                             </div>
@@ -161,11 +195,12 @@
          * 4. Pre-select question types and fill in answers
          */
         (function() {
-            // Prevent redeclaration: Check if script already ran
-            if (window.quizQuestionIndex !== undefined) {
-                return; // Script already loaded
+            const quizFormEl = document.getElementById('quizForm');
+            if (!quizFormEl || quizFormEl.dataset.quizBuilderInit === '1') {
+                return;
             }
-            
+            quizFormEl.dataset.quizBuilderInit = '1';
+
             // Global question counter (starts at 0, increments for each new question)
             window.quizQuestionIndex = 0;
             
@@ -229,6 +264,9 @@
                 const correctAnswer = (questionData && questionData.correct_answer) ? String(questionData.correct_answer) : '';
                 
                 console.log('Question data extracted:', { type, questionText, options, correctAnswer });
+
+                // True/False must only submit two options; extra empty inputs fail server validation.
+                const optionIndices = type === 'true_false' ? [0, 1] : [0, 1, 2, 3];
                 
                 questionDiv.innerHTML = `
                 <div class="flex justify-between items-center mb-4">
@@ -257,13 +295,12 @@
                 <div id="options-${window.quizQuestionIndex}" class="mb-4" style="display: ${type === 'fill_blank' ? 'none' : 'block'};">
                     <label class="block text-sm font-medium text-gray-700 mb-2">Options *</label>
                     <div class="space-y-2">
-                        ${[0, 1, 2, 3].map(i => `
+                        ${optionIndices.map(i => `
                             <input type="text" name="questions[${window.quizQuestionIndex}][options][]" 
                                 value="${escapeHtml(options[i] || '')}" 
                                 placeholder="Option ${String.fromCharCode(65 + i)}" 
-                                ${type !== 'fill_blank' && (type === 'true_false' ? i < 2 : true) ? 'required' : ''}
+                                ${type !== 'fill_blank' ? 'required' : ''}
                                 ${type === 'fill_blank' ? 'disabled' : ''}
-                                ${type === 'true_false' && i >= 2 ? 'style="display: none;"' : ''}
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
                         `).join('')}
                     </div>
@@ -325,7 +362,7 @@
                 }
                 
                 return `
-                    <select id="correct-answer-select-${index}" required onchange="updateCorrectAnswerFromSelect(${index})"
+                    <select id="correct-answer-select-${index}" required onchange="window.updateCorrectAnswerFromSelect(${index})"
                         class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500">
                         <option value="">Select correct answer</option>
                         ${['a', 'b', 'c', 'd'].map((letter, i) => `

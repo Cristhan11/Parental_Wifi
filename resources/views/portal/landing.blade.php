@@ -15,6 +15,12 @@
                 <p class="portal-subtitle">Complete activities to earn internet time</p>
             </header>
 
+            @if(session('error'))
+                <div class="portal-banner portal-banner--error">
+                    <p>{{ session('error') }}</p>
+                </div>
+            @endif
+
             @if(isset($error))
                 <div class="portal-banner portal-banner--error">
                     <p>{{ $error }}</p>

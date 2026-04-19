@@ -125,10 +125,20 @@ class DashboardController extends Controller
                     'attempts' => [],
                 ];
             }
+            $questionItems = $attempt->quiz->questions['questions'] ?? [];
+            if (! is_array($questionItems)) {
+                $questionItems = [];
+            }
+            $totalQuestions = count($questionItems);
+            // Stored score is 0–100%; derive correct count for display (same approach as DeviceController::getQuizScores).
+            $correctCount = $totalQuestions > 0
+                ? (int) max(0, min($totalQuestions, round($attempt->score / 100 * $totalQuestions)))
+                : 0;
+
             $quizResults[$quizId]['attempts'][] = [
                 'device' => $attempt->device,
-                'score' => $attempt->score,
-                'total_questions' => count($attempt->quiz->questions ?? []),
+                'correct_count' => $correctCount,
+                'total_questions' => $totalQuestions,
                 'completed_at' => $attempt->completed_at,
             ];
         }

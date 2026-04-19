@@ -118,7 +118,7 @@
                                     <li class="text-sm flex items-center justify-between font-montserrat">
                                         <span class="text-gray-700">
                                             <span class="font-semibold text-black">{{ $attemptIndex + 1 }}. {{ $attempt['device']->name }}:</span>
-                                            <span class="font-bold text-black ml-1">{{ $attempt['score'] }}/{{ $attempt['total_questions'] }}</span>
+                                            <span class="font-bold text-black ml-1">{{ $attempt['correct_count'] }}/{{ $attempt['total_questions'] }}</span>
                                         </span>
                                         <time datetime="{{ $attempt['completed_at']->toIso8601String() }}" class="text-xs text-gray-500 font-montserrat">
                                             {{ $attempt['completed_at']->format('M j, Y') }}

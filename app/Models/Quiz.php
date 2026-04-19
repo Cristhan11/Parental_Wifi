@@ -30,6 +30,8 @@ class Quiz extends Model
         'questions',
         'passing_score',
         'time_reward_minutes',
+        'max_passes_per_day',
+        'retry_cooldown_minutes',
         'is_active',
     ];
 

@@ -34,6 +34,20 @@ class UpdateQuizRequest extends FormRequest
         return true; // Authorization handled by middleware
     }
 
+    protected function prepareForValidation(): void
+    {
+        $maxPasses = $this->input('max_passes_per_day');
+        $maxPasses = ($maxPasses === '' || $maxPasses === null) ? null : $maxPasses;
+
+        $retry = $this->input('retry_cooldown_minutes');
+        $retry = ($retry === '' || $retry === null || (int) $retry === 0) ? null : $retry;
+
+        $this->merge([
+            'max_passes_per_day' => $maxPasses,
+            'retry_cooldown_minutes' => $retry,
+        ]);
+    }
+
     /**
      * Get the validation rules that apply to the request.
      * 
@@ -76,13 +90,15 @@ class UpdateQuizRequest extends FormRequest
                     }
                 }
             ],
-            'questions.*.options.*' => ['required', 'string', 'max:500'],
+            'questions.*.options.*' => ['required_with:questions.*.options', 'string', 'max:500'],
+            'max_passes_per_day' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'retry_cooldown_minutes' => ['nullable', 'integer', 'min:0', 'max:10080'],
             'questions.*.correct_answer' => ['required', 'string', 'max:500'],
             'devices' => ['nullable', 'array'],
             'devices.*' => [
                 'integer',
                 Rule::exists('devices', 'id')->where(function ($query) {
-                    $query->where('user_id', Auth::id());
+                    $query->where('user_id', Auth::id())->where('role', 'child');
                 }),
             ],
         ];
@@ -97,9 +113,9 @@ class UpdateQuizRequest extends FormRequest
     {
         return [
             'title.required' => 'Quiz title is required.',
-            'passing_score.required' => 'Passing score is required.',
-            'passing_score.min' => 'Passing score must be at least 0%.',
-            'passing_score.max' => 'Passing score cannot exceed 100%.',
+            'passing_score.required' => 'Passing percentage is required.',
+            'passing_score.min' => 'Passing percentage must be at least 0%.',
+            'passing_score.max' => 'Passing percentage cannot exceed 100%.',
             'time_reward_minutes.required' => 'Time reward is required.',
             'time_reward_minutes.min' => 'Time reward must be at least 1 minute.',
             'questions.required' => 'At least one question is required.',

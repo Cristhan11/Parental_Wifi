@@ -54,7 +54,7 @@
                         <ul class="list-disc list-inside text-sm text-gray-700 space-y-1">
                             <li><strong>Column A:</strong> Quiz Title (first row only)</li>
                             <li><strong>Column B:</strong> Description (first row only, optional)</li>
-                            <li><strong>Column C:</strong> Passing Score % (first row only, e.g., 70)</li>
+                            <li><strong>Column C:</strong> Passing percentage (first row only, e.g., 70)</li>
                             <li><strong>Column D:</strong> Time Reward in minutes (first row only, e.g., 15)</li>
                             <li><strong>Column E:</strong> Question text (each row after header)</li>
                             <li><strong>Column F:</strong> Question type (multiple_choice, fill_blank, or true_false)</li>

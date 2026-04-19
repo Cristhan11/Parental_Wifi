@@ -23,7 +23,9 @@ use App\Http\Requests\StoreQuizRequest;
 use App\Http\Requests\UpdateQuizRequest;
 use App\Models\Quiz;
 use App\Services\QuizImportService;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\View\View;
 
@@ -101,8 +103,8 @@ class QuizController extends Controller
      */
     public function create(): View
     {
-        // Get all devices owned by the logged-in parent so quizzes can be assigned
-        $devices = Auth::user()->devices()->get();
+        // Quizzes run on the child portal — only assign to registered child-role devices
+        $devices = $this->quizAssignableDevices();
 
         return view('quizzes.create', compact('devices'));
     }
@@ -160,13 +162,14 @@ class QuizController extends Controller
             'description' => $validated['description'] ?? null,  // Optional description
             'passing_score' => $validated['passing_score'],  // Percentage needed to pass (0-100)
             'time_reward_minutes' => $validated['time_reward_minutes'],  // Minutes granted if passed
+            'max_passes_per_day' => $validated['max_passes_per_day'] ?? null,
+            'retry_cooldown_minutes' => $validated['retry_cooldown_minutes'] ?? null,
             'questions' => ['questions' => $questions],  // Store as JSON: {questions: [...]}
             'is_active' => true,  // New quizzes are active by default
         ]);
 
-        // Assign quiz to selected devices (if any)
-        $deviceIds = $request->input('devices', []);
-        $quiz->devices()->sync($deviceIds);
+        // Assign quiz to selected child devices only (ignore tampered/non-child IDs)
+        $quiz->devices()->sync($this->sanitizedQuizDeviceIds($request));
 
         // Redirect to quiz list page with success message
         // ->with() stores a message in session that displays on next page
@@ -200,11 +203,10 @@ class QuizController extends Controller
             abort(403, 'Unauthorized action.');  // 403 = Forbidden
         }
 
-        // Get devices owned by the parent for assignment checkboxes
-        $devices = Auth::user()->devices()->get();
+        $devices = $this->quizAssignableDevices();
 
-        // Current device assignments for this quiz (used to pre-check boxes)
-        $assignedDeviceIds = $quiz->devices()->pluck('devices.id')->toArray();
+        // Pre-check only child devices (detach parent/guest from display; save will sync child subset only)
+        $assignedDeviceIds = $quiz->devices()->where('role', 'child')->pluck('id')->toArray();
 
         return view('quizzes.edit', compact('quiz', 'devices', 'assignedDeviceIds'));
     }
@@ -260,18 +262,39 @@ class QuizController extends Controller
             'description' => $validated['description'] ?? null,
             'passing_score' => $validated['passing_score'],
             'time_reward_minutes' => $validated['time_reward_minutes'],
+            'max_passes_per_day' => $validated['max_passes_per_day'] ?? null,
+            'retry_cooldown_minutes' => $validated['retry_cooldown_minutes'] ?? null,
             'questions' => ['questions' => $questions],  // Update questions JSON
-            // Convert checkbox value to boolean: "0" = false, "1" = true
-            // ?? false means if is_active is missing, default to false
-            'is_active' => (bool)($validated['is_active'] ?? false),
+            'is_active' => $request->boolean('is_active'),
         ]);
 
-        // Update device assignments (empty array removes all assignments)
-        $deviceIds = $request->input('devices', []);
-        $quiz->devices()->sync($deviceIds);
+        $quiz->devices()->sync($this->sanitizedQuizDeviceIds($request));
 
         return redirect()->route('quizzes.index')
             ->with('success', 'Quiz updated successfully!');
+    }
+
+    /**
+     * Registered child devices for this parent (quizzes are not assigned to parent/guest roles).
+     */
+    protected function quizAssignableDevices(): Collection
+    {
+        return Auth::user()
+            ->devices()
+            ->where('role', 'child')
+            ->orderBy('name')
+            ->get();
+    }
+
+    /**
+     * @return list<int>
+     */
+    protected function sanitizedQuizDeviceIds(Request $request): array
+    {
+        $allowedIds = $this->quizAssignableDevices()->pluck('id')->all();
+        $submitted = array_map('intval', (array) $request->input('devices', []));
+
+        return array_values(array_intersect($allowedIds, $submitted));
     }
 
     /**
