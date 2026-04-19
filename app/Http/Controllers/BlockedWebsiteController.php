@@ -22,7 +22,7 @@ use Illuminate\View\View;
  * DNS enforcement via DomainBlockingService.
  *
  * Key Responsibilities:
- * 1. List blocked websites (household-wide; filterable by block_type)
+ * 1. List blocked websites (household-wide; searchable by domain)
  * 2. Create new blocked websites (URL/Domain/App-level blocking)
  * 3. Update existing blocked websites
  * 4. Delete blocked websites
@@ -96,7 +96,6 @@ class BlockedWebsiteController extends Controller
      * Route: GET /blocked-websites
      *
      * Shows all blocked websites for the authenticated user (all child devices).
-     * Filterable by block_type.
      *
      * @param  Request  $request  HTTP request (may contain filter parameters)
      * @return View The blocked websites index view
@@ -104,11 +103,6 @@ class BlockedWebsiteController extends Controller
     public function index(Request $request): View
     {
         $query = BlockedWebsite::where('user_id', Auth::id());
-
-        // Filter by block_type if provided
-        if ($request->filled('block_type')) {
-            $query->where('block_type', $request->block_type);
-        }
 
         // Search by domain/URL if provided
         if ($request->filled('search')) {
@@ -360,13 +354,7 @@ class BlockedWebsiteController extends Controller
     public function bulkExport(Request $request)
     {
         // Build query (same as index)
-        $query = BlockedWebsite::where('user_id', Auth::id());
-
-        if ($request->filled('block_type')) {
-            $query->where('block_type', $request->block_type);
-        }
-
-        $blockedWebsites = $query->get();
+        $blockedWebsites = BlockedWebsite::where('user_id', Auth::id())->get();
 
         $format = $request->input('format', 'csv');
 

@@ -3,14 +3,13 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 /**
  * Update Blocked Website Request
- * 
+ *
  * This form request handles validation for updating existing blocked websites.
  * It validates all input data before the blocked website is updated in the database.
- * 
+ *
  * Validation Rules:
  * - Same as StoreBlockedWebsiteRequest, plus:
  * - id: Must exist in blocked_websites table
@@ -19,7 +18,7 @@ class UpdateBlockedWebsiteRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
-     * 
+     *
      * @return bool True if user can update blocked websites, false otherwise
      */
     public function authorize(): bool
@@ -30,7 +29,7 @@ class UpdateBlockedWebsiteRequest extends FormRequest
 
     /**
      * Prepare the data for validation.
-     * 
+     *
      * This method is called before validation rules are applied.
      * We use it to decode JSON strings (like related_domains) into arrays.
      */
@@ -45,32 +44,29 @@ class UpdateBlockedWebsiteRequest extends FormRequest
                 $this->merge(['related_domains' => []]);
             }
         }
+
+        $this->merge(['block_type' => 'app']);
     }
 
     /**
      * Get the validation rules that apply to the request.
-     * 
+     *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array|string>
      */
     public function rules(): array
     {
-        $blockType = $this->input('block_type', 'domain');
-        
         return [
-            // Domain - required if block_type is 'domain' or 'app', must be valid domain format
             'domain' => [
-                Rule::requiredIf(in_array($blockType, ['domain', 'app'])),
-                'nullable',
+                'required',
                 'string',
                 'regex:/^[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(\.[a-zA-Z0-9]([a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*\.[a-zA-Z]{2,}$/',
                 'max:255',
             ],
 
-            // Block type - required, must be one of: 'domain', 'app'
             'block_type' => [
                 'required',
                 'string',
-                'in:domain,app',
+                'in:app',
             ],
 
             // Block subdomains - optional boolean, defaults to false
@@ -102,7 +98,7 @@ class UpdateBlockedWebsiteRequest extends FormRequest
 
     /**
      * Get custom error messages for validation rules.
-     * 
+     *
      * @return array<string, string>
      */
     public function messages(): array
@@ -112,8 +108,7 @@ class UpdateBlockedWebsiteRequest extends FormRequest
             'domain.regex' => 'Please enter a valid domain name (e.g., example.com).',
             'domain.max' => 'Domain cannot exceed 255 characters.',
 
-            'block_type.required' => 'Please select a blocking type.',
-            'block_type.in' => 'Blocking type must be Domain or App.',
+            'block_type.in' => 'Invalid block configuration.',
 
             'block_subdomains.boolean' => 'Block subdomains must be yes or no.',
 
@@ -126,4 +121,3 @@ class UpdateBlockedWebsiteRequest extends FormRequest
         ];
     }
 }
-

@@ -2,8 +2,7 @@
     Blocked Websites: Index View
     
     Household-wide blocked websites for the authenticated parent.
-    Filters by block_type and search; applies to all child devices.
-    and displays blocking type indicators and related domains.
+    Search by domain; applies to all child devices.
 --}}
 <x-app-layout>
     <x-slot name="header">
@@ -52,17 +51,9 @@
                 </div>
             @endif
 
-            {{-- Filters --}}
+            {{-- Search --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">
-                <form method="GET" action="{{ route('blocked-websites.index') }}" class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <label for="block_type" class="block text-sm font-medium text-gray-700 mb-1">Block Type</label>
-                        <select name="block_type" id="block_type" class="w-full px-3 py-2 border border-gray-300 rounded-md">
-                            <option value="">All Types</option>
-                            <option value="domain" {{ request('block_type') == 'domain' ? 'selected' : '' }}>Domain</option>
-                            <option value="app" {{ request('block_type') == 'app' ? 'selected' : '' }}>App</option>
-                        </select>
-                    </div>
+                <form method="GET" action="{{ route('blocked-websites.index') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <label for="search" class="block text-sm font-medium text-gray-700 mb-1">Search</label>
                         <input type="text" name="search" id="search" value="{{ request('search') }}" 
@@ -86,7 +77,6 @@
                                 <thead class="bg-gray-50">
                                     <tr>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Block Type</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subdomains</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Related Domains</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Reason</th>
@@ -98,13 +88,6 @@
                                         <tr>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 <span class="font-mono">{{ $blockedWebsite->domain }}</span>
-                                            </td>
-                                            <td class="px-6 py-4 whitespace-nowrap">
-                                                @if($blockedWebsite->block_type === 'domain')
-                                                    <span class="px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">Domain</span>
-                                                @else
-                                                    <span class="px-2 py-1 text-xs font-semibold rounded-full bg-purple-100 text-purple-800">App</span>
-                                                @endif
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                                                 @if($blockedWebsite->block_subdomains)

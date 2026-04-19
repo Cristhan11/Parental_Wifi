@@ -1,9 +1,8 @@
 {{-- 
     Blocked Websites: Create Form
     
-    This view displays a form for creating a new blocked website.
-    Includes blocking type selection (Domain/App), related domains suggestion UI,
-    and Alpine.js for dynamic features.
+    App-style blocking only: main domain plus suggested related domains for mobile apps.
+    Alpine.js powers related-domain suggestions.
 --}}
 <style>
     [x-cloak] { 
@@ -74,34 +73,11 @@
                             </div>
                         @endif
 
-                        {{-- Blocking Type Selection --}}
-                        <div class="mb-6">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Blocking Type *</label>
-                            <div class="grid grid-cols-2 gap-4">
-                                <label class="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50"
-                                    :class="blockType === 'domain' ? 'border-yellow-500 bg-yellow-50' : 'border-gray-300'">
-                                    <input type="radio" name="block_type" value="domain" x-model="blockType" class="mr-3" required>
-                                    <div>
-                                        <div class="font-medium">Domain</div>
-                                        <div class="text-xs text-gray-500">Block website and all its pages</div>
-                                    </div>
-                                </label>
-                                <label class="flex items-center p-4 border-2 rounded-lg cursor-pointer hover:bg-gray-50"
-                                    :class="blockType === 'app' ? 'border-yellow-500 bg-yellow-50' : 'border-gray-300'">
-                                    <input type="radio" name="block_type" value="app" x-model="blockType" class="mr-3" required>
-                                    <div>
-                                        <div class="font-medium">App</div>
-                                        <div class="text-xs text-gray-500">Block website + mobile app completely</div>
-                                    </div>
-                                </label>
-                            </div>
-                            @error('block_type')
-                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                            @enderror
-                        </div>
+                        <p class="mb-6 text-sm text-gray-600 rounded-md border border-yellow-100 bg-yellow-50 px-3 py-2">
+                            Enter the site you want to block. We also block common extra addresses so the website and typical mobile app traffic are covered.
+                        </p>
 
-                        {{-- Domain Input (shown for Domain/App type) --}}
-                        <div class="mb-6" x-show="blockType === 'domain' || blockType === 'app'" x-cloak>
+                        <div class="mb-6">
                             <label for="domain" class="block text-sm font-medium text-gray-700 mb-2">Domain *</label>
                             <input type="text" name="domain" id="domain" value="{{ old('domain') }}"
                                 x-on:blur="suggestDomains()"
@@ -113,25 +89,23 @@
                             @enderror
                         </div>
 
-                        {{-- App Name Input (shown for App type) --}}
-                        <div class="mb-6" x-show="blockType === 'app'" x-cloak>
-                            <label for="app_name" class="block text-sm font-medium text-gray-700 mb-2">App Name (Optional)</label>
+                        <div class="mb-6">
+                            <label for="app_name" class="block text-sm font-medium text-gray-700 mb-2">App name (optional)</label>
                             <input type="text" name="app_name" id="app_name" value="{{ old('app_name') }}"
                                 x-on:blur="suggestDomains()"
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
                                 placeholder="Facebook">
-                            <p class="mt-1 text-sm text-gray-500">Helps identify related domains</p>
+                            <p class="mt-1 text-sm text-gray-500">Helps find related addresses for that app or service</p>
                         </div>
 
-                        {{-- Related Domains Display (shown for App type) --}}
-                        <div class="mb-6" x-show="blockType === 'app'" x-cloak>
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Related Domains</label>
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Related domains</label>
                             <div class="border border-gray-300 rounded-md p-4 bg-gray-50">
                                 <p class="text-sm text-gray-600 mb-3" x-show="relatedDomains.length === 0">
-                                    Enter the domain and app name above, then click outside the field to auto-detect related domains.
+                                    Enter the domain (and optional app name), then click outside a field to suggest extra addresses to block.
                                 </p>
                                 <p class="text-sm text-gray-600 mb-3" x-show="relatedDomains.length > 0">
-                                    The following website addresses will also be blocked to ensure the app cannot work:
+                                    These addresses will also be blocked so the app or service is harder to reach:
                                 </p>
                                 <div class="space-y-2" x-show="relatedDomains.length > 0">
                                     <template x-for="(domain, index) in relatedDomains" :key="index">
@@ -145,13 +119,11 @@
                                         </div>
                                     </template>
                                 </div>
-                                {{-- Always include hidden input for app blocks, even if empty --}}
                                 <input type="hidden" name="related_domains" :value="JSON.stringify(relatedDomains)">
                             </div>
                         </div>
 
-                        {{-- Block Subdomains Checkbox --}}
-                        <div class="mb-6" x-show="blockType === 'domain' || blockType === 'app'" x-cloak>
+                        <div class="mb-6">
                             <label class="flex items-center">
                                 <input type="checkbox" name="block_subdomains" value="1" 
                                     {{ old('block_subdomains') ? 'checked' : '' }}
@@ -163,7 +135,6 @@
                             @enderror
                         </div>
 
-                        {{-- Reason --}}
                         <div class="mb-6">
                             <label for="reason" class="block text-sm font-medium text-gray-700 mb-2">Reason (Optional)</label>
                             <textarea name="reason" id="reason" rows="3"
@@ -174,7 +145,6 @@
                             @enderror
                         </div>
 
-                        {{-- Submit Button --}}
                         <div class="flex justify-end space-x-3">
                             <a href="{{ route('blocked-websites.index') }}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
                                 Cancel
@@ -189,21 +159,28 @@
         </div>
     </div>
 
+    @php
+        $relatedDomainsOld = old('related_domains', []);
+        if (is_string($relatedDomainsOld)) {
+            $decodedRd = json_decode($relatedDomainsOld, true);
+            $relatedDomainsOld = is_array($decodedRd) ? $decodedRd : [];
+        }
+        if (! is_array($relatedDomainsOld)) {
+            $relatedDomainsOld = [];
+        }
+    @endphp
     <script>
         function blockedWebsiteForm() {
             return {
-                blockType: '{{ old("block_type", "domain") }}',
-                relatedDomains: @json(old('related_domains', [])),
+                relatedDomains: @json($relatedDomainsOld),
                 loading: false,
 
                 async suggestDomains() {
-                    if (this.blockType !== 'app') return;
-                    
                     const domain = document.getElementById('domain')?.value;
                     const appName = document.getElementById('app_name')?.value;
-                    
+
                     if (!domain) return;
-                    
+
                     this.loading = true;
                     try {
                         const response = await fetch('{{ route("blocked-websites.suggest-domains") }}', {
@@ -215,26 +192,22 @@
                             },
                             body: JSON.stringify({ domain, app_name: appName })
                         });
-                        
-                        // Check if response is OK
+
                         if (!response.ok) {
                             throw new Error(`HTTP error! status: ${response.status}`);
                         }
-                        
-                        // Check if response is JSON
+
                         const contentType = response.headers.get('content-type');
                         if (!contentType || !contentType.includes('application/json')) {
                             const text = await response.text();
                             console.error('Response is not JSON:', text.substring(0, 100));
                             throw new Error('Response is not JSON');
                         }
-                        
+
                         const data = await response.json();
                         this.relatedDomains = data.domains || [];
                     } catch (error) {
                         console.error('Error fetching related domains:', error);
-                        // Don't show error to user, just leave relatedDomains empty
-                        // Controller will auto-populate related domains when form is submitted
                         this.relatedDomains = [];
                     } finally {
                         this.loading = false;
@@ -248,4 +221,3 @@
         }
     </script>
 </x-app-layout>
-
