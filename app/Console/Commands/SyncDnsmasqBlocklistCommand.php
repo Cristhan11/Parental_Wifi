@@ -14,7 +14,7 @@ class SyncDnsmasqBlocklistCommand extends Command
     protected $signature = 'dnsmasq:sync-blocklist
                             {user_id : Parent account id (users.id) whose blocked_websites rows to apply}';
 
-    protected $description = 'Push blocked domains from DB to dnsmasq (run on Pi as deploy/repair after sudoers changes)';
+    protected $description = 'Push blocked domains and DHCP DNS bypass (parent/guest/whitelist) from DB to dnsmasq (run on Pi after sudoers changes)';
 
     public function handle(DomainBlockingService $domainBlockingService): int
     {
@@ -29,15 +29,24 @@ class SyncDnsmasqBlocklistCommand extends Command
 
         $this->info("Syncing dnsmasq blocklist for user {$user->id} ({$user->email})...");
 
-        $ok = $domainBlockingService->syncDnsmasqBlocklistForUser($user);
+        $okBlocklist = $domainBlockingService->syncDnsmasqBlocklistForUser($user);
+        $okBypass = $domainBlockingService->syncDnsmasqDhcpDnsBypassForUser($user);
 
-        if (! $ok) {
-            $this->error('Sync failed. Check storage/logs/laravel.log and sudoers for scripts/update_dnsmasq_global_blocklist.sh');
+        if (! $okBlocklist) {
+            $this->error('Blocklist sync failed. Check storage/logs/laravel.log and sudoers for scripts/update_dnsmasq_global_blocklist.sh');
 
             return self::FAILURE;
         }
 
         $this->info('dnsmasq blocklist updated successfully.');
+
+        if (! $okBypass) {
+            $this->warn('DHCP DNS bypass sync failed. Check sudoers for scripts/update_dnsmasq_dhcp_dns_bypass.sh and laravel.log');
+
+            return self::SUCCESS;
+        }
+
+        $this->info('dnsmasq DHCP DNS bypass updated successfully.');
 
         return self::SUCCESS;
     }

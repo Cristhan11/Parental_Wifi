@@ -31,6 +31,8 @@ The following scripts need to be added to sudoers:
 3. `update_dnsmasq_blocklist.sh` - Regenerates per-device blocklist (expects MAC as argument; legacy)
 4. **`update_dnsmasq_global_blocklist.sh`** - **Household-wide block list** used by the Laravel app today. Writes `/etc/dnsmasq.d/parental-global-blocklist.conf` from stdin (`domain:0|1` lines). If this script is **not** in sudoers, the UI can show the correct list in the database while **dnsmasq still blocks old domains** (for example Facebook removed in the app but still blocked on the child device).
 
+5. **`update_dnsmasq_dhcp_dns_bypass.sh`** - **DHCP split DNS** so parent/guest/whitelisted MACs get upstream DNS (arguments: primary and secondary IPv4; MAC list on stdin). Writes `/etc/dnsmasq.d/parental-dhcp-dns-bypass.conf`. Invoked by `DomainBlockingService::syncDnsmasqDhcpDnsBypassForUser` when devices change. Without sudoers, parent devices may still be affected by the global blocklist.
+
 Keep the legacy entries if you still rely on old per-MAC configs; the global script is what `DomainBlockingService::syncDnsmasqBlocklistForUser` invokes.
 
 ---
@@ -81,6 +83,7 @@ www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/block_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/unblock_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_blocklist.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
+www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_dhcp_dns_bypass.sh
 ```
 
 **Note:** If your web server runs as a different user (e.g., `snasna`), replace `www-data` with that user.
@@ -122,6 +125,10 @@ echo "test.com:0" | sudo -u www-data sudo /var/www/parental_wifi/scripts/update_
 # Test update_dnsmasq_global_blocklist.sh (household-wide; no MAC argument — domains on stdin only)
 echo "test.com:1" | sudo -u www-data sudo /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
 sudo cat /etc/dnsmasq.d/parental-global-blocklist.conf
+
+# Test update_dnsmasq_dhcp_dns_bypass.sh (MAC list on stdin; two DNS args)
+printf '%s\n' "aa:bb:cc:dd:ee:ff" | sudo -u www-data sudo /var/www/parental_wifi/scripts/update_dnsmasq_dhcp_dns_bypass.sh 8.8.8.8 1.1.1.1
+sudo cat /etc/dnsmasq.d/parental-dhcp-dns-bypass.conf
 ```
 
 ---
@@ -146,6 +153,7 @@ www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/block_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/unblock_domain.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_blocklist.sh
 www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
+www-data ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_dhcp_dns_bypass.sh
 ```
 
 ---
@@ -160,6 +168,7 @@ snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/block_domain.sh
 snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/unblock_domain.sh
 snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_blocklist.sh
 snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_global_blocklist.sh
+snasna ALL=(ALL) NOPASSWD: /var/www/parental_wifi/scripts/update_dnsmasq_dhcp_dns_bypass.sh
 ```
 
 **To find your web server user:**

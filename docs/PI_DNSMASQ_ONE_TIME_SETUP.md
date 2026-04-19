@@ -1,6 +1,6 @@
 # One-time Pi setup: dnsmasq block list (no SSH for parents)
 
-Parents only use the **web app**. The Pi must allow the PHP user (usually `www-data`) to run **`update_dnsmasq_global_blocklist.sh`** as root **once**, via sudoers. This document is for **you** (installer/admin), not for non-technical parents.
+Parents only use the **web app**. The Pi must allow the PHP user (usually `www-data`) to run **`update_dnsmasq_global_blocklist.sh`** and **`update_dnsmasq_dhcp_dns_bypass.sh`** as root **once**, via sudoers. This document is for **you** (installer/admin), not for non-technical parents.
 
 ## What this fixes
 
@@ -13,7 +13,7 @@ If sudoers is missing this rule, the database can show the correct blocked sites
 
 ## Step A — Pull or copy the latest project onto the Pi
 
-Ensure the repo includes `scripts/pi-setup-dnsmasq-global-sudo.sh` and `scripts/update_dnsmasq_global_blocklist.sh`. Adjust the path below if your install is not `/var/www/parental_wifi`.
+Ensure the repo includes `scripts/pi-setup-dnsmasq-global-sudo.sh`, `scripts/update_dnsmasq_global_blocklist.sh`, and `scripts/update_dnsmasq_dhcp_dns_bypass.sh`. Adjust the path below if your install is not `/var/www/parental_wifi`.
 
 ## Step B — Run the automated setup (recommended)
 
@@ -24,10 +24,10 @@ sudo bash scripts/pi-setup-dnsmasq-global-sudo.sh
 
 **What it does:**
 
-1. Resolves the **absolute path** to `scripts/update_dnsmasq_global_blocklist.sh`.
-2. Sets **`chmod +x`** on that script.
-3. **Backs up** `/etc/sudoers.d/parental-wifi-scripts` if it already exists.
-4. **Appends** a single **NOPASSWD** line for that script and user `www-data` (unless already present).
+1. Resolves the **absolute paths** to `scripts/update_dnsmasq_global_blocklist.sh` and `scripts/update_dnsmasq_dhcp_dns_bypass.sh`.
+2. Sets **`chmod +x`** on both scripts.
+3. **Backs up** `/etc/sudoers.d/parental-wifi-scripts` when it appends a new line.
+4. **Appends** **NOPASSWD** lines for both scripts and user `www-data` (each line is skipped if already present).
 5. Sets sudoers file mode **0440** and owner **root:root**.
 6. Runs **`visudo -c`** to validate syntax.
 
@@ -65,14 +65,21 @@ sudo -u www-data php artisan dnsmasq:sync-blocklist YOUR_PARENT_USER_ID
 
 Replace `YOUR_PARENT_USER_ID` with the parent account’s `users.id` from the database.
 
+That command refreshes both the **global blocklist** and the **DHCP DNS bypass** file (parent/guest/whitelisted MACs get upstream DNS so blocked sites do not apply to them).
+
 ## Step E — Confirm dnsmasq config (optional)
 
 ```bash
 sudo cat /etc/dnsmasq.d/parental-global-blocklist.conf
+sudo cat /etc/dnsmasq.d/parental-dhcp-dns-bypass.conf 2>/dev/null || true
 ls -la /etc/dnsmasq.d/blocked-domains-*.conf 2>/dev/null || true
 ```
 
 The global file should match what you expect from the app. Legacy `blocked-domains-*.conf` files may be removed when the global script runs successfully.
+
+### DHCP renew after role or whitelist changes
+
+Devices learn DNS servers from DHCP when they get or renew a lease. After you change a device to **parent**, **guest**, or **whitelisted**, the Pi config updates immediately, but phones/laptops may keep the old DNS until they **renew DHCP** (toggle Wi‑Fi off/on, or wait for the lease to expire).
 
 ## After this
 

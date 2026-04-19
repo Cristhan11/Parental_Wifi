@@ -10,10 +10,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Device Model
- * 
+ *
  * Represents a child device that parents want to monitor and control.
  * Each device is identified by its MAC address and belongs to a parent user.
- * 
+ *
  * Key Features:
  * - Time tracking: remaining_time_minutes, total_time_allocated
  * - Status management: active, blocked, whitelisted
@@ -54,9 +54,9 @@ class Device extends Model
 
     /**
      * Get the parent user that owns this device.
-     * 
+     *
      * Relationship: belongsTo - One device belongs to one user (parent)
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $parent = $device->user; // Gets the User model
@@ -70,9 +70,9 @@ class Device extends Model
 
     /**
      * Get all time grants for this device.
-     * 
+     *
      * Relationship: hasMany - One device has many time grants
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $grants = $device->timeGrants; // Collection of DeviceTimeGrant models
@@ -88,9 +88,9 @@ class Device extends Model
 
     /**
      * Get all quiz attempts for this device.
-     * 
+     *
      * Relationship: hasMany - One device can have many quiz attempts
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $attempts = $device->quizAttempts; // All quiz attempts
@@ -103,9 +103,9 @@ class Device extends Model
 
     /**
      * Get all video completions for this device.
-     * 
+     *
      * Relationship: hasMany - One device can complete many videos
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $completions = $device->videoCompletions; // All video completions
@@ -118,9 +118,9 @@ class Device extends Model
 
     /**
      * Get all schedules for this device.
-     * 
+     *
      * Relationship: hasMany - One device can have many time schedules
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $schedules = $device->schedules; // All time-based access rules
@@ -133,9 +133,9 @@ class Device extends Model
 
     /**
      * Get all browsing logs for this device.
-     * 
+     *
      * Relationship: hasMany - One device has many browsing history records
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $logs = $device->browsingLogs; // All visited websites
@@ -148,9 +148,9 @@ class Device extends Model
 
     /**
      * Get all access attempts for this device.
-     * 
+     *
      * Relationship: hasMany - One device has many security events
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $attempts = $device->accessAttempts; // All blocked/flagged site attempts
@@ -163,9 +163,9 @@ class Device extends Model
 
     /**
      * Get all active sessions for this device.
-     * 
+     *
      * Relationship: hasMany - One device can have many internet sessions
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $sessions = $device->sessions; // All sessions (active and ended)
@@ -178,20 +178,20 @@ class Device extends Model
 
     /**
      * Get all quizzes assigned to this device.
-     * 
+     *
      * Relationship: belongsToMany - Many-to-many (device can have many quizzes, quiz can be assigned to many devices)
      * Uses pivot table: 'device_quiz'
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $quizzes = $device->quizzes; // All assigned quizzes
-     * 
+     *
      * // Assign a quiz to device
      * $device->quizzes()->attach(5); // Assigns quiz ID 5
-     * 
+     *
      * // Remove a quiz assignment
      * $device->quizzes()->detach(5);
-     * 
+     *
      * // Sync quizzes (removes all and adds new ones)
      * $device->quizzes()->sync([1, 2, 3]); // Only these 3 quizzes assigned
      */
@@ -203,17 +203,17 @@ class Device extends Model
 
     /**
      * Get all videos assigned to this device.
-     * 
+     *
      * Relationship: belongsToMany - Many-to-many (device can have many videos, video can be assigned to many devices)
      * Uses pivot table: 'device_video'
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $videos = $device->videos; // All assigned videos
-     * 
+     *
      * // Assign a video to device
      * $device->videos()->attach(3); // Assigns video ID 3
-     * 
+     *
      * // Get only active videos
      * $activeVideos = $device->videos()->where('is_active', true)->get();
      */
@@ -225,12 +225,12 @@ class Device extends Model
 
     /**
      * Get the current active session for this device.
-     * 
+     *
      * Returns the most recent session that hasn't ended yet (ended_at is NULL)
      * Returns NULL if no active session exists
-     * 
+     *
      * @return DeviceSession|null The active session or null if none exists
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * $session = $device->activeSession();
@@ -251,11 +251,11 @@ class Device extends Model
 
     /**
      * Check if device has remaining internet time.
-     * 
+     *
      * Returns true if remaining_time_minutes > 0, false otherwise
      *
      * @return bool True if time remaining, false if expired
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * if ($device->hasRemainingTime()) {
@@ -272,12 +272,12 @@ class Device extends Model
 
     /**
      * Check if device's time has expired.
-     * 
+     *
      * Returns true if remaining_time_minutes <= 0, false otherwise
      * This is the opposite of hasRemainingTime()
      *
      * @return bool True if time expired, false if still has time
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * if ($device->hasTimeExpired()) {
@@ -292,15 +292,15 @@ class Device extends Model
 
     /**
      * Get remaining time in a human-readable format.
-     * 
+     *
      * Converts minutes to "X hours Y minutes" or "X minutes" format
      * Handles pluralization automatically (hour vs hours, minute vs minutes)
      *
      * @return string Formatted time string (e.g., "1 hour 30 minutes" or "45 minutes")
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
-     * echo $device->getRemainingTimeFormatted(); 
+     * echo $device->getRemainingTimeFormatted();
      * // Output: "1 hour 30 minutes" (if 90 minutes remaining)
      * // Output: "45 minutes" (if 45 minutes remaining)
      * // Output: "1 minute" (if 1 minute remaining)
@@ -315,10 +315,10 @@ class Device extends Model
         if ($hours > 0) {
             // sprintf formats string: %d = number, %s = string
             // Ternary operator: condition ? value_if_true : value_if_false
-            return sprintf('%d hour%s %d minute%s', 
-                $hours, 
+            return sprintf('%d hour%s %d minute%s',
+                $hours,
                 $hours > 1 ? 's' : '',      // Add 's' if plural
-                $minutes, 
+                $minutes,
                 $minutes !== 1 ? 's' : ''   // Add 's' if plural
             );
         }
@@ -329,24 +329,24 @@ class Device extends Model
 
     /**
      * Grant additional time to this device.
-     * 
+     *
      * Adds time to device after successful quiz completion or video completion.
      * Also creates a DeviceTimeGrant record to track when and why time was granted.
      *
-     * @param int $minutes Amount of time to grant (e.g., 15, 30)
-     * @param string $source Source of grant: 'quiz' or 'video'
-     * @param int|null $sourceId Optional: ID of quiz_attempt or video_completion that triggered this grant
+     * @param  int  $minutes  Amount of time to grant (e.g., 15, 30)
+     * @param  string  $source  Source of grant: 'quiz' or 'video'
+     * @param  int|null  $sourceId  Optional: ID of quiz_attempt or video_completion that triggered this grant
      * @return DeviceTimeGrant The created time grant record
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
-     * 
+     *
      * // Grant 15 minutes after quiz completion
      * $quizAttempt = QuizAttempt::find(10);
      * $grant = $device->grantTime(15, 'quiz', $quizAttempt->id);
      * // Device's remaining_time_minutes increased by 15
      * // DeviceTimeGrant record created with source='quiz', source_id=10
-     * 
+     *
      * // Grant 30 minutes after video completion
      * $videoCompletion = VideoCompletion::find(5);
      * $device->grantTime(30, 'video', $videoCompletion->id);
@@ -371,21 +371,21 @@ class Device extends Model
 
     /**
      * Deduct time from this device (used when device is actively browsing).
-     * 
+     *
      * Removes time from remaining_time_minutes as the device uses internet.
      * Prevents negative final values by clamping to 0.
      *
-     * @param int $minutes Amount of time to deduct
+     * @param  int  $minutes  Amount of time to deduct
      * @return void No return value
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * // Device has 30 minutes remaining
-     * 
+     *
      * // Deduct 5 minutes after 5 minutes of browsing
      * $device->deductTime(5);
      * // Now device has 25 minutes remaining
-     * 
+     *
      * // If device has 3 minutes and we try to deduct 5, it becomes 0 (not -2)
      * $device->remaining_time_minutes = 3;
      * $device->deductTime(5);  // Result: 0 (max(0, 5) prevents negative)
@@ -405,11 +405,11 @@ class Device extends Model
 
     /**
      * Check if device is currently blocked.
-     * 
+     *
      * Returns true if device status is 'blocked' (no internet access allowed)
      *
      * @return bool True if blocked, false otherwise
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * if ($device->isBlocked()) {
@@ -424,11 +424,11 @@ class Device extends Model
 
     /**
      * Check if device is whitelisted (unrestricted access).
-     * 
+     *
      * Returns true if device status is 'whitelisted' (bypasses all time limits and restrictions)
      *
      * @return bool True if whitelisted, false otherwise
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * if ($device->isWhitelisted()) {
@@ -443,11 +443,11 @@ class Device extends Model
 
     /**
      * Check if device is active (can access internet if time available).
-     * 
+     *
      * Returns true if device status is 'active' (normal operation, subject to time limits)
      *
      * @return bool True if active, false otherwise
-     * 
+     *
      * Usage Example:
      * $device = Device::find(1);
      * if ($device->isActive() && $device->hasRemainingTime()) {
@@ -459,5 +459,19 @@ class Device extends Model
     {
         return $this->status === 'active';
     }
-}
 
+    /**
+     * Whether this device should use the Pi dnsmasq resolver (household blocked domains apply).
+     *
+     * Parent/guest roles and whitelisted status use upstream DNS via DHCP so global dnsmasq
+     * `address=` rules do not affect them.
+     */
+    public function usesFilteredDns(): bool
+    {
+        if ($this->isWhitelisted()) {
+            return false;
+        }
+
+        return ($this->role ?? 'child') === 'child';
+    }
+}

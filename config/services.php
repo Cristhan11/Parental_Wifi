@@ -44,6 +44,9 @@ return [
             'DNSMASQ_WARN_WHEN_SYNC_FAILS',
             PHP_OS_FAMILY !== 'Windows'
         ),
+        /** Upstream DNS pushed via DHCP for parent/guest/whitelisted devices (not Pi resolver). */
+        'bypass_dns_primary' => env('DNSMASQ_BYPASS_DNS_PRIMARY', '8.8.8.8'),
+        'bypass_dns_secondary' => env('DNSMASQ_BYPASS_DNS_SECONDARY', '1.1.1.1'),
     ],
 
 ];

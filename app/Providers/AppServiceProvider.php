@@ -2,7 +2,9 @@
 
 namespace App\Providers;
 
+use App\Models\Device;
 use App\Models\ReportingRecipient;
+use App\Observers\DeviceObserver;
 use App\Observers\ReportingRecipientObserver;
 use Illuminate\Support\ServiceProvider;
 
@@ -26,6 +28,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         ReportingRecipient::observe(ReportingRecipientObserver::class);
+        Device::observe(DeviceObserver::class);
 
         // Immediate alert listeners live under app/Listeners and are auto-registered by
         // Laravel's event discovery (see Illuminate\Foundation\Support\Providers\EventServiceProvider).
