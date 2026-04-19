@@ -19,11 +19,12 @@ The rest of this file lists **only what this repository configures** in Laravel.
 1. SSH into the Pi and `cd` to the Laravel app root (the directory that contains `artisan`).
 2. `git pull`
 3. `composer install` (add `--no-dev` on the Pi if you never install dev dependencies there).
-4. `php artisan migrate` — adds or updates `security_audit_events`. Use `php artisan migrate --force` only if your deploy is non-interactive and you already use `--force` for other migrations.
-5. If you cache config in production: `php artisan config:clear` then `php artisan config:cache` after any `.env` change (`APP_URL`, `TRUSTED_PROXIES`, `TRUSTED_LOCAL_CIDRS`, etc.).
-6. Reload PHP-FPM so new code is picked up (unit name depends on your PHP version). List candidates: `systemctl list-units --type=service --all | grep -i php` or `dpkg -l | grep php-fpm`, then e.g. `sudo systemctl reload php8.3-fpm` or `sudo systemctl reload php-fpm`. Reload nginx/Caddy only if you changed their config: `sudo systemctl reload nginx`.
-7. If you run queue workers: `php artisan queue:restart`.
-8. Install Tailscale on the Pi if it is not already there, then `sudo tailscale up` and sign the node into your tailnet. Set `.env` to match how traffic reaches Laravel (see **`.env` keys this stack reads** below); set `TRUSTED_PROXIES` when nginx/Caddy sits in front of PHP.
+4. **Front-end assets** — The login page uses a static CSS file; the **dashboard** layout loads Vite bundles from `public/build/`. That directory is **not** in git (see `.gitignore`). If it is missing, you get **500** right after a successful login when Laravel tries to render the dashboard. On the Pi (with Node/npm installed): `npm ci` then `npm run build`, or copy `public/build/` from a machine where you already built. Without a build, `storage/logs/laravel.log` usually shows **`ViteManifestNotFoundException`**.
+5. `php artisan migrate` — adds or updates `security_audit_events`. Use `php artisan migrate --force` only if your deploy is non-interactive and you already use `--force` for other migrations.
+6. If you cache config in production: `php artisan config:clear` then `php artisan config:cache` after any `.env` change (`APP_URL`, `TRUSTED_PROXIES`, `TRUSTED_LOCAL_CIDRS`, etc.).
+7. Reload PHP-FPM so new code is picked up (unit name depends on your PHP version). List candidates: `systemctl list-units --type=service --all | grep -i php` or `dpkg -l | grep php-fpm`, then e.g. `sudo systemctl reload php8.3-fpm` or `sudo systemctl reload php-fpm`. Reload nginx/Caddy only if you changed their config: `sudo systemctl reload nginx`.
+8. If you run queue workers: `php artisan queue:restart`.
+9. Install Tailscale on the Pi if it is not already there, then `sudo tailscale up` and sign the node into your tailnet. Set `.env` to match how traffic reaches Laravel (see **`.env` keys this stack reads** below); set `TRUSTED_PROXIES` when nginx/Caddy sits in front of PHP.
 
 ---
 
@@ -101,6 +102,8 @@ The app does not change Reverb for you. If live updates fail over Tailscale, set
 - **Wrong IP in security rows** — Set `TRUSTED_PROXIES` to your proxy (or `*` only if you understand single-hop trust).
 - **LAN logins show as remote** — Add your home subnet to `TRUSTED_LOCAL_CIDRS`.
 - **Tailnet shows as local** — Remove `100.64.0.0/10` from `TRUSTED_LOCAL_CIDRS` if you added it and want tailnet labeled remote.
+- **Tailscale app: “Relay server unavailable” / no sites (even public) on the phone** — That is a **phone ↔ Tailscale network** problem, not Laravel. When relays fail and direct UDP cannot connect, the tunnel may not carry traffic. Try: turn **Tailscale off** and confirm normal sites (e.g. facebook.com) work again; update the Tailscale app; switch **Wi‑Fi vs mobile data**; disable **other VPNs** and **Private DNS** (Android) briefly; sign out and sign back into Tailscale; reboot the phone. If it persists on one carrier only, try another network or Wi‑Fi. The Pi can still be fine (`curl` from the Pi to its own `100.x` already proves the app).
+- **500 right after login (LAN and Tailscale)** — Run **`tail -n 80 storage/logs/laravel.log`** on the Pi. If you see **`ViteManifestNotFoundException`**, build assets on the Pi or copy **`public/build/`** from a dev machine (see step **4** above). If you see **`SQLSTATE`** about **`security_audit_events`**, run **`php artisan migrate`** (or **`--force`** in non-interactive prod). After pulling the latest code, audit write failures are logged as **`security_audit.write_failed`** and no longer block login, but you should still migrate so rows are stored.
 
 ---
 
