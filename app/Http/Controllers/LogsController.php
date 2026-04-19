@@ -12,6 +12,7 @@ use App\Models\DeviceTimeGrant;
 use App\Models\FlaggedWebsite;
 use App\Models\ReportingPreference;
 use App\Models\ReportingRecipientEvent;
+use App\Models\SecurityAuditEvent;
 use App\Models\User;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -74,7 +75,7 @@ class LogsController extends Controller
 
         // Guard stream input so unknown values cannot break routing/filter state.
         $stream = $request->input('stream', 'child_activity');
-        if (!in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
+        if (! in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
             $stream = 'child_activity';
         }
 
@@ -97,7 +98,7 @@ class LogsController extends Controller
         $devices = $this->devicesForViewer($isAdmin);
 
         // Security + UX guard: ignore device filter values outside viewer scope.
-        if ($deviceFilter !== null && !$devices->contains('id', $deviceFilter)) {
+        if ($deviceFilter !== null && ! $devices->contains('id', $deviceFilter)) {
             $deviceFilter = null;
         }
 
@@ -173,7 +174,7 @@ class LogsController extends Controller
         // - fast to generate for automation pipelines
         $entries = $this->resolveExportEntries($request);
         $stream = $request->input('stream', 'child_activity');
-        if (!in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
+        if (! in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
             $stream = 'child_activity';
         }
 
@@ -218,14 +219,14 @@ class LogsController extends Controller
         // - status coloring and auto-sized columns reduce manual cleanup effort
         $entries = $this->resolveExportEntries($request);
         $stream = $request->input('stream', 'child_activity');
-        if (!in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
+        if (! in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
             $stream = 'child_activity';
         }
 
         $filename = sprintf('logs-%s-%s.xlsx', $stream, now()->format('Ymd-His'));
 
         return response()->streamDownload(function () use ($entries) {
-            $spreadsheet = new Spreadsheet();
+            $spreadsheet = new Spreadsheet;
             $sheet = $spreadsheet->getActiveSheet();
             $sheet->setTitle('Logs');
 
@@ -307,7 +308,7 @@ class LogsController extends Controller
         $isAdmin = $user->isAdmin();
 
         $stream = $request->input('stream', 'child_activity');
-        if (!in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
+        if (! in_array($stream, ['child_activity', 'parent_admin_changes'], true)) {
             $stream = 'child_activity';
         }
 
@@ -319,7 +320,7 @@ class LogsController extends Controller
 
         $devices = $this->devicesForViewer($isAdmin);
         $deviceFilter = $request->filled('device_id') ? (int) $request->input('device_id') : null;
-        if ($deviceFilter !== null && !$devices->contains('id', $deviceFilter)) {
+        if ($deviceFilter !== null && ! $devices->contains('id', $deviceFilter)) {
             $deviceFilter = null;
         }
 
@@ -338,6 +339,7 @@ class LogsController extends Controller
         );
 
         $sort = $request->input('sort', 'desc') === 'asc' ? 'asc' : 'desc';
+
         return $sort === 'asc'
             ? $entries->sortBy(fn (array $row) => $row['timestamp']->timestamp)->values()
             : $entries->sortByDesc(fn (array $row) => $row['timestamp']->timestamp)->values();
@@ -382,7 +384,7 @@ class LogsController extends Controller
             ->with('device.user')
             ->whereBetween('attempted_at', [$from, $to]);
 
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $attempts->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
         }
         if ($deviceId) {
@@ -392,8 +394,9 @@ class LogsController extends Controller
         // Access attempts represent security-focused child behavior.
         $entries = $entries->merge($attempts->get()->map(function (AccessAttempt $attempt): array {
             $isBlocked = $attempt->type === 'blocked_website';
+
             return [
-                'id' => 'attempt-' . $attempt->id,
+                'id' => 'attempt-'.$attempt->id,
                 'timestamp' => Carbon::parse($attempt->attempted_at),
                 'stream' => 'child_activity',
                 'event_type' => $isBlocked ? 'violation' : 'access-control',
@@ -412,7 +415,7 @@ class LogsController extends Controller
             ->with('device.user')
             ->whereBetween('visited_at', [$from, $to]);
 
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $browsing->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
         }
         if ($deviceId) {
@@ -422,7 +425,7 @@ class LogsController extends Controller
         // Browsing logs provide baseline activity timeline context.
         $entries = $entries->merge($browsing->get()->map(function (BrowsingLog $log): array {
             return [
-                'id' => 'browse-' . $log->id,
+                'id' => 'browse-'.$log->id,
                 'timestamp' => Carbon::parse($log->visited_at),
                 'stream' => 'child_activity',
                 'event_type' => 'access-control',
@@ -439,7 +442,7 @@ class LogsController extends Controller
             ->with('device.user')
             ->whereBetween('granted_at', [$from, $to]);
 
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $grants->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
         }
         if ($deviceId) {
@@ -449,7 +452,7 @@ class LogsController extends Controller
         // Time grant records explain positive state transitions in timeline.
         $entries = $entries->merge($grants->get()->map(function (DeviceTimeGrant $grant): array {
             return [
-                'id' => 'grant-' . $grant->id,
+                'id' => 'grant-'.$grant->id,
                 'timestamp' => Carbon::parse($grant->granted_at),
                 'stream' => 'child_activity',
                 'event_type' => 'time-granted',
@@ -466,7 +469,7 @@ class LogsController extends Controller
             ->with('device.user')
             ->whereBetween('started_at', [$from, $to]);
 
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $connectedSessions->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
         }
         if ($deviceId) {
@@ -476,7 +479,7 @@ class LogsController extends Controller
         // Session rows provide connection/disconnection visibility.
         $entries = $entries->merge($connectedSessions->get()->map(function (DeviceSession $session): array {
             return [
-                'id' => 'connect-' . $session->id,
+                'id' => 'connect-'.$session->id,
                 'timestamp' => Carbon::parse($session->started_at),
                 'stream' => 'child_activity',
                 'event_type' => 'connection',
@@ -494,7 +497,7 @@ class LogsController extends Controller
             ->whereNotNull('ended_at')
             ->whereBetween('ended_at', [$from, $to]);
 
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $disconnectedSessions->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
         }
         if ($deviceId) {
@@ -503,7 +506,7 @@ class LogsController extends Controller
 
         return $entries->merge($disconnectedSessions->get()->map(function (DeviceSession $session): array {
             return [
-                'id' => 'disconnect-' . $session->id,
+                'id' => 'disconnect-'.$session->id,
                 'timestamp' => Carbon::parse($session->ended_at),
                 'stream' => 'child_activity',
                 'event_type' => 'connection',
@@ -527,8 +530,8 @@ class LogsController extends Controller
          * Assemble parent/admin change stream from persisted configuration entities.
          *
          * Why derived entries:
-         * - A dedicated audit table is not yet present in this codebase.
-         * - We project create/update timestamps into normalized change-log rows.
+         * - Most rows are projected from domain tables' timestamps.
+         * - {@see SecurityAuditEvent} adds IP-aware auth and sensitive-action security events.
          *
          * Connection to scope:
          * - This gives immediate role-focused visibility for policy/config changes
@@ -560,7 +563,7 @@ class LogsController extends Controller
 
             if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
                 $rows[] = [
-                    'id' => 'blocked-create-' . $item->id,
+                    'id' => 'blocked-create-'.$item->id,
                     'timestamp' => Carbon::parse($item->created_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'policy-change',
@@ -579,7 +582,7 @@ class LogsController extends Controller
                 Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
             ) {
                 $rows[] = [
-                    'id' => 'blocked-update-' . $item->id,
+                    'id' => 'blocked-update-'.$item->id,
                     'timestamp' => Carbon::parse($item->updated_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'policy-change',
@@ -618,7 +621,7 @@ class LogsController extends Controller
 
             if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
                 $rows[] = [
-                    'id' => 'flagged-create-' . $item->id,
+                    'id' => 'flagged-create-'.$item->id,
                     'timestamp' => Carbon::parse($item->created_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'policy-change',
@@ -637,7 +640,7 @@ class LogsController extends Controller
                 Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
             ) {
                 $rows[] = [
-                    'id' => 'flagged-update-' . $item->id,
+                    'id' => 'flagged-update-'.$item->id,
                     'timestamp' => Carbon::parse($item->updated_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'policy-change',
@@ -660,7 +663,7 @@ class LogsController extends Controller
                     ->orWhereBetween('updated_at', [$from, $to]);
             });
 
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $schedules->whereHas('device', fn ($q) => $q->where('user_id', Auth::id()));
         }
         if ($deviceId) {
@@ -673,7 +676,7 @@ class LogsController extends Controller
 
             if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
                 $rows[] = [
-                    'id' => 'schedule-create-' . $item->id,
+                    'id' => 'schedule-create-'.$item->id,
                     'timestamp' => Carbon::parse($item->created_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'policy-change',
@@ -688,11 +691,11 @@ class LogsController extends Controller
 
             if (
                 $item->updated_at &&
-                !$item->updated_at->equalTo($item->created_at) &&
+                ! $item->updated_at->equalTo($item->created_at) &&
                 Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
             ) {
                 $rows[] = [
-                    'id' => 'schedule-update-' . $item->id,
+                    'id' => 'schedule-update-'.$item->id,
                     'timestamp' => Carbon::parse($item->updated_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'policy-change',
@@ -715,7 +718,7 @@ class LogsController extends Controller
                     ->orWhereBetween('updated_at', [$from, $to]);
             });
 
-        if (!$isAdmin) {
+        if (! $isAdmin) {
             $devices->where('user_id', Auth::id());
         }
         if ($deviceId) {
@@ -728,7 +731,7 @@ class LogsController extends Controller
 
             if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
                 $rows[] = [
-                    'id' => 'device-create-' . $item->id,
+                    'id' => 'device-create-'.$item->id,
                     'timestamp' => Carbon::parse($item->created_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'configuration',
@@ -743,11 +746,11 @@ class LogsController extends Controller
 
             if (
                 $item->updated_at &&
-                !$item->updated_at->equalTo($item->created_at) &&
+                ! $item->updated_at->equalTo($item->created_at) &&
                 Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
             ) {
                 $rows[] = [
-                    'id' => 'device-update-' . $item->id,
+                    'id' => 'device-update-'.$item->id,
                     'timestamp' => Carbon::parse($item->updated_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'configuration',
@@ -783,7 +786,7 @@ class LogsController extends Controller
                 };
 
                 return [
-                    'id' => 'reporting-recipient-event-' . $event->id,
+                    'id' => 'reporting-recipient-event-'.$event->id,
                     'timestamp' => Carbon::parse($event->created_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'configuration',
@@ -813,7 +816,7 @@ class LogsController extends Controller
 
                 if ($item->created_at && Carbon::parse($item->created_at)->betweenIncluded($from, $to)) {
                     $rows[] = [
-                        'id' => 'reporting-prefs-create-' . $item->id,
+                        'id' => 'reporting-prefs-create-'.$item->id,
                         'timestamp' => Carbon::parse($item->created_at),
                         'stream' => 'parent_admin_changes',
                         'event_type' => 'configuration',
@@ -832,7 +835,7 @@ class LogsController extends Controller
                     Carbon::parse($item->updated_at)->betweenIncluded($from, $to)
                 ) {
                     $rows[] = [
-                        'id' => 'reporting-prefs-update-' . $item->id,
+                        'id' => 'reporting-prefs-update-'.$item->id,
                         'timestamp' => Carbon::parse($item->updated_at),
                         'stream' => 'parent_admin_changes',
                         'event_type' => 'configuration',
@@ -846,6 +849,55 @@ class LogsController extends Controller
                 }
 
                 return $rows;
+            }));
+        }
+
+        if ($deviceId === null) {
+            $security = SecurityAuditEvent::query()
+                ->with('user')
+                ->whereBetween('created_at', [$from, $to]);
+
+            if (! $isAdmin) {
+                $viewerEmail = Auth::user()->email;
+                $security->where(function ($q) use ($viewerEmail): void {
+                    $q->where('user_id', Auth::id())
+                        ->orWhere('attempted_identifier', $viewerEmail);
+                });
+            }
+
+            $entries = $entries->merge($security->orderByDesc('created_at')->get()->map(function (SecurityAuditEvent $e): array {
+                $actorRole = $e->user?->role ?? 'guest';
+                $status = match ($e->event) {
+                    SecurityAuditEvent::EVENT_LOGIN_FAILURE => 'failed',
+                    SecurityAuditEvent::EVENT_LOCKOUT => 'warning',
+                    SecurityAuditEvent::EVENT_LOGIN_SUCCESS => 'success',
+                    SecurityAuditEvent::EVENT_LOGOUT => 'info',
+                    default => 'info',
+                };
+                $source = $e->is_remote ? 'remote' : 'local';
+                $summary = match ($e->event) {
+                    SecurityAuditEvent::EVENT_LOGIN_SUCCESS => 'Login succeeded',
+                    SecurityAuditEvent::EVENT_LOGIN_FAILURE => 'Login failed'
+                        .($e->attempted_identifier ? ' ('.$e->attempted_identifier.')' : ''),
+                    SecurityAuditEvent::EVENT_LOGOUT => 'Logout',
+                    SecurityAuditEvent::EVENT_LOCKOUT => 'Login temporarily locked (too many attempts)',
+                    SecurityAuditEvent::EVENT_SENSITIVE_ACTION => 'Sensitive action: '.($e->route_name ?? 'unknown'),
+                    default => $e->event,
+                };
+                $summary .= ' · IP '.$e->ip_address.' · '.$source;
+
+                return [
+                    'id' => 'security-'.$e->id,
+                    'timestamp' => Carbon::parse($e->created_at),
+                    'stream' => 'parent_admin_changes',
+                    'event_type' => 'security-access',
+                    'status' => $status,
+                    'role' => $actorRole,
+                    'device_id' => null,
+                    'device_name' => 'Security',
+                    'target' => $e->ip_address,
+                    'summary' => $summary,
+                ];
             }));
         }
 
@@ -888,6 +940,7 @@ class LogsController extends Controller
                     $row['role'] ?? '',
                     $row['event_type'] ?? '',
                 ]));
+
                 return str_contains($haystack, $needle);
             });
         }
@@ -899,7 +952,7 @@ class LogsController extends Controller
     {
         // Tolerant parser prevents hard failures on malformed query params.
         // Returning null triggers safe defaults in callers.
-        if (!$value) {
+        if (! $value) {
             return null;
         }
 
@@ -910,4 +963,3 @@ class LogsController extends Controller
         }
     }
 }
-

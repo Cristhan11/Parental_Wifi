@@ -77,7 +77,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('registration.account-rejected');
 });
 
-Route::middleware('auth')->group(function () {
+Route::middleware(['auth', 'audit.sensitive'])->group(function () {
     // EMAIL VERIFICATION ROUTES
     // GET /verify-email - Shows email verification notice page
     Route::get('verify-email', EmailVerificationPromptController::class)

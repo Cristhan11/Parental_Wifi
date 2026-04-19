@@ -21,13 +21,13 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
-Route::middleware(['auth', 'verified'])->group(function () {
+Route::middleware(['auth', 'verified', 'audit.sensitive'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::middleware(['auth', 'verified', 'parent.dashboard'])->group(function () {
+Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/usage-chart', [DashboardController::class, 'usageChart'])
         ->name('dashboard.usage-chart');
@@ -128,7 +128,7 @@ Route::middleware(['auth', 'verified', 'parent.dashboard'])->group(function () {
     });
 });
 
-Route::middleware(['auth', 'verified', 'role.admin'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'verified', 'role.admin', 'audit.sensitive'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
     Route::get('/parents/pending', [AdminParentAccountController::class, 'pending'])->name('parents.pending');
     Route::get('/parents', [AdminParentAccountController::class, 'index'])->name('parents.index');

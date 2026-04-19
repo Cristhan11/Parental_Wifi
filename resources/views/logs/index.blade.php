@@ -98,7 +98,7 @@
                         <label for="event_type" class="block text-xs font-semibold text-gray-700 mb-1">Event Type</label>
                         <select id="event_type" name="event_type" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm">
                             <option value="">All event types</option>
-                            @foreach(['connection', 'violation', 'policy-change', 'access-control', 'time-granted', 'configuration'] as $type)
+                            @foreach(['connection', 'violation', 'policy-change', 'access-control', 'time-granted', 'configuration', 'security-access'] as $type)
                                 <option value="{{ $type }}" {{ $filters['event_type'] === $type ? 'selected' : '' }}>{{ ucfirst($type) }}</option>
                             @endforeach
                         </select>
