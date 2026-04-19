@@ -8,7 +8,9 @@ use App\Services\DomainBlockingService;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Keeps dnsmasq DHCP DNS bypass (split DNS) in sync when device role/status/MAC changes.
+ * Keeps dnsmasq in sync when device role/status/MAC changes:
+ * - Global blocklist from {@see BlockedWebsite} (clears stale Pi config after DB resets)
+ * - DHCP DNS bypass for MACs that should not use filtered DNS
  */
 class DeviceObserver
 {
@@ -43,6 +45,18 @@ class DeviceObserver
         $user = User::query()->find($userId);
         if (! $user) {
             return;
+        }
+
+        try {
+            $okBlocklist = $this->domainBlockingService->syncDnsmasqBlocklistForUser($user);
+            if (! $okBlocklist) {
+                Log::warning('Global dnsmasq blocklist sync returned failure', ['user_id' => $userId]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Global dnsmasq blocklist sync exception', [
+                'user_id' => $userId,
+                'message' => $e->getMessage(),
+            ]);
         }
 
         try {

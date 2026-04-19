@@ -15,6 +15,7 @@ class DeviceDnsBypassObserverTest extends TestCase
     public function test_device_update_triggers_dhcp_dns_bypass_sync_once(): void
     {
         $this->partialMock(DomainBlockingService::class, function ($mock) {
+            $mock->shouldReceive('syncDnsmasqBlocklistForUser')->once()->andReturn(true);
             $mock->shouldReceive('syncDnsmasqDhcpDnsBypassForUser')->once()->andReturn(true);
         });
 
@@ -31,6 +32,7 @@ class DeviceDnsBypassObserverTest extends TestCase
     public function test_device_user_change_triggers_sync_for_old_and_new_account(): void
     {
         $this->partialMock(DomainBlockingService::class, function ($mock) {
+            $mock->shouldReceive('syncDnsmasqBlocklistForUser')->twice()->andReturn(true);
             $mock->shouldReceive('syncDnsmasqDhcpDnsBypassForUser')->twice()->andReturn(true);
         });
 
