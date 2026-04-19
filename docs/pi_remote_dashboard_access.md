@@ -21,7 +21,7 @@ The rest of this file lists **only what this repository configures** in Laravel.
 3. `composer install` (add `--no-dev` on the Pi if you never install dev dependencies there).
 4. `php artisan migrate` — adds or updates `security_audit_events`. Use `php artisan migrate --force` only if your deploy is non-interactive and you already use `--force` for other migrations.
 5. If you cache config in production: `php artisan config:clear` then `php artisan config:cache` after any `.env` change (`APP_URL`, `TRUSTED_PROXIES`, `TRUSTED_LOCAL_CIDRS`, etc.).
-6. Restart whatever serves PHP for this app (for example `sudo systemctl reload php8.2-fpm` — adjust the PHP version to match the Pi) and reload nginx/Caddy if you changed their config.
+6. Reload PHP-FPM so new code is picked up (unit name depends on your PHP version). List candidates: `systemctl list-units --type=service --all | grep -i php` or `dpkg -l | grep php-fpm`, then e.g. `sudo systemctl reload php8.3-fpm` or `sudo systemctl reload php-fpm`. Reload nginx/Caddy only if you changed their config: `sudo systemctl reload nginx`.
 7. If you run queue workers: `php artisan queue:restart`.
 8. Install Tailscale on the Pi if it is not already there, then `sudo tailscale up` and sign the node into your tailnet. Set `.env` to match how traffic reaches Laravel (see **`.env` keys this stack reads** below); set `TRUSTED_PROXIES` when nginx/Caddy sits in front of PHP.
 
@@ -29,7 +29,7 @@ The rest of this file lists **only what this repository configures** in Laravel.
 
 ## What this project configures
 
-- **`App\Http\Middleware\ForceRootUrlFromRequest`** — Prepended on the **`web`** stack in `bootstrap/app.php`. Sets `URL::forceRootUrl()` from the incoming request’s scheme and host so redirects (for example to `/login`) use **the same host you opened** (`100.x`, MagicDNS, or `192.168.x.x`), not only `APP_URL`. Deploy with `git pull` on the Pi so Tailscale browsers are not sent to a fixed LAN IP in the `Location` header.
+- **`App\Http\Middleware\ForceRootUrlFromRequest`** — Prepended on the **`web`** stack in `bootstrap/app.php`. Sets `URL::forceRootUrl()` from the request host **or**, when nginx/php-fpm still sends your captive/LAN host (e.g. `192.168.4.1`) but the connection arrived on Tailscale, from **`SERVER_ADDR`** if it is in Tailscale’s **100.64.0.0/10** range. Fixes redirects so the phone is not sent to an unroutable LAN IP. Prefer fixing nginx with `fastcgi_param HTTP_HOST $http_host;` so `Host` matches the client.
 - **`config/remote_access.php`** — Reads `.env`: `TRUSTED_PROXIES`, optional `TRUSTED_PROXY_HEADERS`, `TRUSTED_LOCAL_CIDRS` (defaults: `192.168.0.0/16,10.0.0.0/8,172.16.0.0/12`; Tailscale `100.x` is not in the default list so tailnet traffic is stored as **remote** in audits).
 - **Trusted proxies** — `App\Providers\AppServiceProvider` calls `TrustProxies::at(...)` when `TRUSTED_PROXIES` is set so `$request->ip()` is correct behind nginx/Caddy or a tunnel.
 - **LAN vs remote for logs** — `App\Support\RequestSource` sets `is_remote` on each audit row from `$request->ip()` and `TRUSTED_LOCAL_CIDRS`.
