@@ -84,10 +84,16 @@
                         @enderror
                     </div>
 
-                    <div class="login-remember">
-                        <input id="remember_me" type="checkbox" name="remember" />
-                        <label for="remember_me"><span>Remember me</span></label>
-                    </div>
+                    <label class="login-remember" for="remember_me">
+                        <input
+                            id="remember_me"
+                            type="checkbox"
+                            name="remember"
+                            value="1"
+                            @checked(old('remember'))
+                        />
+                        <span class="login-remember-text">Remember me</span>
+                    </label>
 
                     <p class="login-links-row" style="margin-top: 1rem; font-size: 0.875rem;">
                         <a href="{{ route('register') }}" class="login-link-secondary">Create parent account</a>

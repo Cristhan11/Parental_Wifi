@@ -6,7 +6,7 @@
     <div class="py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
         <p class="text-gray-600 mb-8">System overview and parent account management.</p>
 
-        <div class="grid gap-4 sm:grid-cols-3 mb-10">
+        <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">
             <div class="bg-white border-4 border-[#FFDE15] rounded-lg p-4 shadow">
                 <div class="text-sm text-gray-500">Pending parent approvals</div>
                 <div class="text-3xl font-bold text-black">{{ $pendingParents }}</div>
@@ -20,6 +20,11 @@
             <div class="bg-white border-4 border-gray-200 rounded-lg p-4 shadow">
                 <div class="text-sm text-gray-500">Devices (all accounts)</div>
                 <div class="text-3xl font-bold text-black">{{ $deviceCount }}</div>
+            </div>
+            <div class="bg-white border-4 border-gray-200 rounded-lg p-4 shadow">
+                <div class="text-sm text-gray-500">Password reset requests</div>
+                <div class="text-3xl font-bold text-black">{{ $pendingPasswordResetRequests }}</div>
+                <a href="{{ route('admin.password-reset-requests.index') }}" class="text-sm underline mt-2 inline-block text-black">Review queue</a>
             </div>
         </div>
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\AdminParentAccountUpdateRequest;
 use App\Models\AdminActionLog;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
@@ -11,6 +12,11 @@ use Illuminate\View\View;
 
 class AdminParentAccountController extends Controller
 {
+    /**
+     * Plaintext password applied when an admin resets a parent account from /admin/parents.
+     */
+    public const DEFAULT_PARENT_RESET_PASSWORD = '12345678';
+
     public function pending(): View
     {
         $parents = User::query()
@@ -104,5 +110,106 @@ class AdminParentAccountController extends Controller
         ]);
 
         return redirect()->route('admin.parents.index')->with('status', 'Account is now a household operator (parent + admin).');
+    }
+
+    public function demoteToParentRole(User $user): RedirectResponse
+    {
+        abort_unless($user->isParentAdmin() && $user->isApprovedParentAccount(), 404);
+
+        $user->forceFill([
+            'role' => User::ROLE_PARENT,
+        ])->save();
+
+        AdminActionLog::create([
+            'actor_id' => auth()->id(),
+            'target_user_id' => $user->id,
+            'action' => 'parent_demoted_from_parent_admin',
+            'note' => null,
+        ]);
+
+        return redirect()->route('admin.parents.index')->with('status', 'Account is now a standard parent (administration access removed).');
+    }
+
+    public function edit(User $user): View
+    {
+        $this->assertManageableApprovedParent($user);
+
+        return view('admin.parents.edit', compact('user'));
+    }
+
+    public function update(AdminParentAccountUpdateRequest $request, User $user): RedirectResponse
+    {
+        $this->assertManageableApprovedParent($user);
+
+        $validated = $request->validated();
+
+        $user->fill([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+        ]);
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
+        }
+
+        $user->save();
+
+        AdminActionLog::create([
+            'actor_id' => auth()->id(),
+            'target_user_id' => $user->id,
+            'action' => 'parent_updated',
+            'note' => null,
+        ]);
+
+        return redirect()->route('admin.parents.index')->with('status', 'Parent account updated.');
+    }
+
+    public function destroy(User $user): RedirectResponse
+    {
+        $this->assertManageableApprovedParent($user);
+
+        abort_if($user->id === auth()->id(), 403, 'You cannot delete your own account.');
+
+        AdminActionLog::create([
+            'actor_id' => auth()->id(),
+            'target_user_id' => $user->id,
+            'action' => 'parent_deleted',
+            'note' => null,
+        ]);
+
+        $user->delete();
+
+        return redirect()->route('admin.parents.index')->with('status', 'Parent account deleted.');
+    }
+
+    public static function setUserPasswordToDefault(User $user): void
+    {
+        $user->forceFill([
+            'password' => self::DEFAULT_PARENT_RESET_PASSWORD,
+        ])->save();
+    }
+
+    public function resetPasswordToDefault(User $user): RedirectResponse
+    {
+        $this->assertManageableApprovedParent($user);
+
+        self::setUserPasswordToDefault($user);
+
+        AdminActionLog::create([
+            'actor_id' => auth()->id(),
+            'target_user_id' => $user->id,
+            'action' => 'parent_password_reset_to_default',
+            'note' => null,
+        ]);
+
+        return redirect()->route('admin.parents.index')->with(
+            'status',
+            'Password set to the default (12345678). Ask the parent to sign in and change it under profile settings.'
+        );
+    }
+
+    private function assertManageableApprovedParent(User $user): void
+    {
+        abort_unless($user->isApprovedParentAccount(), 404);
     }
 }

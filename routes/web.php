@@ -3,6 +3,7 @@
 use App\Http\Controllers\AccessAttemptController;
 use App\Http\Controllers\Admin\AdminDashboardController;
 use App\Http\Controllers\Admin\AdminParentAccountController;
+use App\Http\Controllers\Admin\AdminParentPasswordResetRequestController;
 use App\Http\Controllers\BlockedWebsiteController;
 use App\Http\Controllers\BrowsingLogController;
 use App\Http\Controllers\DashboardController;
@@ -130,11 +131,18 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
 
 Route::middleware(['auth', 'verified', 'role.admin', 'audit.sensitive'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
+    Route::get('/password-reset-requests', [AdminParentPasswordResetRequestController::class, 'index'])->name('password-reset-requests.index');
+    Route::post('/password-reset-requests/{parent_password_reset_request}/fulfill', [AdminParentPasswordResetRequestController::class, 'fulfill'])->name('password-reset-requests.fulfill');
     Route::get('/parents/pending', [AdminParentAccountController::class, 'pending'])->name('parents.pending');
     Route::get('/parents', [AdminParentAccountController::class, 'index'])->name('parents.index');
+    Route::get('/parents/{user}/edit', [AdminParentAccountController::class, 'edit'])->name('parents.edit');
+    Route::patch('/parents/{user}', [AdminParentAccountController::class, 'update'])->name('parents.update');
+    Route::delete('/parents/{user}', [AdminParentAccountController::class, 'destroy'])->name('parents.destroy');
     Route::post('/parents/{user}/approve', [AdminParentAccountController::class, 'approve'])->name('parents.approve');
     Route::post('/parents/{user}/reject', [AdminParentAccountController::class, 'reject'])->name('parents.reject');
     Route::post('/parents/{user}/promote', [AdminParentAccountController::class, 'promoteToHouseholdOperator'])->name('parents.promote');
+    Route::post('/parents/{user}/demote', [AdminParentAccountController::class, 'demoteToParentRole'])->name('parents.demote');
+    Route::post('/parents/{user}/reset-password-default', [AdminParentAccountController::class, 'resetPasswordToDefault'])->name('parents.reset-password-default');
 });
 
 Route::prefix('portal')->name('portal.')->group(function () {

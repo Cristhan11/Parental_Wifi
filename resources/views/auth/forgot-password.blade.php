@@ -2,7 +2,7 @@
     <div class="mb-6">
         <h2 class="text-2xl font-bold text-black">Forgot Password</h2>
         <p class="mt-2 text-sm" style="color: #00000080;">
-            {{ __('Forgot your password? No problem. Just let us know your email address and we will email you a password reset link that will allow you to choose a new one.') }}
+            Enter the email on your parent account. Administrators will be notified to reset your password. They will tell you how to sign in; then change your password under profile settings. No verification email is sent from this form.
         </p>
     </div>
 
@@ -25,7 +25,7 @@
             </a>
 
             <x-primary-button>
-                {{ __('Email Password Reset Link') }}
+                Request password reset
             </x-primary-button>
         </div>
     </form>

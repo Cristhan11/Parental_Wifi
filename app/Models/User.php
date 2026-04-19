@@ -185,6 +185,18 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
+     * Parent / household-operator accounts may use /forgot-password to queue an admin-led reset (no email link).
+     */
+    public function isEligibleForSelfServicePasswordResetRequest(): bool
+    {
+        if ($this->rejected_at !== null) {
+            return false;
+        }
+
+        return in_array($this->role, [self::ROLE_PARENT, self::ROLE_PARENT_ADMIN], true);
+    }
+
+    /**
      * Full parent dashboard access: verified email + approved + not rejected.
      */
     public function canAccessParentDashboard(): bool

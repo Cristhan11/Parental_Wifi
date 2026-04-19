@@ -4,6 +4,7 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
 
 class AuthenticationTest extends TestCase
@@ -28,6 +29,22 @@ class AuthenticationTest extends TestCase
 
         $this->assertAuthenticated();
         $response->assertRedirect(route('dashboard', absolute: false));
+    }
+
+    public function test_remember_me_sets_recaller_cookie(): void
+    {
+        $user = User::factory()->create();
+
+        $recaller = Auth::guard()->getRecallerName();
+
+        $response = $this->post('/login', [
+            'email' => $user->email,
+            'password' => 'password',
+            'remember' => '1',
+        ]);
+
+        $this->assertAuthenticated();
+        $response->assertCookie($recaller);
     }
 
     public function test_users_can_not_authenticate_with_invalid_password(): void

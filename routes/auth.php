@@ -52,7 +52,7 @@ Route::middleware('guest')->group(function () {
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
 
-    // POST /forgot-password - Sends password reset email
+    // POST /forgot-password - Queues admin-led default password reset (no email link)
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
         ->name('password.email');
 

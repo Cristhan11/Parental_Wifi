@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Models\Device;
+use App\Models\ParentPasswordResetRequest;
 use App\Models\User;
 use Illuminate\View\View;
 
@@ -25,6 +26,8 @@ class AdminDashboardController extends Controller
             ->count();
         $deviceCount = Device::query()->count();
 
-        return view('admin.dashboard', compact('pendingParents', 'parentCount', 'deviceCount'));
+        $pendingPasswordResetRequests = ParentPasswordResetRequest::query()->pending()->count();
+
+        return view('admin.dashboard', compact('pendingParents', 'parentCount', 'deviceCount', 'pendingPasswordResetRequests'));
     }
 }
