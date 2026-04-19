@@ -78,6 +78,34 @@ class DeviceManagementTest extends TestCase
     }
 
     /**
+     * Network suggestions on create should omit MACs already registered for this parent.
+     */
+    public function test_create_page_network_list_excludes_registered_devices(): void
+    {
+        $user = User::factory()->create();
+        // Avoid AA:BB:… placeholder text on the same page (MAC input hint).
+        Device::factory()->create([
+            'user_id' => $user->id,
+            'mac_address' => 'C0:FF:EE:00:00:01',
+        ]);
+
+        $this->mock(NetworkService::class, function ($mock) {
+            $mock->shouldReceive('getConnectedDevices')
+                ->once()
+                ->andReturn([
+                    ['mac_address' => 'C0-FF-EE-00-00-01', 'ip_address' => '192.168.1.10'],
+                    ['mac_address' => '11:22:33:44:55:66', 'ip_address' => '192.168.1.20'],
+                ]);
+        });
+
+        $response = $this->actingAs($user)->get(route('accounts.create'));
+
+        $response->assertOk();
+        $response->assertDontSee('C0:FF:EE:00:00:01');
+        $response->assertSee('11:22:33:44:55:66');
+    }
+
+    /**
      * Test creating a device with valid data.
      */
     public function test_can_create_device_with_valid_data(): void

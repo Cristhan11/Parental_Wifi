@@ -79,7 +79,8 @@
                         <div class="mb-6">
                             <label for="role" class="block text-sm font-medium text-gray-700 mb-2">Assigned Role *</label>
                             <select name="role" id="role" required
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
+                                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
+                                onchange="toggleTimeAllocationFields()">
                                 <option value="child" {{ old('role', 'child') === 'child' ? 'selected' : '' }}>CHILD</option>
                                 <option value="guest" {{ old('role', 'child') === 'guest' ? 'selected' : '' }}>GUEST</option>
                                 <option value="parent" {{ old('role', 'child') === 'parent' ? 'selected' : '' }}>PARENT</option>
@@ -109,8 +110,8 @@
                             @enderror
                         </div>
 
-                        {{-- Time Allocation --}}
-                        <div class="grid grid-cols-2 gap-4 mb-6">
+                        {{-- Time Allocation (hidden for parent devices; not subject to child time limits) --}}
+                        <div id="time-allocation-fields" class="grid grid-cols-2 gap-4 mb-6">
                             <div>
                                 <label for="remaining_time_minutes" class="block text-sm font-medium text-gray-700 mb-2">Initial Time Allocation (minutes)</label>
                                 <input type="number" name="remaining_time_minutes" id="remaining_time_minutes" value="{{ old('remaining_time_minutes', 15) }}" min="0" max="9999"
@@ -171,6 +172,21 @@
             document.getElementById('mac_address').value = mac;
             normalizeMacAddress(document.getElementById('mac_address'));
         }
+
+        /**
+         * Parent devices do not use initial/total time allocation in the UI.
+         */
+        function toggleTimeAllocationFields() {
+            const roleSelect = document.getElementById('role');
+            const block = document.getElementById('time-allocation-fields');
+            if (!roleSelect || !block) {
+                return;
+            }
+            const isParent = roleSelect.value === 'parent';
+            block.classList.toggle('hidden', isParent);
+        }
+
+        document.addEventListener('DOMContentLoaded', toggleTimeAllocationFields);
     </script>
     @endpush
 </x-app-layout>

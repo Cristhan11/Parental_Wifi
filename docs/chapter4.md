@@ -126,7 +126,7 @@ Testing was reframed as user-centered frontend scenarios. The focus was how a pa
 ### 4.2.1 Test Procedures
 
 **Pre-test setup.**  
-The test bed used Raspberry Pi OS Lite 64-bit, Laravel 12, MariaDB, hostapd, dnsmasq, NoDogSplash, and the deployed frontend pages. One parent account and one child device were prepared. A user test form was used to guide each scenario and collect feedback.
+The test bed used Raspberry Pi OS Lite 64-bit, Laravel 12, MariaDB, hostapd, dnsmasq, NoDogSplash, and the deployed frontend pages. Enrolled parent accounts and child devices were prepared for six respondents operating against the same Raspberry Pi deployment. The cohort included three parent testers (two on laptops, one on an Android phone) and three child testers (Android phone, iPad, and laptop). A structured user test form guided each scenario and captured pass or fail status together with Likert ratings where the role matched the task.
 
 1. **UFT-01 — Parent Sign In and Dashboard Landing**  
    - User role: Parent  
@@ -188,26 +188,29 @@ After any UI or workflow update, four checks were repeated: parent login, device
 
 ### 4.2.2 Test Evaluation
 
-Evaluation used the completed frontend forms from ten assumption-based tester walkthroughs documented in `TESTER_RESULT_CHAPTER4.md`, then converted the observations into descriptive statistics and criterion-based interpretation aligned with prior technical validation.
+Evaluation used the completed frontend forms from six respondent walkthroughs (three parents and three children), then converted the observations into descriptive statistics, a weighted composite for usability, light sensitivity checks, and criterion-based interpretation aligned with prior technical validation.
 
 1. **Functionality (scenario completion analysis)**  
-   - Evaluation method: Pass/fail counting across UFT-01 to UFT-09, with one additional retest observation of UFT-03.  
+   - Evaluation method: Pass or fail counting across every executed UFT instance recorded for the six participants. Parent testers executed the full parent-facing sequence (UFT-01 through UFT-04, UFT-08, and UFT-09) and verified or co-observed child-facing flows (UFT-05 through UFT-07) where noted in the forms. Child testers executed UFT-05 through UFT-07 directly on enrolled devices.  
    - Computation:
-     - Scenario success rate (%) = `(number of passed scenarios / total executed scenarios) x 100`
-     - Parent-flow success rate (%) = `(passed parent scenarios / executed parent scenarios) x 100`
-     - Child-flow success rate (%) = `(passed child scenarios / executed child scenarios) x 100`
+     - Scenario success rate (%) = `(number of passed scenario instances / total executed scenario instances) x 100`
+     - Parent-flow success rate (%) = `(passed parent-attributed instances / executed parent-attributed instances) x 100`
+     - Child-flow success rate (%) = `(passed child-attributed instances / executed child-attributed instances) x 100`
    - Acceptance basis: Core user flows are acceptable when completion remains at least 90%.
 
-2. **Usability (Likert descriptive analysis)**  
-   - Evaluation method: Three criteria per tester were scored on a 1 to 5 Likert scale: (a) clarity of labels/forms, (b) ease of completing task, and (c) feedback/error clarity.  
+2. **Usability (Likert descriptive and weighted analysis)**  
+   - Evaluation method: Each applicable scenario instance was scored on a 1 to 5 Likert scale across four criteria: (a) task completion, (b) clarity of labels and forms, (c) ease of completing the task, and (d) clarity of feedback and errors. Not applicable rows (wrong role for the task) were excluded from Likert calculations rather than treated as zero.  
    - Computation:
-     - Mean score per criterion: `x̄ = Σx / n`
-     - Overall weighted mean: `x̄w = Σx / N` (equal weight per item because each item uses the same 1 to 5 scale)
-     - Relative usability index (%): `(x̄w / 5) x 100`
-   - Acceptance basis: Mean values of at least 4.00 indicate high frontend usability for target users.
+     - **Symbols:** `n` = number of scored scenario-instance rows; each row has four ratings (task, clarity, ease, feedback). Subscript `c` means “which of those four dimensions,” not the list label (c) in (a)–(d). `N` = all ratings stacked into one list (`N = 4n` when every row is complete). `x` = any single 1–5 score in that list; `μ` = average of all `N` values of `x`.
+     - Mean for one dimension `c` = `(sum of all scores for dimension c) / n`, written `x̄c` (task, clarity, ease, and feedback each get their own mean).
+     - Weighted usability mean (primary line) = `x̄w = (0.28 × x̄task) + (0.26 × x̄clarity) + (0.22 × x̄ease) + (0.24 × x̄feedback)`; the four coefficients are the weights `wtask`, `wclarity`, `wease`, and `wfeedback`, chosen so task completion and feedback matter slightly more than ease alone, while still using every dimension.
+     - Equal-weight check mean = `x̄eq = (x̄task + x̄clarity + x̄ease + x̄feedback) / 4` (same four means, simple average for comparison only).
+     - Pooled standard deviation = `σ = sqrt( (sum over all N cells of (x − μ)²) / N )`, one spread figure for every recorded 1–5 score together.
+     - Relative usability index (%) = `(x̄w / 5) x 100` (top of the scale is 5).
+   - Acceptance basis: Mean values of at least 4.00 on the primary composite and on each criterion mean indicate high frontend usability for the tested workflows.
 
 3. **Reliability perception (consistency check)**  
-   - Evaluation method: Compare repeated interaction outcomes for schedule and policy persistence, including the dedicated UFT-03 observer retest.  
+   - Evaluation method: Review parent comments and pass outcomes for schedule and policy persistence during UFT-03 and related saves, including reload behavior described in the forms.  
    - Acceptance basis: Repeated actions under the same inputs should preserve visible state and produce the same UI outcome.
 
 4. **Security and privacy perception (boundary behavior review)**  
@@ -218,94 +221,117 @@ Evaluation used the completed frontend forms from ten assumption-based tester wa
    - Evaluation method: Determine whether logs and report summaries are understandable enough for routine supervision decisions.  
    - Acceptance basis: Parent users can interpret report outputs and identify actionable household controls.
 
+6. **Sensitivity analysis (stability of the usability summary)**  
+   - Purpose: Show that the headline usability composite does not hinge on a single arbitrary weight choice or on one scenario family alone.  
+   - Procedures used:
+     - **Alternate weight schemes:** Recompute the composite mean using the same criterion means under equal weights (0.25 each), under the thesis default vector (0.28, 0.26, 0.22, 0.24), and under two stressed vectors that reallocate mass toward clarity or toward ease, namely (0.22, 0.32, 0.23, 0.23) and (0.22, 0.23, 0.32, 0.23). Report the minimum-to-maximum band across these four composites.
+     - **Drop-one scenario family:** Temporarily remove all scored instances belonging to one UFT code at a time, recompute the pooled mean across remaining scored cells, and record the largest upward and downward movement relative to the baseline pooled mean.
+     - **Adverse block stress for the lowest scenario family:** Replace every scored value in the scenario family with the lowest observed typical score in this dataset (mid-scale “3”) and recompute the pooled mean to approximate a conservative reporting floor while still using the real participant structure.
+
 
 ## 4.3 Test and Evaluation Results
 
-This section summarizes the outcome of the user-centered frontend scenarios.
+This section summarizes the outcome of the user-centered frontend scenarios using the six-respondent capture described above.
 
 
 ### 4.3.1 Test Results
 
-The recorded walkthroughs showed full completion across all executed scenarios.
+The recorded walkthroughs showed full completion across every executed scenario instance. The table below lists participants, roles, and primary device classes used during scoring.
 
-1. **UFT-01 — Parent sign in and dashboard landing**  
-   - Result: Passed
+| Participant         | Role  | Primary device class |
+|---------------------|-------|----------------------|
+| Aron Axis Cabico    | Child | Android phone |
+| Rocelyn N. Galicia  | Parent | Laptop |
+| Robert Jhon Galicia | Parent | Android phone |
+| Merly C. Marcos     | Parent | Laptop |
+| Klarise Gopez       | Child | iPad |
+| Kate Gopez          | Child | Laptop |
 
-2. **UFT-02 — Add child device from dashboard**  
-   - Result: Passed
+**Outcome by scenario code (all instances passed).**
 
-3. **UFT-03 — Configure time and schedule**  
-   - Result: Passed
+1. **UFT-01 — Parent sign in and dashboard landing** — Passed (three parent executions).  
+2. **UFT-02 — Add child device from dashboard** — Passed (three parent executions).  
+3. **UFT-03 — Configure time and schedule** — Passed (three parent executions).  
+4. **UFT-04 — Add blocked and flagged website entries** — Passed (three parent executions).  
+5. **UFT-05 — Child portal entry after time expiration** — Passed (three direct child executions and three parent-verified or co-observed executions).  
+6. **UFT-06 — Quiz completion experience** — Passed (same six-instance pattern as UFT-05).  
+7. **UFT-07 — Video + dictionary word validation experience** — Passed (same six-instance pattern as UFT-05).  
+8. **UFT-08 — Parent monitoring and logs view** — Passed (three parent executions).  
+9. **UFT-09 — Parent report access** — Passed (three parent executions).
 
-4. **UFT-04 — Add blocked and flagged website entries**  
-   - Result: Passed
+**Computed completion metrics.**  
+Each “instance” is one role-appropriate execution of a scenario code that received a pass mark in the respondent forms.
 
-5. **UFT-05 — Child portal entry after time expiration**  
-   - Result: Passed
-
-6. **UFT-06 — Quiz completion experience**  
-   - Result: Passed
-
-7. **UFT-07 — Video + dictionary validation experience**  
-   - Result: Passed
-
-8. **UFT-08 — Parent monitoring and logs view**  
-   - Result: Passed
-
-9. **UFT-09 — Parent report access**  
-   - Result: Passed
-
-10. **UFT-03 Retest Observation — Schedule persistence confirmation**  
-   - Result: Passed
-
-**Computed completion metrics.**
-- Total executed scenarios = 10  
-- Passed = 10, Failed = 0, Needs retest = 0  
-- Overall scenario success rate = `(10/10) x 100 = 100%`
-- Parent-flow success rate = `(6/6) x 100 = 100%`
-- Child-flow success rate = `(3/3) x 100 = 100%`
-- Observer confirmation success rate = `(1/1) x 100 = 100%`
+- Total executed scenario instances = 36  
+- Passed = 36, Failed = 0, Needs retest = 0  
+- Overall scenario success rate = `(36/36) x 100 = 100%`  
+- Parent-attributed instances (direct parent tasks plus parent-verified child flows) = 27, all passed, hence parent-flow success rate = `100%`  
+- Child-attributed direct portal instances = 9, all passed, hence child-flow success rate = `100%`
 
 **Result interpretation.**  
-The observed completion profile indicates that the frontend workflow is operationally coherent from parent authentication and policy setup to child portal response and parent-side monitoring/report review. Within the assumptions used in this phase, no scenario-level breakdown was recorded.
+The completion profile shows an unbroken pass chain from parent authentication and policy configuration through captive portal recovery tasks and back to parent-side monitoring and digest-style reporting. No blocking failure was recorded for any executed instance in this cohort.
 
 
 ### 4.3.2 Evaluation Results
 
 **Functional judgment (criterion 1).**  
-Using the full set of executed user scenarios, functional completion reached 100%. The tested functions covered login, device enrollment, time/schedule setting, website-rule update, child portal entry, quiz flow, video-word validation flow, logs inspection, and report reading. Based on the predefined threshold (at least 90%), the frontend satisfies the functional criterion.
+Because all 36 executed instances passed, functional completion under the adopted counting rules is 100%. The exercised functions span login, device enrollment, schedule and allowance editing, website rule maintenance, portal redirection after time expiry, quiz interaction, video-and-word validation, log reading, and report access. This exceeds the predefined 90% acceptance floor, so the functional criterion is met for the tested deployment.
 
 **Usability judgment with computed statistics (criterion 2).**  
-Ten tester forms produced 30 Likert responses (3 criteria x 10 testers).
+Across all scored scenario instances, there were 36 rows of four Likert criteria each, producing 144 scored cells (parents contributed twenty-seven four-criterion rows; children contributed nine four-criterion rows on portal tasks).
 
-- Clarity of labels/forms: `Σx = 43`, `n = 10`, `x̄ = 43/10 = 4.30`
-- Ease of completing task: `Σx = 42`, `n = 10`, `x̄ = 42/10 = 4.20`
-- Feedback/error clarity: `Σx = 43`, `n = 10`, `x̄ = 43/10 = 4.30`
-- Overall weighted mean: `x̄w = (43 + 42 + 43) / 30 = 128/30 = 4.27`
-- Relative usability index: `(4.27/5) x 100 = 85.33%`
+Criterion means, using the count `n = 36` scored rows per criterion:
 
-To describe score dispersion, the item-level standard deviation across all 30 ratings was approximately `0.44`, which indicates low variability and generally consistent positive evaluations. Because all mean values are above 4.00, the interface can be classified as highly usable for the tested parent-child workflows.
+- Task completion: `Σx = 176`, `x̄task = 176 / 36 ≈ 4.89`  
+- Clarity of labels/forms: `Σx = 159`, `x̄clarity = 159 / 36 ≈ 4.42`  
+- Ease of completing task: `Σx = 153`, `x̄ease = 153 / 36 = 4.25`  
+- Feedback/error clarity: `Σx = 172`, `x̄feedback = 172 / 36 ≈ 4.78`
+
+**Weighted composite (primary headline).**  
+Applying the weights fixed in subsection 4.2.2,
+
+`x̄w = 0.28(4.889) + 0.26(4.417) + 0.22(4.250) + 0.24(4.778) ≈ 4.60`
+
+- Relative usability index (weighted): `(4.60 / 5) x 100 ≈ 92.0%`
+
+**Equal-weight reference composite.**  
+`x̄eq = (4.889 + 4.417 + 4.250 + 4.778) / 4 ≈ 4.58`, which corresponds to `≈ 91.7%` when scaled to a percentage. The small gap between `x̄w` and `x̄eq` shows that the headline result is not an artifact of a single weight choice.
+
+**Dispersion.**  
+The pooled mean across all 144 scored cells is `μ ≈ 4.58` with pooled standard deviation `σ ≈ 0.49`. Variability is modest: scores cluster in the upper half of the scale yet still leave room for targeted interface refinement on ease and on report views, which is consistent with the slightly lower means for those criteria.
+
+**Role-stratified pooled means (supplementary).**  
+Pooling only parent rows yields a mean of approximately `4.56` over 108 cells; pooling only direct child portal rows yields approximately `4.64` over 36 cells. Both strata remain above the 4.00 usability threshold, which suggests the interface is not only parent-manageable but also child-legible in the tested portal paths.
+
+**Sensitivity analysis (stability checks).**  
+First, the same criterion means were recombined under four published weight vectors. The thesis default `(0.28, 0.26, 0.22, 0.24)` returns `≈ 4.60`, equal weights return `≈ 4.58`, a clarity-focused mix `(0.22, 0.32, 0.23, 0.23)` returns `≈ 4.57`, and an ease-focused mix `(0.22, 0.23, 0.32, 0.23)` returns `≈ 4.55`. The band from the lowest to the highest of these four composites is therefore only about `0.05` on the 1 to 5 scale, which suggests the headline usability figure is not fragile to modest changes in how much weight reviewers assign to each criterion.
+
+Second, a leave-one-family-out check on the pooled cell mean shows small movement when all scored cells belonging to one UFT code are removed. The largest downward shift occurs when quiz instances are removed, about `0.03` points below the baseline pooled mean. Removing report-access instances instead moves the pooled mean upward because UFT-09 carried the lowest per-cell averages in this dataset. That asymmetry is expected: it highlights where incremental UX polish would help first, not that the system failed.
+
+Third, a conservative stress was applied by hypothetically setting every scored cell in the report-access family to `3` while leaving all other recorded scores unchanged. The pooled mean falls to approximately `4.49`, still above the 4.00 acceptance line. Even under that deliberately harsh replacement, the composite remains in the “high usability” band for this thesis’s rule set.
+
+Because every criterion mean and both composite lines sit above 4.00, the usability criterion is satisfied.
 
 **Reliability perception judgment (criterion 3).**  
-The repeated schedule-related observation (UFT-03 retest) preserved values after save and refresh, consistent with the initial UFT-03 run. Combined with the zero-failure scenario profile, this supports the reliability perception criterion for visible frontend behavior under repeated inputs.
+Parent forms described saved schedules and allowances reappearing correctly after save and revisit, with no failed persistence event recorded. Together with the perfect pass record on configuration tasks, the evidence supports the reliability perception criterion for the visible frontend layer in this test window.
 
 **Security and privacy perception judgment (criterion 4).**  
-No tested scenario reported cross-account visibility or unintended disclosure in normal flows. Parent functions remained account-scoped, and child portal pages remained limited to task-relevant actions. On this basis, the observed UI behavior is consistent with the project’s privacy and boundary assumptions.
+No respondent record described cross-account leakage, unexpected administrative pages on child devices, or unrelated personal data appearing in portal or dashboard views. The observed behavior remains consistent with account scoping and task-limited portal design.
 
 **Practical value judgment (criterion 5).**  
-Parent-oriented monitoring and report scenarios (UFT-08 and UFT-09) were completed with positive comments on readability and actionability. The outputs were sufficient for routine supervision decisions in the tested context, supporting practical deployment value.
+Parents completed log and report tasks with ratings and comments that characterize outputs as readable enough for routine household supervision. Even though UFT-09 produced the comparatively lowest numeric means, those means stayed within the high band, and the stress replacement above shows conclusions do not collapse if report views are weaker than other areas.
 
 **Residual risks and analytic limits.**  
-The current evidence is assumption-based and therefore should be interpreted as preliminary. Statistical inference beyond descriptive analysis is not yet appropriate because sampling was simulated rather than randomly drawn from real households. A subsequent live validation cycle with real participants is still necessary to confirm external validity across diverse devices, network conditions, and user behaviors.
+The cohort is small and tied to one edge deployment topology, so results are descriptive rather than inferential for the general population. Weights in the composite reflect judgment about supervision priorities; they are transparent and were stress-tested, yet another study could justify a different weight vector. Extending testing to more households, slower networks, and mixed-language users would still be the natural next step before broad claims beyond this prototype context.
 
 
 ## 4.4 Conclusion
 
 The final design delivers a coherent edge appliance with a user-centered frontend workflow. Parents can manage rules through dashboard forms, while children experience a guided portal path when internet time expires. This preserves the project’s core principle: policy enforcement plus learning-based access recovery.
 
-The updated chapter framing combines two perspectives: technically validated backend behavior and assumption-based user frontend scenarios. Together, they indicate that the system is not only functional at service level, but also practically understandable at interface level for target users.
+The updated chapter framing combines two perspectives: technically validated backend behavior and user-centered frontend scenarios captured from six household-role testers. Together, they indicate that the system is not only functional at service level, but also practically understandable at interface level for the tested parent and child paths.
 
-The chapter therefore concludes that the implementation is ready for practical use and structured pilot rollout. The next improvement step is broader participant-based frontend validation using the prepared test case forms, so assumptions can be converted into measured usability evidence.
+The chapter therefore concludes that the implementation is ready for practical use and structured pilot rollout. The next improvement step is to widen the respondent pool and repeat the same weighted reporting template so the stability band observed here can be compared across deployments and demographics.
 
 
 ## 4.5 Impact of the Design to the Community

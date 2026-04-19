@@ -295,6 +295,27 @@ class DeviceController extends Controller
         // getConnectedDevices() returns array of devices currently on network
         $connectedDevices = $this->networkService->getConnectedDevices();
 
+        // Only suggest devices not already registered for this parent (match by normalized MAC)
+        $registeredMacs = Auth::user()->devices()
+            ->pluck('mac_address')
+            ->map(fn (string $mac) => $this->deviceService->normalizeMacAddress($mac))
+            ->all();
+
+        $deviceService = $this->deviceService;
+        $connectedDevices = array_values(array_filter(
+            $connectedDevices,
+            function (array $row) use ($registeredMacs, $deviceService): bool {
+                $raw = $row['mac_address'] ?? '';
+                if ($raw === '') {
+                    return true;
+                }
+
+                $normalized = $deviceService->normalizeMacAddress($raw);
+
+                return ! in_array($normalized, $registeredMacs, true);
+            }
+        ));
+
         // Return the create view
         // compact('connectedDevices') passes connected devices to view
         // View can display these as suggestions for MAC addresses
