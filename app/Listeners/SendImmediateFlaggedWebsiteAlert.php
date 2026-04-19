@@ -5,6 +5,7 @@ namespace App\Listeners;
 use App\Events\FlaggedWebsiteVisited;
 use App\Mail\ImmediateFlaggedWebsiteAlertMail;
 use App\Models\ReportDispatchLog;
+use App\Services\AccessAttemptAlertGrouping;
 use App\Models\ReportingPreference;
 use App\Models\User;
 use Illuminate\Support\Facades\Mail;
@@ -41,12 +42,22 @@ class SendImmediateFlaggedWebsiteAlert
         }
 
         $timezone = $preference->timezone ?: config('reporting.default_timezone');
-        $domain = $event->domain ?: ($event->url ?: 'unknown-domain');
-        $subject = sprintf('[Parental WiFi][Alert][Flagged] %s visited %s', $event->deviceName, $domain);
+        $groupDomain = AccessAttemptAlertGrouping::normalizeHost((string) ($event->domain ?? ''));
+        if ($groupDomain === '') {
+            $groupDomain = AccessAttemptAlertGrouping::normalizeHost(
+                (string) (parse_url((string) ($event->url ?? ''), PHP_URL_HOST) ?: '')
+            );
+        }
+        if ($groupDomain === '') {
+            $groupDomain = 'unknown-site';
+        }
+        $siteLabel = AccessAttemptAlertGrouping::subjectSiteLabel($groupDomain);
+        $subject = sprintf('[Parental WiFi][Alert][Flagged] %s visited %s', $event->deviceName, $siteLabel);
+        $detailLine = AccessAttemptAlertGrouping::detailHostFromEvent($event->url, $event->domain);
         $payload = [
             'preheader' => sprintf('Flagged activity detected for %s at %s.', $event->deviceName, now()->setTimezone($timezone)->format('M d, Y H:i:s')),
             'child_or_device_label' => $event->deviceName,
-            'url_or_domain' => $event->domain ?: ($event->url ?: 'N/A'),
+            'url_or_domain' => $detailLine,
             'event_local_datetime' => now()->setTimezone($timezone)->format('M d, Y H:i:s'),
             'device_name' => $event->deviceName,
             'ip_address' => null,

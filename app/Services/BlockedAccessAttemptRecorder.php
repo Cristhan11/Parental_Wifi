@@ -54,8 +54,10 @@ class BlockedAccessAttemptRecorder
             return false;
         }
 
-        $throttleMinutes = (int) config('reporting.blocked_access_alert_throttle_minutes', 15);
-        if ($throttleMinutes > 0 && $this->isThrottled($device->id, $host, $attemptedAt, $throttleMinutes)) {
+        $alertGroupDomain = AccessAttemptAlertGrouping::groupDomainForBlockedRule($matched, $host);
+
+        $throttleMinutes = (int) config('reporting.blocked_access_alert_throttle_minutes', 10);
+        if ($throttleMinutes > 0 && $this->isThrottled($device->id, $alertGroupDomain, $attemptedAt, $throttleMinutes)) {
             return false;
         }
 
@@ -64,7 +66,7 @@ class BlockedAccessAttemptRecorder
                 'device_id' => $device->id,
                 'type' => 'blocked_website',
                 'url' => $urlFromLog ?: ('https://'.$host.'/'),
-                'domain' => $host,
+                'domain' => $alertGroupDomain,
                 'ip_address' => $clientIp,
                 'attempted_at' => $attemptedAt,
             ]);
@@ -161,14 +163,17 @@ class BlockedAccessAttemptRecorder
         return false;
     }
 
-    private function isThrottled(int $deviceId, string $normalizedHost, CarbonInterface $attemptedAt, int $throttleMinutes): bool
+    /**
+     * @param  string  $alertGroupDomain  Same value stored on {@see AccessAttempt::$domain} (rule primary / URL host), not the raw queried hostname.
+     */
+    private function isThrottled(int $deviceId, string $alertGroupDomain, CarbonInterface $attemptedAt, int $throttleMinutes): bool
     {
         $windowStart = $attemptedAt->copy()->subMinutes($throttleMinutes);
 
         return AccessAttempt::query()
             ->where('device_id', $deviceId)
             ->where('type', 'blocked_website')
-            ->where('domain', $normalizedHost)
+            ->where('domain', $alertGroupDomain)
             ->where('attempted_at', '>=', $windowStart)
             ->exists();
     }

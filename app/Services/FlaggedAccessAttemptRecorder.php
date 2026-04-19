@@ -62,8 +62,10 @@ class FlaggedAccessAttemptRecorder
             return false;
         }
 
-        $throttleMinutes = (int) config('reporting.flagged_access_alert_throttle_minutes', 15);
-        if ($throttleMinutes > 0 && $this->isThrottled($device->id, $host, $attemptedAt, $throttleMinutes)) {
+        $alertGroupDomain = AccessAttemptAlertGrouping::groupDomainForFlaggedRule($matched, $host);
+
+        $throttleMinutes = (int) config('reporting.flagged_access_alert_throttle_minutes', 10);
+        if ($throttleMinutes > 0 && $this->isThrottled($device->id, $alertGroupDomain, $attemptedAt, $throttleMinutes)) {
             return false;
         }
 
@@ -72,7 +74,7 @@ class FlaggedAccessAttemptRecorder
                 'device_id' => $device->id,
                 'type' => 'flagged_website',
                 'url' => $urlFromLog ?: ('https://'.$host.'/'),
-                'domain' => $host,
+                'domain' => $alertGroupDomain,
                 'ip_address' => $clientIp,
                 'attempted_at' => $attemptedAt,
             ]);
@@ -115,14 +117,17 @@ class FlaggedAccessAttemptRecorder
         return $h;
     }
 
-    private function isThrottled(int $deviceId, string $normalizedHost, CarbonInterface $attemptedAt, int $throttleMinutes): bool
+    /**
+     * @param  string  $alertGroupDomain  Rule primary domain (stored on {@see AccessAttempt::$domain}), not the raw queried hostname.
+     */
+    private function isThrottled(int $deviceId, string $alertGroupDomain, CarbonInterface $attemptedAt, int $throttleMinutes): bool
     {
         $windowStart = $attemptedAt->copy()->subMinutes($throttleMinutes);
 
         return AccessAttempt::query()
             ->where('device_id', $deviceId)
             ->where('type', 'flagged_website')
-            ->where('domain', $normalizedHost)
+            ->where('domain', $alertGroupDomain)
             ->where('attempted_at', '>=', $windowStart)
             ->exists();
     }

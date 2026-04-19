@@ -394,6 +394,10 @@ class LogsController extends Controller
         // Access attempts represent security-focused child behavior.
         $entries = $entries->merge($attempts->get()->map(function (AccessAttempt $attempt): array {
             $isBlocked = $attempt->type === 'blocked_website';
+            $hostFromUrl = parse_url((string) $attempt->url, PHP_URL_HOST);
+            $detail = (is_string($hostFromUrl) && $hostFromUrl !== '')
+                ? $hostFromUrl
+                : ($attempt->domain ?: $attempt->url);
 
             return [
                 'id' => 'attempt-'.$attempt->id,
@@ -404,10 +408,10 @@ class LogsController extends Controller
                 'role' => $attempt->device?->role === 'child' ? 'child-device' : $attempt->device?->role,
                 'device_id' => $attempt->device_id,
                 'device_name' => $attempt->device?->name,
-                'target' => $attempt->domain ?: $attempt->url,
+                'target' => $detail,
                 'summary' => $isBlocked
-                    ? "Blocked website attempt: {$attempt->domain}"
-                    : "Flagged website visited: {$attempt->domain}",
+                    ? "Blocked website attempt: {$detail}"
+                    : "Flagged website visited: {$detail}",
             ];
         }));
 

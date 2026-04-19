@@ -26,24 +26,24 @@ return [
     | Blocked-domain immediate alerts (ParseNetworkLogs)
     |--------------------------------------------------------------------------
     |
-    | When the same child queries the same blocked hostname repeatedly, dnsmasq may
-    | log many lines per minute. Skip creating duplicate AccessAttempt rows (and
+    | When the same child triggers the same block rule repeatedly (including many
+    | different subdomains of one site), skip duplicate AccessAttempt rows (and
     | duplicate emails) within this window. Set to 0 to disable throttling.
     |
     */
 
-    'blocked_access_alert_throttle_minutes' => (int) env('BLOCKED_ACCESS_ALERT_THROTTLE_MINUTES', 15),
+    'blocked_access_alert_throttle_minutes' => (int) env('BLOCKED_ACCESS_ALERT_THROTTLE_MINUTES', 10),
 
     /*
     |--------------------------------------------------------------------------
     | Flagged-domain immediate alerts (ParseNetworkLogs)
     |--------------------------------------------------------------------------
     |
-    | Same idea as blocked throttling: dnsmasq may log many queries for one hostname.
+    | Same idea as blocked throttling: many hostnames can map to one flagged rule.
     | Set to 0 to disable throttling.
     |
     */
 
-    'flagged_access_alert_throttle_minutes' => (int) env('FLAGGED_ACCESS_ALERT_THROTTLE_MINUTES', 15),
+    'flagged_access_alert_throttle_minutes' => (int) env('FLAGGED_ACCESS_ALERT_THROTTLE_MINUTES', 10),
 
 ];

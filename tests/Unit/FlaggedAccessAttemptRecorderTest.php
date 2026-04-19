@@ -45,8 +45,44 @@ class FlaggedAccessAttemptRecorderTest extends TestCase
         $this->assertDatabaseHas('access_attempts', [
             'device_id' => $device->id,
             'type' => 'flagged_website',
-            'domain' => 'www.example.com',
+            'domain' => 'example.com',
         ]);
+    }
+
+    public function test_subdomains_share_throttle_bucket_for_same_flag_rule(): void
+    {
+        config(['reporting.flagged_access_alert_throttle_minutes' => 60]);
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create(['user_id' => $user->id]);
+
+        FlaggedWebsite::create([
+            'user_id' => $user->id,
+            'url' => 'https://example.com/',
+            'domain' => 'example.com',
+            'reason' => null,
+        ]);
+
+        $recorder = new FlaggedAccessAttemptRecorder(new BlockedAccessAttemptRecorder);
+        $t0 = Carbon::parse('2026-04-12 14:00:00');
+
+        $this->assertTrue($recorder->recordIfFlagged(
+            $device,
+            'www.example.com',
+            'https://www.example.com/',
+            '192.168.4.20',
+            $t0
+        ));
+
+        $this->assertFalse($recorder->recordIfFlagged(
+            $device,
+            'api.example.com',
+            'https://api.example.com/',
+            '192.168.4.20',
+            $t0->copy()->addMinutes(5)
+        ));
+
+        $this->assertSame(1, AccessAttempt::query()->where('device_id', $device->id)->count());
     }
 
     public function test_throttle_suppresses_second_attempt_within_window(): void

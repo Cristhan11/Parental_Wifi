@@ -46,7 +46,51 @@ class BlockedAccessAttemptRecorderTest extends TestCase
         $this->assertDatabaseHas('access_attempts', [
             'device_id' => $device->id,
             'type' => 'blocked_website',
-            'domain' => 'www.youtube.com',
+            'domain' => 'youtube.com',
+        ]);
+    }
+
+    public function test_subdomains_share_throttle_bucket_for_same_domain_rule(): void
+    {
+        config(['reporting.blocked_access_alert_throttle_minutes' => 60]);
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create(['user_id' => $user->id]);
+
+        BlockedWebsite::create([
+            'user_id' => $user->id,
+            'url' => null,
+            'domain' => 'facebook.com',
+            'reason' => null,
+            'block_type' => 'domain',
+            'block_subdomains' => true,
+            'related_domains' => null,
+        ]);
+
+        $recorder = new BlockedAccessAttemptRecorder;
+        $t0 = Carbon::parse('2026-04-12 14:00:00');
+
+        $this->assertTrue($recorder->recordIfBlocked(
+            $device,
+            'web.facebook.com',
+            'https://web.facebook.com/',
+            '192.168.4.20',
+            $t0
+        ));
+
+        $this->assertFalse($recorder->recordIfBlocked(
+            $device,
+            'graph.facebook.com',
+            'https://graph.facebook.com/',
+            '192.168.4.20',
+            $t0->copy()->addMinutes(5)
+        ));
+
+        $this->assertSame(1, AccessAttempt::query()->where('device_id', $device->id)->count());
+        $this->assertDatabaseHas('access_attempts', [
+            'device_id' => $device->id,
+            'domain' => 'facebook.com',
+            'url' => 'https://web.facebook.com/',
         ]);
     }
 
