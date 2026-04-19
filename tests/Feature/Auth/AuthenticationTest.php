@@ -3,6 +3,7 @@
 namespace Tests\Feature\Auth;
 
 use App\Models\User;
+use Database\Seeders\DefaultUserSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Tests\TestCase;
@@ -57,6 +58,19 @@ class AuthenticationTest extends TestCase
         ]);
 
         $this->assertGuest();
+    }
+
+    public function test_seeded_default_admin_can_authenticate(): void
+    {
+        $this->seed(DefaultUserSeeder::class);
+
+        $response = $this->post('/login', [
+            'email' => 'admin@parentalwifi.local',
+            'password' => 'admin123',
+        ]);
+
+        $this->assertAuthenticated();
+        $response->assertRedirect(route('admin.dashboard', absolute: false));
     }
 
     public function test_users_can_logout(): void

@@ -159,6 +159,40 @@ html {
     color: var(--auth-yellow);
 }
 
+.login-password-toggle {
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 2.75rem;
+    height: 2.75rem;
+    margin: -0.35rem -0.35rem -0.35rem 0;
+    padding: 0;
+    border: none;
+    background: transparent;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--auth-yellow);
+}
+
+.login-password-toggle:hover {
+    background: rgba(255, 222, 21, 0.22);
+}
+
+.login-password-toggle:focus-visible {
+    outline: 2px solid var(--auth-yellow-dark);
+    outline-offset: 2px;
+}
+
+.login-password-toggle svg {
+    width: 1.35rem;
+    height: 1.35rem;
+}
+
+.login-password-toggle-icon--hide {
+    display: none;
+}
+
 .login-input-shell input {
     flex: 1;
     min-width: 0;

@@ -96,4 +96,25 @@ class ProfileTest extends TestCase
 
         $this->assertNotNull($user->fresh());
     }
+
+    public function test_system_admin_cannot_delete_their_account_from_profile(): void
+    {
+        $user = User::factory()->create([
+            'role' => User::ROLE_ADMIN,
+        ]);
+
+        $response = $this
+            ->actingAs($user)
+            ->from('/profile')
+            ->delete('/profile', [
+                'password' => 'password',
+            ]);
+
+        $response
+            ->assertRedirect('/profile')
+            ->assertSessionHas('profile_delete_blocked');
+
+        $this->assertNotNull($user->fresh());
+        $this->assertAuthenticatedAs($user);
+    }
 }

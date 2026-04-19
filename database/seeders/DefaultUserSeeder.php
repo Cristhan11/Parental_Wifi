@@ -4,7 +4,6 @@ namespace Database\Seeders;
 
 use App\Models\User;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Hash;
 
 /**
  * Default User Seeder
@@ -23,8 +22,9 @@ use Illuminate\Support\Facades\Hash;
  *
  * Usage:
  * - Runs automatically when executing: php artisan db:seed
- * - Uses firstOrCreate() to prevent duplicate accounts if seeder runs multiple times
- * - Only creates the account if it doesn't already exist
+ * - Uses updateOrCreate() on email so re-running the seeder restores the documented
+ *   password, role, and verification (fixes "credentials do not match" if the row
+ *   existed with a different password). Change the password in the app after first login.
  */
 class DefaultUserSeeder extends Seeder
 {
@@ -36,20 +36,16 @@ class DefaultUserSeeder extends Seeder
      */
     public function run(): void
     {
-        // Create default admin account
-        // firstOrCreate() ensures we don't create duplicates if seeder runs multiple times
-        User::firstOrCreate(
-            // Search criteria: Look for user with this email
-            [
-                'email' => 'admin@parentalwifi.local',
-            ],
-            // Data to create if user doesn't exist
+        // Bootstrap system admin (same email every time). updateOrCreate keeps credentials
+        // aligned with this seeder when you run: php artisan db:seed --class=DefaultUserSeeder
+        // Plaintext password: User model uses the `hashed` cast (single Hash::make on save).
+        User::updateOrCreate(
+            ['email' => 'admin@parentalwifi.local'],
             [
                 'name' => 'System Administrator',
-                'email' => 'admin@parentalwifi.local',
-                'password' => Hash::make('admin123'), // Password is hashed for security
-                'role' => 'admin', // Admin role for full system access
-                'email_verified_at' => now(), // Mark email as verified (no email verification needed for default account)
+                'password' => 'admin123',
+                'role' => User::ROLE_ADMIN,
+                'email_verified_at' => now(),
             ]
         );
 

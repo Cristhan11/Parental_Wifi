@@ -163,6 +163,14 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->role === self::ROLE_PARENT_ADMIN;
     }
 
+    /**
+     * System admins cannot self-delete from profile (use another admin or DB process).
+     */
+    public function canDeleteOwnAccount(): bool
+    {
+        return $this->role !== self::ROLE_ADMIN;
+    }
+
     public function isAwaitingAdminApproval(): bool
     {
         return $this->isStrictParentRole()

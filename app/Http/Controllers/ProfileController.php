@@ -42,11 +42,18 @@ class ProfileController extends Controller
      */
     public function destroy(Request $request): RedirectResponse
     {
+        $user = $request->user();
+
+        if (! $user->canDeleteOwnAccount()) {
+            return Redirect::route('profile.edit')->with(
+                'profile_delete_blocked',
+                __('Administrator accounts cannot be deleted from profile settings.')
+            );
+        }
+
         $request->validateWithBag('userDeletion', [
             'password' => ['required', 'current_password'],
         ]);
-
-        $user = $request->user();
 
         Auth::logout();
 
