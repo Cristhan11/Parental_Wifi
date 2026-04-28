@@ -9,6 +9,7 @@ use App\Models\QuizAttempt;
 use App\Models\Video;
 use App\Models\VideoCompletion;
 use App\Models\VideoWordDisplay;
+use App\Services\DeviceService;
 use App\Services\TimeGrantingService;
 use App\Services\VideoWordService;
 use Illuminate\Http\RedirectResponse;
@@ -24,10 +25,16 @@ class PortalController extends Controller
 
     protected VideoWordService $videoWordService;
 
-    public function __construct(TimeGrantingService $timeGrantingService, VideoWordService $videoWordService)
-    {
+    protected DeviceService $deviceService;
+
+    public function __construct(
+        TimeGrantingService $timeGrantingService,
+        VideoWordService $videoWordService,
+        DeviceService $deviceService,
+    ) {
         $this->timeGrantingService = $timeGrantingService;
         $this->videoWordService = $videoWordService;
+        $this->deviceService = $deviceService;
     }
 
     /**
@@ -70,13 +77,15 @@ class PortalController extends Controller
         // getDevice() looks for MAC in URL query (?mac=...), POST data, or session
         $device = $this->getDevice($request);
 
-        // If device not found, show landing page with error message
-        // This happens if MAC address doesn't exist in database
-        // Child will see friendly error message instead of crash
+        // Unknown device on home Wi‑Fi: show simplified registration request (Simplify_project.md).
+        // No MAC on wire: plain-language hint to connect / trigger captive sign-in.
         if (! $device) {
+            $showDeviceRegistration = session('device_mac') !== null;
+
             return view('portal.landing', [
-                'device' => null,  // No device found
-                'error' => 'Device not found. Please connect to the network.',
+                'device' => null,
+                'showDeviceRegistration' => $showDeviceRegistration,
+                'error' => $showDeviceRegistration ? null : 'We could not tell which device this is. Connect to the home Wi‑Fi, open a website once to sign in, then open this page again.',
             ]);
         }
 
@@ -129,71 +138,103 @@ class PortalController extends Controller
      * @param  Request  $request  The HTTP request
      * @return Device|null The device if found, null if not found
      */
-    protected function getDevice(Request $request): ?Device
+    /**
+     * Resolve the client MAC (NoDogSplash token, gateway IP lookup, query, or session) and persist to session.
+     */
+    protected function resolveMacAddress(Request $request): ?string
     {
-        // First, check if we have a NoDogSplash token parameter
-        // This happens when device is redirected from NoDogSplash splash page
         $token = $request->query('tok');
         if ($token) {
-            // Look up MAC address from token using ndsctl
             $macAddress = $this->getMacFromToken($token);
             if ($macAddress) {
-                // Store MAC in session for subsequent requests
-                session(['device_mac' => $macAddress]);
-                // Look up device in database
-                $device = Device::where('mac_address', $macAddress)->first();
-                if ($device) {
-                    return $device;
-                }
+                $normalized = $this->deviceService->normalizeMacAddress($macAddress);
+                session(['device_mac' => $normalized]);
+
+                return $normalized;
             }
         }
 
-        // Fallback 1: Try to get MAC address from IP address (for direct portal access)
-        // This handles cases where Android's captive portal detection accesses
-        // the portal directly without going through splash.html (no token)
         $clientIp = $request->ip();
         if ($clientIp && $clientIp !== '127.0.0.1' && $clientIp !== '::1') {
             $macAddress = $this->getMacFromIp($clientIp);
             if ($macAddress) {
-                // Store MAC in session for subsequent requests
-                session(['device_mac' => $macAddress]);
-                // Look up device in database
-                $device = Device::where('mac_address', $macAddress)->first();
-                if ($device) {
-                    Log::info('Device identified by IP address (no token)', [
-                        'ip' => $clientIp,
-                        'mac' => $macAddress,
-                        'device_id' => $device->id,
-                    ]);
+                $normalized = $this->deviceService->normalizeMacAddress($macAddress);
+                session(['device_mac' => $normalized]);
 
-                    return $device;
-                }
+                return $normalized;
             }
         }
 
-        // Fallback 2: Try to get MAC address from three possible sources (in order):
-        // 1. URL query parameter: ?mac=AA:BB:CC:DD:EE:FF
-        // 2. Form input (POST data)
-        // 3. Session (stored from previous request)
-        // ?? is the "null coalescing operator" - uses next value if previous is null
-        $macAddress = $request->query('mac')      // GET parameter
-            ?? $request->input('mac')              // POST parameter
-            ?? session('device_mac');             // Session storage
+        $macAddress = $request->query('mac')
+            ?? $request->input('mac')
+            ?? session('device_mac');
 
-        // If no MAC address found, return null (device not found)
+        if (! $macAddress) {
+            $macAddress = $this->devLoopbackMacAddress($request);
+        }
+
+        if (! $macAddress) {
+            return null;
+        }
+
+        $normalized = $this->deviceService->normalizeMacAddress($macAddress);
+        session(['device_mac' => $normalized]);
+
+        return $normalized;
+    }
+
+    /**
+     * When developing with `php artisan serve`, the client is loopback and ndsctl is absent.
+     * PORTAL_DEV_CLIENT_MAC (see config/portal.php) supplies a test MAC only in that case.
+     */
+    protected function devLoopbackMacAddress(Request $request): ?string
+    {
+        if (! app()->environment(['local', 'testing'])) {
+            return null;
+        }
+
+        $devMac = config('portal.dev_client_mac');
+        if (! is_string($devMac) || trim($devMac) === '') {
+            return null;
+        }
+
+        $ip = $request->ip();
+        if (! in_array($ip, ['127.0.0.1', '::1'], true)) {
+            return null;
+        }
+
+        return trim($devMac);
+    }
+
+    protected function getDevice(Request $request): ?Device
+    {
+        $macAddress = $this->resolveMacAddress($request);
+
         if (! $macAddress) {
             Log::warning('Device not found - no token, IP lookup failed, and no MAC in request', [
-                'ip' => $clientIp ?? 'unknown',
-                'token' => $token ?? 'none',
+                'ip' => $request->ip() ?? 'unknown',
+                'token' => $request->query('tok') ?? 'none',
                 'url' => $request->fullUrl(),
             ]);
 
             return null;
         }
 
-        // Look up device in database by MAC address
-        // ->first() returns the first matching device or null if not found
         return Device::where('mac_address', $macAddress)->first();
+    }
+
+    /**
+     * Redirect to portal landing when the client is known on Wi‑Fi but not registered, or unknown.
+     */
+    protected function redirectLandingUnknownDevice(): RedirectResponse
+    {
+        if (session('device_mac')) {
+            return redirect()->route('portal.landing')
+                ->with('portal_info', 'This device is not set up yet. Ask a parent to approve it, or use the form below to send a request.');
+        }
+
+        return redirect()->route('portal.landing')
+            ->with('error', 'We could not tell which device this is. Connect to the home Wi‑Fi, open a website once to sign in, then open this page again.');
     }
 
     /**
@@ -430,8 +471,7 @@ class PortalController extends Controller
 
         // Validation: Device must exist
         if (! $device) {
-            return redirect()->route('portal.landing')
-                ->with('error', 'Device not found. Please connect to the network.');
+            return $this->redirectLandingUnknownDevice();
         }
 
         // Validation: Quiz must be active
@@ -836,8 +876,7 @@ class PortalController extends Controller
 
         // Validation: Device must exist
         if (! $device) {
-            return redirect()->route('portal.landing')
-                ->with('error', 'Device not found. Please connect to the network.');
+            return $this->redirectLandingUnknownDevice();
         }
 
         // Validation: Video must be active

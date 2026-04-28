@@ -26,6 +26,43 @@ class DeviceRegistrationRequestQueueTest extends TestCase
         ]);
     }
 
+    public function test_portal_landing_uses_portal_dev_client_mac_on_loopback_when_configured(): void
+    {
+        config(['portal.dev_client_mac' => 'AA:BB:CC:DD:EE:FE']);
+
+        $response = $this->get('http://127.0.0.1/portal');
+
+        $response->assertOk();
+        $response->assertSee('Request to Register', false);
+    }
+
+    public function test_portal_landing_shows_request_to_register_when_session_has_unregistered_device_mac(): void
+    {
+        $response = $this->withSession(['device_mac' => 'AA:BB:CC:DD:EE:01'])
+            ->get(route('portal.landing'));
+
+        $response->assertOk();
+        $response->assertSee('Request to Register', false);
+        $response->assertSee('name="device_name"', false);
+    }
+
+    public function test_registration_store_uses_session_device_mac_from_portal(): void
+    {
+        $this->withSession(['device_mac' => 'aa:bb:cc:dd:ee:02'])
+            ->post(route('device-request.store'), [
+                'device_name' => 'Portal Tablet',
+            ], [
+                'User-Agent' => 'Mozilla/TestPortal',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('device_registration_requests', [
+            'device_name' => 'Portal Tablet',
+            'mac_address' => 'AA:BB:CC:DD:EE:02',
+            'status' => 'pending',
+        ]);
+    }
+
     public function test_parent_owner_must_assign_role_before_approval(): void
     {
         $owner = User::factory()->create([

@@ -183,7 +183,8 @@ class DeviceController extends Controller
         $rawIp = (string) $request->ip();
         $ipAddress = filter_var($rawIp, FILTER_VALIDATE_IP) ? $rawIp : null;
         $source = (string) ($request->userAgent() ?? 'unknown');
-        $macAddress = $request->header('X-Device-Mac');
+        $rawMac = $request->header('X-Device-Mac') ?: session('device_mac');
+        $macAddress = $rawMac ? $this->deviceService->normalizeMacAddress(trim((string) $rawMac)) : null;
         $hostname = $ipAddress ? gethostbyaddr($ipAddress) : null;
 
         $fingerprint = sha1(

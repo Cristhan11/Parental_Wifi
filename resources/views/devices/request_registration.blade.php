@@ -21,7 +21,7 @@
         </div>
 
         <p class="text-xs text-gray-500">
-            MAC address is captured automatically in the backend. Manual MAC entry is available only in advanced/debug tools.
+            Your device is recognized automatically when you use this page on the home Wi‑Fi. Manual device-id entry is only in advanced tools for troubleshooting.
         </p>
 
         <x-primary-button class="w-full justify-center">

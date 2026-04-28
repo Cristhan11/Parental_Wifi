@@ -12,8 +12,28 @@
         <div class="portal-inner">
             <header class="portal-hero">
                 <h1 class="portal-title">Welcome!</h1>
-                <p class="portal-subtitle">Complete activities to earn internet time</p>
+                <p class="portal-subtitle">
+                    @if(!empty($device))
+                        Complete activities to earn internet time
+                    @elseif(!empty($showDeviceRegistration))
+                        New device? Ask a parent to add you, or send a request below.
+                    @else
+                        Complete activities to earn internet time
+                    @endif
+                </p>
             </header>
+
+            @if(session('portal_info'))
+                <div class="portal-banner portal-banner--info">
+                    <p>{{ session('portal_info') }}</p>
+                </div>
+            @endif
+
+            @if(session('success'))
+                <div class="portal-banner portal-banner--success">
+                    <p>{{ session('success') }}</p>
+                </div>
+            @endif
 
             @if(session('error'))
                 <div class="portal-banner portal-banner--error">
@@ -21,10 +41,34 @@
                 </div>
             @endif
 
-            @if(isset($error))
+            @error('device_name')
+                <div class="portal-banner portal-banner--error">
+                    <p>{{ $message }}</p>
+                </div>
+            @enderror
+
+            @if(isset($error) && $error)
                 <div class="portal-banner portal-banner--error">
                     <p>{{ $error }}</p>
                 </div>
+            @endif
+
+            @if(!empty($showDeviceRegistration))
+                <section class="portal-card portal-card--register" aria-labelledby="register-heading">
+                    <h2 id="register-heading" class="portal-card__title">
+                        <svg class="portal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4" />
+                        </svg>
+                        New device
+                    </h2>
+                    <p class="portal-register-lead">Pick a name your parent will recognize, then tap the button. They will see your request on the Accounts page.</p>
+                    <form method="POST" action="{{ route('device-request.store') }}" class="portal-register-form">
+                        @csrf
+                        <label class="portal-field-label" for="device_name">Device name</label>
+                        <input id="device_name" name="device_name" type="text" class="portal-input" value="{{ old('device_name') }}" placeholder="Example: Miguel tablet" required autocomplete="off" maxlength="255">
+                        <button type="submit" class="portal-btn-primary">Request to Register</button>
+                    </form>
+                </section>
             @elseif($device)
                 <section class="portal-card">
                     <h2 class="portal-card__title">
