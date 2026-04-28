@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Models\ReportingRecipient;
 use App\Models\User;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Http\RedirectResponse;
@@ -49,6 +50,11 @@ class VerifyEmailCodeController extends Controller
             event(new Verified($user));
         }
 
+        ReportingRecipient::firstOrCreate(
+            ['user_id' => $user->id, 'email' => $user->email],
+            ['label' => 'Owner verified email', 'is_enabled' => true]
+        );
+
         $user->forceFill([
             'email_verification_code_hash' => null,
             'email_verification_code_expires_at' => null,
@@ -66,7 +72,7 @@ class VerifyEmailCodeController extends Controller
         if ($user->hasParentCapability()) {
             return redirect()
                 ->route('registration.pending-approval')
-                ->with('status', 'Your email is verified. An administrator will approve your account next.');
+                ->with('status', 'Your email is verified. A Parent Owner will approve your account next.');
         }
 
         return redirect()->intended(route('admin.dashboard', absolute: false).'?verified=1');

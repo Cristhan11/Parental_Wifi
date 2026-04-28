@@ -16,11 +16,15 @@ class RegisteredUserController extends Controller
 {
     public function create(): View
     {
+        abort_unless($this->canRegisterParentAccounts(), 404);
+
         return view('auth.register');
     }
 
     public function store(Request $request): RedirectResponse
     {
+        abort_unless($this->canRegisterParentAccounts(), 404);
+
         $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
@@ -39,5 +43,15 @@ class RegisteredUserController extends Controller
         Auth::login($user);
 
         return redirect(route('verification.notice', absolute: false));
+    }
+
+    private function canRegisterParentAccounts(): bool
+    {
+        return User::query()
+            ->whereIn('role', [User::ROLE_ADMIN, User::ROLE_PARENT_ADMIN])
+            ->where('requires_email_setup', false)
+            ->where('force_password_change', false)
+            ->whereNotNull('email_verified_at')
+            ->exists();
     }
 }

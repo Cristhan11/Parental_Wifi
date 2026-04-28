@@ -10,10 +10,13 @@ use App\Models\Device;
 use App\Models\ReportingRecipient;
 use App\Observers\DeviceObserver;
 use App\Observers\ReportingRecipientObserver;
+use App\PolicyApplyFlags;
+use App\Services\PolicyApplyDebouncer;
 use Illuminate\Auth\Events\Failed;
 use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
+use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
@@ -29,7 +32,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(PolicyApplyDebouncer::class, function () {
+            return PolicyApplyDebouncer::fromConfig();
+        });
     }
 
     /**
@@ -55,6 +60,15 @@ class AppServiceProvider extends ServiceProvider
 
         ReportingRecipient::observe(ReportingRecipientObserver::class);
         Device::observe(DeviceObserver::class);
+
+        Event::listen(Registered::class, function (Registered $event): void {
+            $user = $event->user;
+            if (! $user || ! $user->getKey()) {
+                return;
+            }
+
+            app(PolicyApplyDebouncer::class)->requestApply((int) $user->getKey(), PolicyApplyFlags::DhcpBypass);
+        });
 
         // Immediate alert listeners live under app/Listeners and are auto-registered by
         // Laravel's event discovery (see Illuminate\Foundation\Support\Providers\EventServiceProvider).

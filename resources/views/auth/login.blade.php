@@ -115,8 +115,10 @@
                     </label>
 
                     <p class="login-links-row" style="margin-top: 1rem; font-size: 0.875rem;">
-                        <a href="{{ route('register') }}" class="login-link-secondary">Create parent account</a>
-                        <span style="opacity:0.5;"> · </span>
+                        @if(($canRegisterParent ?? false) === true)
+                            <a href="{{ route('register') }}" class="login-link-secondary">Create parent account</a>
+                            <span style="opacity:0.5;"> · </span>
+                        @endif
                         <a href="{{ route('password.request') }}" class="login-link-secondary">Forgot password?</a>
                     </p>
 

@@ -45,14 +45,15 @@
                 </div>
             @endif
 
-            {{-- Info Banner --}}
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p class="text-sm text-blue-800">
-                    <strong>Note:</strong> Schedules define when devices can access the internet. The system automatically 
-                    enforces these schedules every minute. Devices are blocked when outside allowed time windows or when 
-                    daily duration limits are reached.
-                </p>
-            </div>
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>Schedules set when your child can use the internet.</li>
+                    <li>After the allowed schedule time, internet is turned off for that device.</li>
+                    <li>If you set a daily limit, internet also turns off after the allowed minutes are used.</li>
+                    <li>You can make different schedules for weekdays, weekends, or bedtime.</li>
+                </ul>
+            </x-collapsible-instructions>
 
             {{-- Filters --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">

@@ -3,72 +3,57 @@
 namespace App\Observers;
 
 use App\Models\Device;
-use App\Models\User;
-use App\Services\DomainBlockingService;
-use Illuminate\Support\Facades\Log;
+use App\PolicyApplyFlags;
+use App\Services\PolicyApplyDebouncer;
 
 /**
- * Keeps dnsmasq in sync when device role/status/MAC changes:
- * - Global blocklist from {@see BlockedWebsite} (clears stale Pi config after DB resets)
- * - DHCP DNS bypass for MACs that should not use filtered DNS
+ * Queues debounced DHCP DNS bypass updates when device identity or role changes.
+ * Block list regeneration is triggered from blocked-website changes only (lighter on the Pi).
  */
 class DeviceObserver
 {
     public function __construct(
-        protected DomainBlockingService $domainBlockingService
+        protected PolicyApplyDebouncer $policyApplyDebouncer
     ) {}
 
     public function created(Device $device): void
     {
-        $this->syncForUser($device->user_id);
+        $this->requestBypassForUser($device->user_id);
     }
 
     public function updated(Device $device): void
     {
-        $this->syncForUser($device->user_id);
+        if ($this->dhcpRelevantChanged($device)) {
+            $this->requestBypassForUser($device->user_id);
+        }
+
         if ($device->wasChanged('user_id') && $device->getOriginal('user_id')) {
-            $this->syncForUser((int) $device->getOriginal('user_id'));
+            $this->requestBypassForUser((int) $device->getOriginal('user_id'));
         }
     }
 
     public function deleted(Device $device): void
     {
-        $this->syncForUser($device->user_id);
+        $this->requestBypassForUser($device->user_id);
     }
 
-    protected function syncForUser(?int $userId): void
+    protected function dhcpRelevantChanged(Device $device): bool
+    {
+        foreach (['mac_address', 'role', 'status', 'user_id'] as $attr) {
+            if ($device->wasChanged($attr)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function requestBypassForUser(?int $userId): void
     {
         if (! $userId) {
             return;
         }
 
-        $user = User::query()->find($userId);
-        if (! $user) {
-            return;
-        }
-
-        try {
-            $okBlocklist = $this->domainBlockingService->syncDnsmasqBlocklistForUser($user);
-            if (! $okBlocklist) {
-                Log::warning('Global dnsmasq blocklist sync returned failure', ['user_id' => $userId]);
-            }
-        } catch (\Throwable $e) {
-            Log::warning('Global dnsmasq blocklist sync exception', [
-                'user_id' => $userId,
-                'message' => $e->getMessage(),
-            ]);
-        }
-
-        try {
-            $ok = $this->domainBlockingService->syncDnsmasqDhcpDnsBypassForUser($user);
-            if (! $ok) {
-                Log::warning('DHCP DNS bypass sync returned failure', ['user_id' => $userId]);
-            }
-        } catch (\Throwable $e) {
-            Log::warning('DHCP DNS bypass sync exception', [
-                'user_id' => $userId,
-                'message' => $e->getMessage(),
-            ]);
-        }
+        $this->policyApplyDebouncer->requestApply($userId, PolicyApplyFlags::DhcpBypass);
     }
 }

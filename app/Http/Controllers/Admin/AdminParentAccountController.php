@@ -34,9 +34,18 @@ class AdminParentAccountController extends Controller
         $q = trim((string) $request->input('q', ''));
 
         $parents = User::query()
-            ->whereIn('role', [User::ROLE_PARENT, User::ROLE_PARENT_ADMIN])
-            ->whereNotNull('approved_at')
             ->whereNull('rejected_at')
+            ->where(function ($query) {
+                $query->where(function ($parentQuery) {
+                    $parentQuery->whereIn('role', [User::ROLE_PARENT, User::ROLE_PARENT_ADMIN])
+                        ->whereNotNull('approved_at');
+                })->orWhere(function ($ownerQuery) {
+                    $ownerQuery->where('role', User::ROLE_ADMIN)
+                        ->where('requires_email_setup', false)
+                        ->where('force_password_change', false)
+                        ->whereNotNull('email_verified_at');
+                });
+            })
             ->when($q !== '', function ($query) use ($q) {
                 $query->where(function ($inner) use ($q) {
                     $inner->where('name', 'like', '%'.$q.'%')
@@ -47,7 +56,9 @@ class AdminParentAccountController extends Controller
             ->paginate(20)
             ->withQueryString();
 
-        return view('admin.parents.index', compact('parents', 'q'));
+        $householdOperatorCount = $this->householdOperatorCount();
+
+        return view('admin.parents.index', compact('parents', 'q', 'householdOperatorCount'));
     }
 
     public function approve(User $user): RedirectResponse
@@ -115,6 +126,11 @@ class AdminParentAccountController extends Controller
     public function demoteToParentRole(User $user): RedirectResponse
     {
         abort_unless($user->isParentAdmin() && $user->isApprovedParentAccount(), 404);
+        abort_if(
+            $this->hasSingleHouseholdOperatorRemaining() && $user->hasAdminCapability(),
+            403,
+            'You cannot remove household operator access from the last remaining household operator.'
+        );
 
         $user->forceFill([
             'role' => User::ROLE_PARENT,
@@ -169,6 +185,11 @@ class AdminParentAccountController extends Controller
         $this->assertManageableApprovedParent($user);
 
         abort_if($user->id === auth()->id(), 403, 'You cannot delete your own account.');
+        abort_if(
+            ! $user->isStrictParentRole(),
+            403,
+            'Only standard parent accounts can be deleted.'
+        );
 
         AdminActionLog::create([
             'actor_id' => auth()->id(),
@@ -211,5 +232,28 @@ class AdminParentAccountController extends Controller
     private function assertManageableApprovedParent(User $user): void
     {
         abort_unless($user->isApprovedParentAccount(), 404);
+    }
+
+    private function hasSingleHouseholdOperatorRemaining(): bool
+    {
+        return $this->householdOperatorCount() <= 1;
+    }
+
+    private function householdOperatorCount(): int
+    {
+        return User::query()
+            ->whereNull('rejected_at')
+            ->where(function ($query) {
+                $query->where(function ($parentAdminQuery) {
+                    $parentAdminQuery->where('role', User::ROLE_PARENT_ADMIN)
+                        ->whereNotNull('approved_at');
+                })->orWhere(function ($ownerQuery) {
+                    $ownerQuery->where('role', User::ROLE_ADMIN)
+                        ->where('requires_email_setup', false)
+                        ->where('force_password_change', false)
+                        ->whereNotNull('email_verified_at');
+                });
+            })
+            ->count();
     }
 }

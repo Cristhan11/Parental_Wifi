@@ -73,18 +73,41 @@
 
     <div class="py-12">
         <div class="max-w-7xl mx-auto min-w-0 px-4 sm:px-6 lg:px-8">
+            <x-collapsible-instructions class="mb-6">
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>Pick a child from the menu to see their time on the internet, quiz scores, and recent websites.</li>
+                    <li><strong>Browsing History</strong> opens the full visit list for that child; <strong>Access Attempts</strong> opens blocked and flagged site activity for that child.</li>
+                    <li>On the chart, use <strong>Daily</strong>, <strong>Weekly</strong>, <strong>Monthly</strong>, or <strong>Yearly</strong> to change what the graph shows.</li>
+                </ul>
+            </x-collapsible-instructions>
+
             {{-- Child dropdown selector (matching Image 3) --}}
             @if($devices->count() > 0)
                 <div class="mb-6 min-w-0">
-                    <form method="GET" action="{{ route('child_devices.index') }}" class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
-                        <label for="device" class="shrink-0 text-sm font-medium text-gray-700">CHILD:</label>
-                        <select name="device" id="device" onchange="this.form.submit()" class="w-full min-w-0 rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:max-w-md">
-                            @foreach($devices as $d)
-                                <option value="{{ $d->id }}" {{ $device && $device->id === $d->id ? 'selected' : '' }}>
-                                    {{ $d->name }}
-                                </option>
-                            @endforeach
-                        </select>
+                    <form method="GET" action="{{ route('child_devices.index') }}" class="rounded-lg border border-yellow-200 bg-white p-4 shadow-sm">
+                        <label for="device" class="mb-2 block text-sm font-semibold tracking-wide text-gray-700">Select Child Device</label>
+                        <div class="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
+                            <div class="pointer-events-none inline-flex items-center rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-xs font-semibold uppercase tracking-wide text-gray-700 sm:text-sm">
+                                {{ $device?->name ?? 'Child' }}
+                            </div>
+                            <div class="relative w-full sm:w-auto sm:flex-none">
+                                <select
+                                    name="device"
+                                    id="device"
+                                    onchange="this.form.submit()"
+                                    aria-label="Select child device"
+                                    class="w-full sm:w-[280px] md:w-[300px] lg:w-[320px] min-w-0 rounded-md border-2 border-yellow-300 bg-white py-2.5 pl-3 pr-10 text-sm font-medium text-gray-900 shadow-sm focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-200">
+                                    <option value="" selected disabled>Click here to select another child</option>
+                                    @foreach($devices as $d)
+                                        @continue($device && $device->id === $d->id)
+                                        <option value="{{ $d->id }}">
+                                            {{ $d->name }}
+                                        </option>
+                                    @endforeach
+                                </select>
+                            </div>
+                        </div>
                     </form>
                 </div>
             @endif

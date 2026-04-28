@@ -53,7 +53,7 @@
         </div>
 
         <p class="mt-6 text-xs text-gray-500">
-            <a href="{{ route('admin.dashboard') }}" class="underline text-black">← Back to administration</a>
+            <a href="{{ route('admin.dashboard') }}" class="underline text-black">← Back to Parent Owner</a>
         </p>
     </div>
 </x-app-layout>

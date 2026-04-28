@@ -1,8 +1,8 @@
 <x-guest-layout>
     <div class="mb-6">
-        <h2 class="text-2xl font-bold text-black">Awaiting administrator approval</h2>
+        <h2 class="text-2xl font-bold text-black">Awaiting Parent Owner approval</h2>
         <p class="mt-2 text-sm" style="color: #00000080;">
-            Your email is verified. A system administrator must approve your parent account before you can use the dashboard. You will be able to sign in as usual once approved.
+            Your email is verified. A Parent Owner must approve your parent account before you can use the dashboard. You will be able to sign in as usual once approved.
         </p>
     </div>
 

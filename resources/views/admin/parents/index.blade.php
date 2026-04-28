@@ -50,25 +50,33 @@
                                     <div class="flex flex-col items-end gap-2 text-xs">
                                         <a href="{{ route('admin.parents.edit', $user) }}" class="underline text-black">Edit</a>
                                         @if ($user->isStrictParentRole())
-                                            <form action="{{ route('admin.parents.promote', $user) }}" method="POST" class="inline" onsubmit="return confirm('Grant this parent access to Administration (household operator)?');">
+                                            <form action="{{ route('admin.parents.promote', $user) }}" method="POST" class="inline" onsubmit="return confirm('Grant this parent access to Parent Owner tools (household operator)?');">
                                                 @csrf
                                                 <button type="submit" class="underline text-black">Make household operator</button>
                                             </form>
                                         @elseif ($user->isParentAdmin())
-                                            <form action="{{ route('admin.parents.demote', $user) }}" method="POST" class="inline" onsubmit="return confirm('Remove administration access and make this a standard parent account?');">
-                                                @csrf
-                                                <button type="submit" class="underline text-black">Remove household operator</button>
-                                            </form>
+                                            @if ($householdOperatorCount > 1)
+                                                <form action="{{ route('admin.parents.demote', $user) }}" method="POST" class="inline" onsubmit="return confirm('Remove Parent Owner tool access and make this a standard parent account?');">
+                                                    @csrf
+                                                    <button type="submit" class="underline text-black">Remove household operator</button>
+                                                </form>
+                                            @else
+                                                <span class="text-gray-400">Remove household operator (disabled: last operator)</span>
+                                            @endif
                                         @endif
                                         <form action="{{ route('admin.parents.reset-password-default', $user) }}" method="POST" class="inline" onsubmit="return confirm('Set this account’s password to the default 12345678? The parent should change it after logging in.');">
                                             @csrf
                                             <button type="submit" class="underline text-black">Reset password to default</button>
                                         </form>
-                                        <form action="{{ route('admin.parents.destroy', $user) }}" method="POST" class="inline" onsubmit="return confirm('Permanently delete this parent account and all related data? This cannot be undone.');">
-                                            @csrf
-                                            @method('DELETE')
-                                            <button type="submit" class="underline text-red-700">Delete account</button>
-                                        </form>
+                                        @if ($user->isStrictParentRole())
+                                            <form action="{{ route('admin.parents.destroy', $user) }}" method="POST" class="inline" onsubmit="return confirm('Permanently delete this parent account and all related data? This cannot be undone.');">
+                                                @csrf
+                                                @method('DELETE')
+                                                <button type="submit" class="underline text-red-700">Delete account</button>
+                                            </form>
+                                        @else
+                                            <span class="text-gray-400">Delete account (only standard parents)</span>
+                                        @endif
                                     </div>
                                 @else
                                     <span class="text-gray-400">—</span>

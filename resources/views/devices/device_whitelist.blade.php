@@ -41,6 +41,15 @@
                 </div>
             @endif
 
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>Devices on this list are <strong>trusted</strong>: they can use the internet without your usual child limits.</li>
+                    <li>Tap <strong>Remove from Whitelist</strong> when you want that device to follow normal rules again.</li>
+                    <li>Tap <strong>Edit</strong> to change the name, address, or other settings for that device.</li>
+                </ul>
+            </x-collapsible-instructions>
+
             {{-- Whitelist table --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                 <div class="p-6">

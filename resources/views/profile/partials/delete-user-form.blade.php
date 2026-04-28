@@ -8,7 +8,7 @@
             @if ($user->canDeleteOwnAccount())
                 {{ __('Once your account is deleted, all data linked to it—including child device records, browsing-related logs, and quiz activity—will be permanently removed. This cannot be undone.') }}
             @else
-                {{ __('Once an account is deleted, all data linked to it is permanently removed. Administrator accounts cannot be deleted from this page.') }}
+                {{ __('Once an account is deleted, all data linked to it is permanently removed. Household operator / Parent Owner accounts cannot be deleted from this page.') }}
             @endif
         </p>
     </header>
@@ -64,7 +64,7 @@
             </p>
         @else
             <p class="text-sm font-medium text-gray-700">
-                {{ __('Administrator accounts cannot be deleted from profile settings.') }}
+                {{ __('Household operator / Parent Owner accounts cannot be deleted from profile settings.') }}
             </p>
         @endif
     @endif

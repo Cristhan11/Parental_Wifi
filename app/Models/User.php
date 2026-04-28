@@ -31,6 +31,8 @@ class User extends Authenticatable implements MustVerifyEmail
         'email',
         'password',
         'role',
+        'requires_email_setup',
+        'force_password_change',
     ];
 
     /**
@@ -49,6 +51,8 @@ class User extends Authenticatable implements MustVerifyEmail
             'approved_at' => 'datetime',
             'rejected_at' => 'datetime',
             'email_verification_code_expires_at' => 'datetime',
+            'requires_email_setup' => 'boolean',
+            'force_password_change' => 'boolean',
         ];
     }
 
@@ -126,7 +130,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function hasParentCapability(): bool
     {
-        return in_array($this->role, [self::ROLE_PARENT, self::ROLE_PARENT_ADMIN], true);
+        return in_array($this->role, [self::ROLE_PARENT, self::ROLE_PARENT_ADMIN, self::ROLE_ADMIN], true);
     }
 
     /**
@@ -164,11 +168,12 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * System admins cannot self-delete from profile (use another admin or DB process).
+     * Accounts with admin/operator capability cannot self-delete from profile
+     * to prevent lockout of household/system administration access.
      */
     public function canDeleteOwnAccount(): bool
     {
-        return $this->role !== self::ROLE_ADMIN;
+        return ! $this->hasAdminCapability();
     }
 
     public function isAwaitingAdminApproval(): bool
@@ -187,6 +192,13 @@ class User extends Authenticatable implements MustVerifyEmail
     {
         if (! $this->hasParentCapability()) {
             return false;
+        }
+
+        if ($this->role === self::ROLE_ADMIN) {
+            return ! $this->requires_email_setup
+                && ! $this->force_password_change
+                && $this->hasVerifiedEmail()
+                && $this->rejected_at === null;
         }
 
         return $this->approved_at !== null && $this->rejected_at === null;
@@ -209,7 +221,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     public function canAccessParentDashboard(): bool
     {
-        if (! $this->hasParentCapability()) {
+        if (! $this->isApprovedParentAccount()) {
             return false;
         }
 
@@ -217,11 +229,7 @@ class User extends Authenticatable implements MustVerifyEmail
             return false;
         }
 
-        if ($this->rejected_at !== null) {
-            return false;
-        }
-
-        return $this->approved_at !== null;
+        return true;
     }
 
     public function canAccessAdminDashboard(): bool
@@ -229,10 +237,35 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasAdminCapability();
     }
 
+    /**
+     * Backward compatibility: older seeded owners stayed as ROLE_ADMIN after setup.
+     * Promote them to ROLE_PARENT_ADMIN once setup is complete and email is verified.
+     */
+    public function upgradeLegacyOwnerToParentAdminIfEligible(): bool
+    {
+        if (
+            $this->role !== self::ROLE_ADMIN
+            || $this->requires_email_setup
+            || $this->force_password_change
+            || ! $this->hasVerifiedEmail()
+        ) {
+            return false;
+        }
+
+        $this->forceFill([
+            'role' => self::ROLE_PARENT_ADMIN,
+            'approved_at' => $this->approved_at ?? now(),
+            'rejected_at' => null,
+            'approval_rejection_note' => null,
+        ])->save();
+
+        return true;
+    }
+
     public function accountTypeLabel(): string
     {
         return match ($this->role) {
-            self::ROLE_ADMIN => 'System admin',
+            self::ROLE_ADMIN => 'Parent Owner',
             self::ROLE_PARENT_ADMIN => 'Household operator (parent + admin)',
             self::ROLE_PARENT => 'Parent',
             default => 'User',

@@ -16,9 +16,9 @@ use Illuminate\Database\Seeder;
  * - This account is required to access the system and create additional parent/admin accounts
  *
  * Default Credentials:
- * - Email: admin@parentalwifi.local
+ * - Email: admin123@email.com
  * - Password: admin123
- * - Role: admin
+ * - Role: admin (displayed as Parent Owner in UI)
  *
  * Usage:
  * - Runs automatically when executing: php artisan db:seed
@@ -40,18 +40,20 @@ class DefaultUserSeeder extends Seeder
         // aligned with this seeder when you run: php artisan db:seed --class=DefaultUserSeeder
         // Plaintext password: User model uses the `hashed` cast (single Hash::make on save).
         User::updateOrCreate(
-            ['email' => 'admin@parentalwifi.local'],
+            ['email' => 'admin123@email.com'],
             [
-                'name' => 'System Administrator',
+                'name' => 'Parent Owner',
                 'password' => 'admin123',
                 'role' => User::ROLE_ADMIN,
-                'email_verified_at' => now(),
+                'email_verified_at' => null,
+                'requires_email_setup' => true,
+                'force_password_change' => true,
             ]
         );
 
         // Output confirmation message
         $this->command->info('Default admin account created:');
-        $this->command->info('  Email: admin@parentalwifi.local');
+        $this->command->info('  Email: admin123@email.com');
         $this->command->info('  Password: admin123');
         $this->command->warn('  ⚠️  Please change the password after first login!');
     }

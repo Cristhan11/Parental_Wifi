@@ -201,6 +201,27 @@ class DomainBlockingService
     ];
 
     /**
+     * Common websites/apps shown as quick picks in the block form.
+     *
+     * @var array<string, string>
+     */
+    protected array $commonWebsiteChoices = [
+        'Facebook' => 'facebook.com',
+        'Instagram' => 'instagram.com',
+        'WhatsApp' => 'whatsapp.com',
+        'TikTok' => 'tiktok.com',
+        'YouTube' => 'youtube.com',
+        'X (Twitter)' => 'twitter.com',
+        'Snapchat' => 'snapchat.com',
+        'Discord' => 'discord.com',
+        'Netflix' => 'netflix.com',
+        'Roblox' => 'roblox.com',
+        'Reddit' => 'reddit.com',
+        'Pinterest' => 'pinterest.com',
+        'Telegram' => 'telegram.org',
+    ];
+
+    /**
      * Constructor - Initialize DomainBlockingService with ScriptExecutor.
      *
      * This constructor uses Laravel's dependency injection to automatically
@@ -265,6 +286,24 @@ class DomainBlockingService
         ]);
 
         return [];
+    }
+
+    /**
+     * Return predefined common websites/apps for quick domain selection.
+     *
+     * @return array<int, array{name: string, domain: string}>
+     */
+    public function getCommonWebsiteChoices(): array
+    {
+        $choices = [];
+        foreach ($this->commonWebsiteChoices as $name => $domain) {
+            $choices[] = [
+                'name' => $name,
+                'domain' => $domain,
+            ];
+        }
+
+        return $choices;
     }
 
     /**

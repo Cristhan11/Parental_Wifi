@@ -26,6 +26,22 @@
 
     <div class="py-8">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-4">
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    @if(!empty($filters['device_id']))
+                        <li>The table can be limited to <strong>one device</strong> using the <strong>Device</strong> filter. Choose <strong>All devices</strong> to see everyone again.</li>
+                    @endif
+                    <li><strong>Child Activity</strong> shows events from your children’s devices (connections, time limits, blocked or flagged sites, and similar).</li>
+                    <li><strong>Parent/Parent Owner Changes</strong> shows changes made in the parent side of the app (settings and account actions), separate from child activity.</li>
+                    <li>Set <strong>From</strong>, <strong>To</strong>, and any other filters you need, then tap <strong>Apply</strong>. <strong>Reset</strong> clears those choices for the tab you are on.</li>
+                    <li><strong>Export Excel</strong> downloads a spreadsheet of the list as filtered.</li>
+                    @if($stream === 'child_activity')
+                        <li>On <strong>Child Activity</strong>, the <strong>Live Child Activity Events</strong> box at the bottom adds new lines as things happen while you keep this page open.</li>
+                    @endif
+                </ul>
+            </x-collapsible-instructions>
+
             <div class="bg-white shadow-sm sm:rounded-lg border border-gray-200 p-4">
                 {{-- 
                     Stream selector:
@@ -40,7 +56,7 @@
                         </a>
                         <a href="{{ route('logs.index', array_merge(request()->query(), ['stream' => 'parent_admin_changes'])) }}"
                            class="px-4 py-2 rounded-md text-sm font-semibold {{ $stream === 'parent_admin_changes' ? 'bg-yellow-400 text-black' : 'bg-gray-100 text-gray-700 hover:bg-gray-200' }}">
-                            Parent/Admin Changes ({{ $streamCounts['parent_admin_changes'] }})
+                            Parent/Parent Owner Changes ({{ $streamCounts['parent_admin_changes'] }})
                         </a>
                     </div>
 

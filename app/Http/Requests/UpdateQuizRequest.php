@@ -2,15 +2,15 @@
 
 /**
  * UpdateQuizRequest - Form Validation for Quiz Updates
- * 
+ *
  * This class validates form data when a parent edits an existing quiz.
  * It's almost identical to StoreQuizRequest, but includes an additional
  * 'is_active' field to allow parents to enable/disable quizzes.
- * 
+ *
  * Why separate from StoreQuizRequest? Allows different validation rules
  * for create vs update if needed in the future (e.g., allow changing
  * quiz ID, or prevent changing certain fields after creation).
- * 
+ *
  * Key Difference: Includes 'is_active' checkbox validation
  */
 
@@ -24,9 +24,9 @@ class UpdateQuizRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
-     * 
+     *
      * Authorization is handled by route middleware and controller checks.
-     * 
+     *
      * @return bool Always true
      */
     public function authorize(): bool
@@ -50,13 +50,13 @@ class UpdateQuizRequest extends FormRequest
 
     /**
      * Get the validation rules that apply to the request.
-     * 
+     *
      * Same validation rules as StoreQuizRequest, plus:
      * - 'is_active' field (optional boolean checkbox)
-     * 
+     *
      * The 'is_active' field allows parents to enable/disable quizzes
      * without deleting them. Disabled quizzes won't appear in the portal.
-     * 
+     *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
     public function rules(): array
@@ -64,6 +64,10 @@ class UpdateQuizRequest extends FormRequest
         return [
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
+            'level' => ['required', 'in:Elementary,High School,Senior High School'],
+            'subject' => ['required', 'string', 'max:100'],
+            'question_count' => ['nullable', 'integer', 'in:5,10,15'],
+            'minutes_per_correct' => ['nullable', 'integer', 'min:1', 'max:60'],
             'passing_score' => ['required', 'integer', 'min:0', 'max:100'],
             'time_reward_minutes' => ['required', 'integer', 'min:1'],
             // Active Status: Optional (sometimes), must be boolean (true/false)
@@ -71,9 +75,9 @@ class UpdateQuizRequest extends FormRequest
             // This allows updating quiz without changing is_active status
             // Checkbox sends "0" (unchecked) or "1" (checked), Laravel converts to boolean
             'is_active' => ['sometimes', 'boolean'],
-            'questions' => ['required', 'array', 'min:1'],
-            'questions.*.question' => ['required', 'string', 'max:1000'],
-            'questions.*.type' => ['required', 'string', 'in:multiple_choice,fill_blank,true_false'],
+            'questions' => ['nullable', 'array'],
+            'questions.*.question' => ['nullable', 'string', 'max:1000'],
+            'questions.*.type' => ['nullable', 'string', 'in:multiple_choice,fill_blank,true_false'],
             'questions.*.options' => [
                 'nullable', // Allow null/empty for fill_blank
                 'array',
@@ -82,18 +86,18 @@ class UpdateQuizRequest extends FormRequest
                     $questionIndex = explode('.', $attribute)[1];
                     $type = request()->input("questions.{$questionIndex}.type");
                     if (in_array($type, ['multiple_choice', 'true_false'])) {
-                        if (empty($value) || !is_array($value)) {
+                        if (empty($value) || ! is_array($value)) {
                             $fail('Options are required for multiple choice and true/false questions.');
                         } elseif (count($value) < 2) {
                             $fail('At least 2 options are required for multiple choice and true/false questions.');
                         }
                     }
-                }
+                },
             ],
             'questions.*.options.*' => ['required_with:questions.*.options', 'string', 'max:500'],
             'max_passes_per_day' => ['nullable', 'integer', 'min:1', 'max:500'],
             'retry_cooldown_minutes' => ['nullable', 'integer', 'min:0', 'max:10080'],
-            'questions.*.correct_answer' => ['required', 'string', 'max:500'],
+            'questions.*.correct_answer' => ['nullable', 'string', 'max:500'],
             'devices' => ['nullable', 'array'],
             'devices.*' => [
                 'integer',
@@ -131,4 +135,3 @@ class UpdateQuizRequest extends FormRequest
         ];
     }
 }
-

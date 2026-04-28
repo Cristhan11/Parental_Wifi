@@ -27,6 +27,15 @@
                         @csrf
                         @method('PUT')
 
+                        <x-collapsible-instructions class="mb-6">
+                            <p class="mb-2 font-semibold">Instructions</p>
+                            <ul class="list-inside list-disc space-y-1">
+                                <li>Update the full URL if needed; visits for that address are included in your reports.</li>
+                                <li>The reason field is optional but helps you remember why you flagged this site.</li>
+                                <li>Red border on a required field means it needs a value before you can save.</li>
+                            </ul>
+                        </x-collapsible-instructions>
+
                         {{-- URL Input --}}
                         <div class="mb-6">
                             <label for="url" class="block text-sm font-medium text-gray-700 mb-2">URL *</label>
@@ -63,5 +72,43 @@
             </div>
         </div>
     </div>
+    <script>
+        function setRequiredFieldState(field) {
+            if (!field || field.type === 'hidden' || field.disabled) return;
+            if (!field.hasAttribute('required')) return;
+
+            const hasValue = String(field.value ?? '').trim() !== '';
+            if (hasValue) {
+                field.style.borderColor = '#16A34A';
+                field.style.boxShadow = '0 0 0 1px #16A34A';
+            } else {
+                field.style.borderColor = '#DC2626';
+                field.style.boxShadow = '0 0 0 1px #DC2626';
+            }
+        }
+
+        function bindRequiredFieldFeedback(scope = document) {
+            const fields = scope.querySelectorAll('input[required], select[required], textarea[required]');
+            fields.forEach((field) => {
+                if (field.dataset.requiredBound === '1') return;
+                field.dataset.requiredBound = '1';
+                setRequiredFieldState(field);
+                field.addEventListener('input', () => setRequiredFieldState(field));
+                field.addEventListener('change', () => setRequiredFieldState(field));
+                field.addEventListener('blur', () => setRequiredFieldState(field));
+            });
+        }
+
+        function initializeRequiredFeedback() {
+            bindRequiredFieldFeedback();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeRequiredFeedback);
+        } else {
+            initializeRequiredFeedback();
+        }
+        window.addEventListener('pageshow', initializeRequiredFeedback);
+    </script>
 </x-app-layout>
 

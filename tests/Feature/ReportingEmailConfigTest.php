@@ -34,6 +34,45 @@ class ReportingEmailConfigTest extends TestCase
         $this->withoutMiddleware(ValidateCsrfToken::class);
     }
 
+    public function test_parent_can_bulk_save_recipients_replace_list(): void
+    {
+        $parent = User::factory()->create(['role' => 'parent']);
+
+        $a = ReportingRecipient::create([
+            'user_id' => $parent->id,
+            'label' => 'A',
+            'email' => 'a@example.test',
+            'is_enabled' => true,
+        ]);
+        $b = ReportingRecipient::create([
+            'user_id' => $parent->id,
+            'label' => 'B',
+            'email' => 'b@example.test',
+            'is_enabled' => true,
+        ]);
+
+        $this->actingAs($parent)->post(route('reports.recipients.bulk-save'), [
+            '_form' => 'recipients_bulk',
+            'recipients' => [
+                ['id' => $a->id, 'label' => 'A2', 'email' => 'a@example.test', 'is_enabled' => '1'],
+                ['id' => '', 'label' => '', 'email' => 'c@example.test', 'is_enabled' => '0'],
+            ],
+        ])->assertRedirect(route('reports.index'));
+
+        $this->assertDatabaseHas('reporting_recipients', [
+            'user_id' => $parent->id,
+            'email' => 'a@example.test',
+            'label' => 'A2',
+            'is_enabled' => 1,
+        ]);
+        $this->assertDatabaseHas('reporting_recipients', [
+            'user_id' => $parent->id,
+            'email' => 'c@example.test',
+            'is_enabled' => 0,
+        ]);
+        $this->assertDatabaseMissing('reporting_recipients', ['id' => $b->id]);
+    }
+
     public function test_parent_can_view_and_update_reporting_preferences(): void
     {
         $parent = User::factory()->create(['role' => 'parent']);

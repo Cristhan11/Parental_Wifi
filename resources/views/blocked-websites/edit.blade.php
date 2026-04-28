@@ -32,13 +32,16 @@
                         @csrf
                         @method('PUT')
 
-                        <p class="mb-6 text-sm text-gray-600 rounded-md border border-yellow-100 bg-yellow-50 px-3 py-2">
-                            Blocks the main domain and suggested related addresses so typical app traffic is covered. Saving upgrades this rule to full app-style blocking.
-                        </p>
+                        <x-collapsible-instructions class="mb-6" innerClass="mt-3 rounded-md border border-yellow-100 bg-yellow-50 px-3 py-3 text-sm text-gray-700">
+                            <p class="mb-2 font-semibold">Instructions</p>
+                            <p class="text-gray-700">
+                                Blocks the main domain and suggested related addresses so typical app traffic is covered. Saving upgrades this rule to full app-style blocking.
+                            </p>
+                        </x-collapsible-instructions>
 
                         <div class="mb-6">
                             <label for="domain" class="block text-sm font-medium text-gray-700 mb-2">Domain *</label>
-                            <input type="text" name="domain" id="domain" value="{{ old('domain', $blockedWebsite->domain) }}"
+                            <input type="text" name="domain" id="domain" value="{{ old('domain', $blockedWebsite->domain) }}" required
                                 x-on:blur="suggestDomains()"
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-mono"
                                 placeholder="example.com">
@@ -129,6 +132,43 @@
         }
     @endphp
     <script>
+        function setRequiredFieldState(field) {
+            if (!field || field.type === 'hidden' || field.disabled) return;
+            if (!field.hasAttribute('required')) return;
+
+            const hasValue = String(field.value ?? '').trim() !== '';
+            if (hasValue) {
+                field.style.borderColor = '#16A34A';
+                field.style.boxShadow = '0 0 0 1px #16A34A';
+            } else {
+                field.style.borderColor = '#DC2626';
+                field.style.boxShadow = '0 0 0 1px #DC2626';
+            }
+        }
+
+        function bindRequiredFieldFeedback(scope = document) {
+            const fields = scope.querySelectorAll('input[required], select[required], textarea[required]');
+            fields.forEach((field) => {
+                if (field.dataset.requiredBound === '1') return;
+                field.dataset.requiredBound = '1';
+                setRequiredFieldState(field);
+                field.addEventListener('input', () => setRequiredFieldState(field));
+                field.addEventListener('change', () => setRequiredFieldState(field));
+                field.addEventListener('blur', () => setRequiredFieldState(field));
+            });
+        }
+
+        function initializeRequiredFeedback() {
+            bindRequiredFieldFeedback();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeRequiredFeedback);
+        } else {
+            initializeRequiredFeedback();
+        }
+        window.addEventListener('pageshow', initializeRequiredFeedback);
+
         function blockedWebsiteForm() {
             return {
                 relatedDomains: @json($relatedDomainsOld),

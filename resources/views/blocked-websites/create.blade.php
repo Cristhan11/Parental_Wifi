@@ -73,16 +73,43 @@
                             </div>
                         @endif
 
-                        <p class="mb-6 text-sm text-gray-600 rounded-md border border-yellow-100 bg-yellow-50 px-3 py-2">
-                            Enter the site you want to block. We also block common extra addresses so the website and typical mobile app traffic are covered.
-                        </p>
+                        <x-collapsible-instructions class="mb-6">
+                            <p class="mb-2 font-semibold">Instructions</p>
+                            <ul class="list-inside list-disc space-y-1">
+                                <li>Enter the site you want to block, or pick from common websites below.</li>
+                                <li>We also block common app and website addresses for that site (ex: Facebook links used by the app).</li>
+                                <li>Red input border means required. Fill it in until it turns green.</li>
+                            </ul>
+                        </x-collapsible-instructions>
+
+                        <div class="mb-6">
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Common websites</label>
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="website in commonWebsites" :key="website.domain">
+                                    <button
+                                        type="button"
+                                        @click="selectCommonWebsite(website.domain)"
+                                        class="px-3 py-1.5 rounded-full border border-gray-300 text-sm text-gray-700 bg-white hover:bg-gray-50">
+                                        <span x-text="`${website.name} (${website.domain})`"></span>
+                                    </button>
+                                </template>
+                            </div>
+                            <p class="mt-1 text-sm text-gray-500">Tap a common site to fill the domain quickly.</p>
+                        </div>
 
                         <div class="mb-6">
                             <label for="domain" class="block text-sm font-medium text-gray-700 mb-2">Domain *</label>
-                            <input type="text" name="domain" id="domain" value="{{ old('domain') }}"
+                            <input type="text" name="domain" id="domain" value="{{ old('domain') }}" required
+                                x-model="domain"
                                 x-on:blur="suggestDomains()"
+                                list="common-domain-list"
                                 class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500 font-mono"
                                 placeholder="example.com">
+                            <datalist id="common-domain-list">
+                                <template x-for="website in commonWebsites" :key="`list-${website.domain}`">
+                                    <option :value="website.domain" x-text="website.name"></option>
+                                </template>
+                            </datalist>
                             <p class="mt-1 text-sm text-gray-500">Enter the website address (e.g., facebook.com or youtube.com)</p>
                             @error('domain')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
@@ -90,50 +117,16 @@
                         </div>
 
                         <div class="mb-6">
-                            <label for="app_name" class="block text-sm font-medium text-gray-700 mb-2">App name (optional)</label>
-                            <input type="text" name="app_name" id="app_name" value="{{ old('app_name') }}"
-                                x-on:blur="suggestDomains()"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                                placeholder="Facebook">
-                            <p class="mt-1 text-sm text-gray-500">Helps find related addresses for that app or service</p>
-                        </div>
-
-                        <div class="mb-6">
-                            <label class="block text-sm font-medium text-gray-700 mb-2">Related domains</label>
-                            <div class="border border-gray-300 rounded-md p-4 bg-gray-50">
-                                <p class="text-sm text-gray-600 mb-3" x-show="relatedDomains.length === 0">
-                                    Enter the domain (and optional app name), then click outside a field to suggest extra addresses to block.
+                            <label class="block text-sm font-medium text-gray-700 mb-2">Automatic protection</label>
+                            <div class="border border-gray-300 rounded-md p-4 bg-gray-50 text-sm text-gray-700">
+                                <p>Related domains and subdomains are blocked automatically.</p>
+                                <p x-show="relatedDomains.length > 0" class="mt-2">
+                                    Extra related domains found: <span class="font-medium" x-text="relatedDomains.length"></span>
                                 </p>
-                                <p class="text-sm text-gray-600 mb-3" x-show="relatedDomains.length > 0">
-                                    These addresses will also be blocked so the app or service is harder to reach:
-                                </p>
-                                <div class="space-y-2" x-show="relatedDomains.length > 0">
-                                    <template x-for="(domain, index) in relatedDomains" :key="index">
-                                        <div class="flex items-center justify-between p-2 bg-white rounded border">
-                                            <span class="font-mono text-sm" x-text="domain"></span>
-                                            <button type="button" @click="removeDomain(index)" class="text-red-600 hover:text-red-800">
-                                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-                                                </svg>
-                                            </button>
-                                        </div>
-                                    </template>
-                                </div>
-                                <input type="hidden" name="related_domains" :value="JSON.stringify(relatedDomains)">
                             </div>
                         </div>
-
-                        <div class="mb-6">
-                            <label class="flex items-center">
-                                <input type="checkbox" name="block_subdomains" value="1" 
-                                    {{ old('block_subdomains') ? 'checked' : '' }}
-                                    class="h-4 w-4 text-yellow-600 focus:ring-yellow-500 border-gray-300 rounded">
-                                <span class="ml-2 text-sm text-gray-700">Also block subdomains (e.g., www.example.com, m.example.com)</span>
-                            </label>
-                            @error('block_subdomains')
-                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                            @enderror
-                        </div>
+                        <input type="hidden" name="related_domains" :value="JSON.stringify(relatedDomains)">
+                        <input type="hidden" name="block_subdomains" value="1">
 
                         <div class="mb-6">
                             <label for="reason" class="block text-sm font-medium text-gray-700 mb-2">Reason (Optional)</label>
@@ -170,14 +163,64 @@
         }
     @endphp
     <script>
+        function setRequiredFieldState(field) {
+            if (!field || field.type === 'hidden' || field.disabled) return;
+            if (!field.hasAttribute('required')) return;
+
+            const hasValue = String(field.value ?? '').trim() !== '';
+            if (hasValue) {
+                field.style.borderColor = '#16A34A';
+                field.style.boxShadow = '0 0 0 1px #16A34A';
+            } else {
+                field.style.borderColor = '#DC2626';
+                field.style.boxShadow = '0 0 0 1px #DC2626';
+            }
+        }
+
+        function bindRequiredFieldFeedback(scope = document) {
+            const fields = scope.querySelectorAll('input[required], select[required], textarea[required]');
+            fields.forEach((field) => {
+                if (field.dataset.requiredBound === '1') return;
+                field.dataset.requiredBound = '1';
+                setRequiredFieldState(field);
+                field.addEventListener('input', () => setRequiredFieldState(field));
+                field.addEventListener('change', () => setRequiredFieldState(field));
+                field.addEventListener('blur', () => setRequiredFieldState(field));
+            });
+        }
+
+        function initializeRequiredFeedback() {
+            bindRequiredFieldFeedback();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeRequiredFeedback);
+        } else {
+            initializeRequiredFeedback();
+        }
+        window.addEventListener('pageshow', initializeRequiredFeedback);
+
         function blockedWebsiteForm() {
             return {
+                domain: @js(old('domain', '')),
                 relatedDomains: @json($relatedDomainsOld),
+                commonWebsites: @json($commonWebsites ?? []),
                 loading: false,
 
+                selectCommonWebsite(domain) {
+                    this.domain = domain;
+                    const domainField = document.getElementById('domain');
+                    if (domainField) {
+                        domainField.value = domain;
+                        setRequiredFieldState(domainField);
+                        domainField.dispatchEvent(new Event('input', { bubbles: true }));
+                        domainField.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                    this.suggestDomains();
+                },
+
                 async suggestDomains() {
-                    const domain = document.getElementById('domain')?.value;
-                    const appName = document.getElementById('app_name')?.value;
+                    const domain = this.domain;
 
                     if (!domain) return;
 
@@ -190,7 +233,7 @@
                                 'X-CSRF-TOKEN': '{{ csrf_token() }}',
                                 'Accept': 'application/json'
                             },
-                            body: JSON.stringify({ domain, app_name: appName })
+                            body: JSON.stringify({ domain })
                         });
 
                         if (!response.ok) {
@@ -212,10 +255,6 @@
                     } finally {
                         this.loading = false;
                     }
-                },
-
-                removeDomain(index) {
-                    this.relatedDomains.splice(index, 1);
                 }
             }
         }

@@ -2,7 +2,7 @@
     <div class="mb-6">
         <h2 class="text-2xl font-bold text-black">Forgot Password</h2>
         <p class="mt-2 text-sm" style="color: #00000080;">
-            Enter the email on your parent account. Administrators will be notified to reset your password. They will tell you how to sign in; then change your password under profile settings. No verification email is sent from this form.
+            Enter the email on your parent account. Parent Owners will be notified to reset your password. They will tell you how to sign in; then change your password under profile settings. No verification email is sent from this form.
         </p>
     </div>
 

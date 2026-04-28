@@ -6,16 +6,14 @@ use App\Models\Device;
 use App\Models\User;
 use App\Services\NetworkService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Facades\Queue;
-use Mockery;
 use Tests\TestCase;
 
 /**
  * Device Management Feature Tests
- * 
+ *
  * Tests all CRUD operations, validation, authorization, and status management
  * for the Device Management system (TODO 18).
- * 
+ *
  * These tests verify:
  * - Device creation, reading, updating, deletion
  * - MAC address validation and normalization
@@ -24,7 +22,7 @@ use Tests\TestCase;
  * - Time allocation management
  * - Role management
  * - Network service integration
- * 
+ *
  * Database: Uses RefreshDatabase trait (compatible with MariaDB)
  */
 class DeviceManagementTest extends TestCase
@@ -75,6 +73,7 @@ class DeviceManagementTest extends TestCase
 
         $response->assertOk();
         $response->assertSee('ADD DEVICE');
+        $response->assertDontSee('MAC Address *');
     }
 
     /**
@@ -98,7 +97,7 @@ class DeviceManagementTest extends TestCase
                 ]);
         });
 
-        $response = $this->actingAs($user)->get(route('accounts.create'));
+        $response = $this->actingAs($user)->get(route('accounts.create.advanced'));
 
         $response->assertOk();
         $response->assertDontSee('C0:FF:EE:00:00:01');
@@ -115,6 +114,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => 'AA:BB:CC:DD:EE:FF',
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'active',
             'remaining_time_minutes' => 30,
@@ -146,6 +146,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => 'aa-bb-cc-dd-ee-ff', // Lowercase with hyphens
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'active',
         ];
@@ -167,6 +168,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => 'AA:BB:CC:DD:EE:FF',
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'active',
             // Not providing remaining_time_minutes
@@ -199,7 +201,7 @@ class DeviceManagementTest extends TestCase
     }
 
     /**
-     * Test validation: MAC address is required.
+     * Test validation: MAC address is required on advanced/debug path.
      */
     public function test_mac_address_is_required(): void
     {
@@ -207,6 +209,7 @@ class DeviceManagementTest extends TestCase
 
         $deviceData = [
             'name' => 'Test Device',
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'active',
         ];
@@ -228,6 +231,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => $existingDevice->mac_address, // Duplicate MAC
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'active',
         ];
@@ -248,6 +252,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => 'INVALID-MAC-ADDRESS',
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'active',
         ];
@@ -268,6 +273,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => 'AA:BB:CC:DD:EE:FF',
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'invalid_status',
         ];
@@ -288,6 +294,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => 'AA:BB:CC:DD:EE:FF',
+            'advanced_mode' => '1',
             'role' => 'invalid_role',
             'status' => 'active',
         ];
@@ -309,6 +316,7 @@ class DeviceManagementTest extends TestCase
         $deviceData = [
             'name' => 'Test Device',
             'mac_address' => 'AA:BB:CC:DD:EE:FF',
+            'advanced_mode' => '1',
             'role' => 'child',
             'status' => 'active',
             'remaining_time_minutes' => -10,
@@ -666,4 +674,3 @@ class DeviceManagementTest extends TestCase
         $response->assertRedirect(route('login'));
     }
 }
-

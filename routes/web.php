@@ -22,6 +22,11 @@ Route::get('/', function () {
     return redirect()->route('login');
 });
 
+Route::get('/device-request', [DeviceController::class, 'requestRegistrationForm'])->name('device-request.create');
+Route::post('/device-request', [DeviceController::class, 'submitRegistrationRequest'])
+    ->middleware('throttle:6,1')
+    ->name('device-request.store');
+
 Route::middleware(['auth', 'verified', 'audit.sensitive'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
@@ -43,6 +48,8 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
         Route::get('/import', [QuizController::class, 'import'])->name('import');
         Route::post('/import', [QuizController::class, 'processImport'])->name('import.process');
         Route::get('/template/download', [QuizController::class, 'downloadTemplate'])->name('template.download');
+        Route::get('/question-bank/export', [QuizController::class, 'exportQuestionBank'])->name('question-bank.export');
+        Route::post('/random-mode', [QuizController::class, 'updateRandomModeSettings'])->name('random-mode.update');
     });
 
     Route::prefix('videos')->name('videos.')->group(function () {
@@ -59,6 +66,7 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
         Route::get('/blocklist', [DeviceController::class, 'blocklist'])->name('blocklist');
         Route::get('/whitelist', [DeviceController::class, 'whitelist'])->name('whitelist');
         Route::get('/create', [DeviceController::class, 'create'])->name('create');
+        Route::get('/create/advanced', [DeviceController::class, 'createAdvanced'])->name('create.advanced');
         Route::post('/', [DeviceController::class, 'store'])->name('store');
         Route::get('/{device}/edit', [DeviceController::class, 'edit'])->name('edit');
         Route::put('/{device}', [DeviceController::class, 'update'])->name('update');
@@ -66,6 +74,10 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
         Route::post('/{device}/status', [DeviceController::class, 'updateStatus'])->name('status.update');
         Route::post('/{device}/time', [DeviceController::class, 'updateTimeAllocation'])->name('time.update');
         Route::post('/{device}/update-role', [DeviceController::class, 'updateRole'])->name('role.update');
+        Route::post('/registration-requests/{registrationRequest}/approve', [DeviceController::class, 'approveRegistrationRequest'])
+            ->name('registration-requests.approve');
+        Route::post('/registration-requests/{registrationRequest}/reject', [DeviceController::class, 'rejectRegistrationRequest'])
+            ->name('registration-requests.reject');
     });
 
     Route::prefix('child_devices')->name('child_devices.')->group(function () {
@@ -122,6 +134,7 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
     Route::prefix('reports')->name('reports.')->group(function () {
         Route::get('/', [ReportsController::class, 'index'])->name('index');
         Route::put('/preferences', [ReportsController::class, 'updatePreferences'])->name('preferences.update');
+        Route::post('/recipients/bulk-save', [ReportsController::class, 'bulkSaveRecipients'])->name('recipients.bulk-save');
         Route::post('/recipients', [ReportsController::class, 'storeRecipient'])->name('recipients.store');
         Route::put('/recipients/{recipient}', [ReportsController::class, 'updateRecipient'])->name('recipients.update');
         Route::delete('/recipients/{recipient}', [ReportsController::class, 'destroyRecipient'])->name('recipients.destroy');

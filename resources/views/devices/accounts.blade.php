@@ -52,12 +52,15 @@
                 <a href="{{ route('accounts.whitelist') }}" class="inline-flex w-full items-center justify-center rounded border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-black hover:opacity-90 sm:w-auto sm:px-4 sm:text-base">
                     <span>Whitelist</span>
                 </a>
-                {{-- + New button (red, with plus icon) --}}
-                <a href="{{ route('accounts.create') }}" class="inline-flex w-full items-center justify-center gap-1 rounded px-3 py-2 text-sm font-medium text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base" style="background-color: #EF4444;">
-                    <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                    </svg>
-                    <span>New</span>
+                {{-- Registration button with pending-count badge --}}
+                <a href="{{ route('accounts.create') }}" class="relative inline-flex w-full items-center justify-center rounded px-3 py-2 text-sm font-medium text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base" style="background-color: #EF4444;">
+                    <span>Registration</span>
+                    @if(($pendingRegistrationCount ?? 0) > 0)
+                        <span class="pointer-events-none z-10 inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-none text-white shadow-md"
+                              style="position:absolute; top:-8px; right:-8px; background-color:#2563EB;">
+                            {{ $pendingRegistrationCount > 99 ? '99+' : $pendingRegistrationCount }}
+                        </span>
+                    @endif
                 </a>
             </div>
         </div>
@@ -77,6 +80,26 @@
                     {{ session('error') }}
                 </div>
             @endif
+
+            @if(session('info'))
+                <div class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                    {{ session('info') }}
+                </div>
+            @endif
+
+            <x-policy-apply-status />
+
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>This page shows all connected devices in your home network.</li>
+                    <li>Use <strong>Edit</strong> to update the device name, role, and settings.</li>
+                    <li>Use <strong>Blocklist</strong> for devices you want to stop from being connected to the internet.</li>
+                    <li>Use <strong>Whitelist</strong> for trusted devices that should stay allowed to connect to the internet.</li>
+                    <li>Use <strong>Registration</strong> to review child device registration requests.</li>
+                    <li>The blue badge on <strong>Registration</strong> shows how many pending requests need action.</li>
+                </ul>
+            </x-collapsible-instructions>
 
             {{-- Main device management table (matching Image 4 design) --}}
             <div class="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
@@ -167,11 +190,14 @@
                             <h3 class="mt-2 text-sm font-medium text-gray-900">No devices</h3>
                             <p class="mt-1 text-sm text-gray-500">Get started by creating a new device.</p>
                             <div class="mt-6">
-                                <a href="{{ route('accounts.create') }}" class="inline-flex items-center px-4 py-2 rounded text-white font-medium hover:opacity-90" style="background-color: #EF4444;">
-                                    <svg class="w-5 h-5 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path>
-                                    </svg>
-                                    Add Device
+                                <a href="{{ route('accounts.create') }}" class="relative inline-flex items-center px-4 py-2 rounded text-white font-medium hover:opacity-90" style="background-color: #EF4444;">
+                                    Registration
+                                    @if(($pendingRegistrationCount ?? 0) > 0)
+                                        <span class="pointer-events-none z-10 inline-flex h-6 min-w-[24px] items-center justify-center rounded-full px-1.5 text-xs font-bold leading-none text-white shadow-md"
+                                              style="position:absolute; top:-8px; right:-8px; background-color:#2563EB;">
+                                            {{ $pendingRegistrationCount > 99 ? '99+' : $pendingRegistrationCount }}
+                                        </span>
+                                    @endif
                                 </a>
                             </div>
                         </div>
@@ -181,4 +207,26 @@
         </div>
     </div>
 </x-app-layout>
+
+@push('scripts')
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('form[action*="registration-requests"]').forEach(function (form) {
+            const roleSelect = form.querySelector('select[name="assigned_role"]');
+            const approveBtn = form.querySelector('button[type="submit"]');
+            if (!roleSelect || !approveBtn) return;
+
+            const sync = function () {
+                const hasRole = roleSelect.value !== '';
+                approveBtn.disabled = !hasRole;
+                approveBtn.classList.toggle('opacity-50', !hasRole);
+                approveBtn.classList.toggle('cursor-not-allowed', !hasRole);
+            };
+
+            roleSelect.addEventListener('change', sync);
+            sync();
+        });
+    });
+</script>
+@endpush
 

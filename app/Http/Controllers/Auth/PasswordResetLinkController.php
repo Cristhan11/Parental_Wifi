@@ -7,6 +7,7 @@ use App\Models\ParentPasswordResetRequest;
 use App\Models\User;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Password;
 use Illuminate\View\View;
 
 class PasswordResetLinkController extends Controller
@@ -32,7 +33,9 @@ class PasswordResetLinkController extends Controller
 
         $user = User::query()->where('email', $validated['email'])->first();
 
-        if ($user?->isEligibleForSelfServicePasswordResetRequest()) {
+        if ($user && $user->hasAdminCapability() && $user->hasVerifiedEmail()) {
+            Password::sendResetLink(['email' => $validated['email']]);
+        } elseif ($user?->isEligibleForSelfServicePasswordResetRequest()) {
             $alreadyPending = ParentPasswordResetRequest::query()
                 ->where('user_id', $user->id)
                 ->pending()
@@ -47,7 +50,7 @@ class PasswordResetLinkController extends Controller
 
         return back()->with(
             'status',
-            'If that email is registered for a parent account, administrators have been notified. After they reset your password, sign in with the credentials they give you and change your password under profile settings.'
+            'If that email is registered for a parent account, Parent Owners have been notified. After they reset your password, sign in with the credentials they give you and change your password under profile settings.'
         );
     }
 }

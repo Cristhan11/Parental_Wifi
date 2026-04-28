@@ -4,6 +4,7 @@ use App\Jobs\CheckTimeExpiration;
 use App\Jobs\EnforceSchedules;
 use App\Jobs\MonitorDeviceConnections;
 use App\Jobs\ParseNetworkLogs;
+use App\Jobs\ReconcileDnsmasqPolicyJob;
 use App\Jobs\TrackActiveSessions;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -294,4 +295,14 @@ Schedule::command('reporting:send-digest weekly')
 Schedule::command('reporting:send-digest monthly')
     ->monthlyOn(1, '06:10')
     ->name('reporting-digest-monthly')
+    ->withoutOverlapping();
+
+/**
+ * Household dnsmasq full reconcile (fallback / self-healing).
+ *
+ * Debounced applies cover normal UX; this job recovers drift if a script failed mid-flight.
+ */
+Schedule::job(new ReconcileDnsmasqPolicyJob)
+    ->hourly()
+    ->name('reconcile-dnsmasq-policy')
     ->withoutOverlapping();

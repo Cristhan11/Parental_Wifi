@@ -45,6 +45,16 @@
                 </div>
             @endif
 
+            <x-collapsible-instructions class="mb-6">
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>Update the <strong>name</strong>, <strong>Wi‑Fi address (MAC)</strong>, <strong>role</strong>, and <strong>status</strong> when something changes for this device.</li>
+                    <li><strong>Active</strong>: normal rules apply (schedules and time limits for children, and so on).</li>
+                    <li><strong>Blocked</strong>: this device cannot use the internet. <strong>Whitelisted</strong>: treated as trusted, without the usual child limits.</li>
+                    <li><strong>Remaining time</strong> and <strong>Total time</strong> are in minutes and matter most for child-style devices—adjust them here, then tap <strong>Update device</strong>.</li>
+                </ul>
+            </x-collapsible-instructions>
+
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
                 {{-- Statistics Cards --}}
                 <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 p-4">
@@ -209,6 +219,43 @@
             // Update input value
             input.value = mac;
         }
+
+        function setRequiredFieldState(field) {
+            if (!field || field.type === 'hidden' || field.disabled) return;
+            if (!field.hasAttribute('required')) return;
+
+            const hasValue = String(field.value ?? '').trim() !== '';
+            if (hasValue) {
+                field.style.borderColor = '#16A34A';
+                field.style.boxShadow = '0 0 0 1px #16A34A';
+            } else {
+                field.style.borderColor = '#DC2626';
+                field.style.boxShadow = '0 0 0 1px #DC2626';
+            }
+        }
+
+        function bindRequiredFieldFeedback(scope = document) {
+            const fields = scope.querySelectorAll('input[required], select[required], textarea[required]');
+            fields.forEach((field) => {
+                if (field.dataset.requiredBound === '1') return;
+                field.dataset.requiredBound = '1';
+                setRequiredFieldState(field);
+                field.addEventListener('input', () => setRequiredFieldState(field));
+                field.addEventListener('change', () => setRequiredFieldState(field));
+                field.addEventListener('blur', () => setRequiredFieldState(field));
+            });
+        }
+
+        function initializeRequiredFeedback() {
+            bindRequiredFieldFeedback();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeRequiredFeedback);
+        } else {
+            initializeRequiredFeedback();
+        }
+        window.addEventListener('pageshow', initializeRequiredFeedback);
     </script>
     @endpush
 </x-app-layout>

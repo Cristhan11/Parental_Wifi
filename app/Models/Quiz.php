@@ -10,7 +10,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Quiz Model
- * 
+ *
  * Represents a quiz that parents create for their children.
  * Children must pass quizzes to earn additional internet time.
  */
@@ -27,6 +27,11 @@ class Quiz extends Model
         'user_id',
         'title',
         'description',
+        'level',
+        'subject',
+        'question_count',
+        'scoring_mode',
+        'minutes_per_correct',
         'questions',
         'passing_score',
         'time_reward_minutes',
@@ -50,9 +55,9 @@ class Quiz extends Model
 
     /**
      * Get the parent user who created this quiz.
-     * 
+     *
      * Relationship: belongsTo - One quiz belongs to one user (parent)
-     * 
+     *
      * Usage Example:
      * $quiz = Quiz::find(1);
      * $parent = $quiz->user; // Gets the User who created this quiz
@@ -65,9 +70,9 @@ class Quiz extends Model
 
     /**
      * Get all quiz attempts for this quiz.
-     * 
+     *
      * Relationship: hasMany - One quiz can have many attempts
-     * 
+     *
      * Usage Example:
      * $quiz = Quiz::find(1);
      * $attempts = $quiz->attempts; // All attempts on this quiz
@@ -81,14 +86,14 @@ class Quiz extends Model
 
     /**
      * Get all devices assigned to this quiz.
-     * 
+     *
      * Relationship: belongsToMany - Many-to-many (quiz can be assigned to many devices)
      * Uses pivot table: 'device_quiz'
-     * 
+     *
      * Usage Example:
      * $quiz = Quiz::find(1);
      * $devices = $quiz->devices; // All devices that can take this quiz
-     * 
+     *
      * // Assign quiz to a device
      * $quiz->devices()->attach(5); // Assigns to device ID 5
      */
@@ -100,16 +105,16 @@ class Quiz extends Model
 
     /**
      * Check if a score passes this quiz.
-     * 
+     *
      * Compares the given score against the quiz's passing_score (percentage)
      *
-     * @param int $score The score to check (0-100 percentage)
+     * @param  int  $score  The score to check (0-100 percentage)
      * @return bool True if score >= passing_score, false otherwise
-     * 
+     *
      * Usage Example:
      * $quiz = Quiz::find(1);
      * $quiz->passing_score = 70; // Requires 70% to pass
-     * 
+     *
      * $studentScore = 85;
      * if ($quiz->isPassingScore($studentScore)) {
      *     echo "Student passed!";
@@ -121,7 +126,10 @@ class Quiz extends Model
      */
     public function isPassingScore(int $score): bool
     {
+        if ($this->scoring_mode === 'time_reward') {
+            return true;
+        }
+
         return $score >= $this->passing_score;  // >= means "greater than or equal to"
     }
 }
-

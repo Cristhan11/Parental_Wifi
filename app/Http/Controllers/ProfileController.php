@@ -27,12 +27,21 @@ class ProfileController extends Controller
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
         $request->user()->fill($request->validated());
+        $emailChanged = $request->user()->isDirty('email');
 
-        if ($request->user()->isDirty('email')) {
+        if ($emailChanged) {
             $request->user()->email_verified_at = null;
+            $request->user()->email_verification_code_hash = null;
+            $request->user()->email_verification_code_expires_at = null;
         }
 
         $request->user()->save();
+
+        if ($emailChanged) {
+            $request->user()->sendEmailVerificationNotification();
+
+            return Redirect::route('verification.notice')->with('status', 'verification-code-sent');
+        }
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }
@@ -47,7 +56,7 @@ class ProfileController extends Controller
         if (! $user->canDeleteOwnAccount()) {
             return Redirect::route('profile.edit')->with(
                 'profile_delete_blocked',
-                __('Administrator accounts cannot be deleted from profile settings.')
+                __('Household operator / Parent Owner accounts cannot be deleted from profile settings.')
             );
         }
 

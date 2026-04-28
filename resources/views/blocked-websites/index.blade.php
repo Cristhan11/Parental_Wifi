@@ -51,6 +51,23 @@
                 </div>
             @endif
 
+            @if(session('info'))
+                <div class="mb-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+                    {{ session('info') }}
+                </div>
+            @endif
+
+            <x-policy-apply-status />
+
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>This list applies to <strong>all</strong> your child devices.</li>
+                    <li>Sites you add here are <strong>blocked</strong>—they should not open for your children on your home network.</li>
+                    <li>Use <strong>Search</strong> to find a domain, or tap <strong>Block Website</strong> above to add one. <strong>Flagged</strong> sites are different: they stay open but visits show in your reports.</li>
+                </ul>
+            </x-collapsible-instructions>
+
             {{-- Search --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">
                 <form method="GET" action="{{ route('blocked-websites.index') }}" class="grid grid-cols-1 md:grid-cols-2 gap-4">

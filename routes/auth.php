@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
 use App\Http\Controllers\Auth\NewPasswordController;
+use App\Http\Controllers\Auth\OwnerOnboardingController;
 use App\Http\Controllers\Auth\PasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Auth\RegisteredUserController;
@@ -34,9 +35,7 @@ use Illuminate\Support\Facades\Route;
 // ============================================================================
 // If a logged-in user tries to access these, they'll be redirected to dashboard
 Route::middleware('guest')->group(function () {
-    Route::get('register', [RegisteredUserController::class, 'create'])
-        ->name('register');
-
+    Route::get('register', [RegisteredUserController::class, 'create'])->name('register');
     Route::post('register', [RegisteredUserController::class, 'store']);
 
     // LOGIN ROUTES
@@ -78,6 +77,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 });
 
 Route::middleware(['auth', 'audit.sensitive'])->group(function () {
+    Route::get('owner/onboarding', [OwnerOnboardingController::class, 'edit'])->name('owner.onboarding.edit');
+    Route::post('owner/onboarding', [OwnerOnboardingController::class, 'update'])->name('owner.onboarding.update');
+
     // EMAIL VERIFICATION ROUTES
     // GET /verify-email - Shows email verification notice page
     Route::get('verify-email', EmailVerificationPromptController::class)

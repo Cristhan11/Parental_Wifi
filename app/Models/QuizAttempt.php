@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Quiz Attempt Model
- * 
+ *
  * Tracks each time a child attempts a quiz.
  * Stores answers, calculates score, and records if they passed.
  */
@@ -26,6 +26,8 @@ class QuizAttempt extends Model
         'quiz_id',
         'answers',
         'score',
+        'correct_count',
+        'total_questions',
         'passed',
         'completed_at',
     ];
@@ -46,9 +48,9 @@ class QuizAttempt extends Model
 
     /**
      * Get the device that attempted this quiz.
-     * 
+     *
      * Relationship: belongsTo - One attempt belongs to one device
-     * 
+     *
      * Usage Example:
      * $attempt = QuizAttempt::find(1);
      * $device = $attempt->device; // Gets the Device that took the quiz
@@ -61,9 +63,9 @@ class QuizAttempt extends Model
 
     /**
      * Get the quiz that was attempted.
-     * 
+     *
      * Relationship: belongsTo - One attempt belongs to one quiz
-     * 
+     *
      * Usage Example:
      * $attempt = QuizAttempt::find(1);
      * $quiz = $attempt->quiz; // Gets the Quiz that was attempted
@@ -76,4 +78,3 @@ class QuizAttempt extends Model
         return $this->belongsTo(Quiz::class);
     }
 }
-

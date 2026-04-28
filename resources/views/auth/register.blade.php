@@ -2,7 +2,7 @@
     <div class="mb-6">
         <h2 class="text-2xl font-bold text-black">Parent registration</h2>
         <p class="mt-2 text-sm" style="color: #00000080;">
-            Create a parent account. You must verify your email, then a system administrator must approve you before you can use the dashboard.
+            Create a parent account. You must verify your email, then a Parent Owner must approve you before you can use the dashboard.
         </p>
     </div>
 

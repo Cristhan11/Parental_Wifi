@@ -42,7 +42,9 @@ class FlaggedWebsiteController extends Controller
 
     public function create(): View
     {
-        return view('flagged-websites.create');
+        $commonWebsites = $this->domainBlockingService->getCommonWebsiteChoices();
+
+        return view('flagged-websites.create', compact('commonWebsites'));
     }
 
     public function store(StoreFlaggedWebsiteRequest $request): RedirectResponse

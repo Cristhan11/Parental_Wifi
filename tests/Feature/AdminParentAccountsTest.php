@@ -92,6 +92,37 @@ class AdminParentAccountsTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_admin_cannot_delete_household_operator_account(): void
+    {
+        $this->actingAsHouseholdOperator();
+
+        $operator = User::factory()->create([
+            'role' => User::ROLE_PARENT_ADMIN,
+            'approved_at' => now(),
+        ]);
+
+        $this->delete(route('admin.parents.destroy', $operator))
+            ->assertForbidden();
+
+        $this->assertModelExists($operator);
+    }
+
+    public function test_cannot_demote_last_remaining_household_operator(): void
+    {
+        $operator = User::factory()->create([
+            'role' => User::ROLE_PARENT_ADMIN,
+            'approved_at' => now(),
+        ]);
+
+        $this->actingAs($operator);
+
+        $this->post(route('admin.parents.demote', $operator))
+            ->assertForbidden();
+
+        $operator->refresh();
+        $this->assertSame(User::ROLE_PARENT_ADMIN, $operator->role);
+    }
+
     public function test_admin_can_reset_parent_password_to_default(): void
     {
         $this->actingAsHouseholdOperator();

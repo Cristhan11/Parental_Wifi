@@ -23,6 +23,15 @@
                     <form action="{{ route('quizzes.store') }}" method="POST" id="quizForm">
                         @csrf
 
+                        <div class="mb-6 rounded-md border p-4" style="border-color: #EAB308; background-color: #FFDE15;">
+                            <h3 class="text-sm font-semibold text-black">How this works</h3>
+                            <ul class="mt-2 list-disc pl-5 text-sm text-black space-y-1">
+                                <li>Fill in the basic quiz information first.</li>
+                                <li>Required fields are highlighted in red until completed, then turn green.</li>
+                                <li>Add questions below and assign the quiz to child devices.</li>
+                            </ul>
+                        </div>
+
                         {{-- Quiz Metadata: Title, Description, Passing Score, Time Reward --}}
                         <div class="mb-6">
                             <label for="title" class="block text-sm font-medium text-gray-700 mb-2">Quiz Title *</label>
@@ -42,21 +51,38 @@
                             @enderror
                         </div>
 
-                        <div class="grid grid-cols-2 gap-4 mb-6">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
-                                <label for="passing_score" class="block text-sm font-medium text-gray-700 mb-2">Passing Percentage *</label>
-                                <input type="number" name="passing_score" id="passing_score" value="{{ old('passing_score', 70) }}" min="0" max="100" required
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
-                                @error('passing_score')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
+                                <label for="level" class="block text-sm font-medium text-gray-700 mb-2">Level *</label>
+                                <select name="level" id="level" required class="required-field w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2">
+                                    <option value="Elementary" {{ old('level') === 'Elementary' ? 'selected' : '' }}>Elementary</option>
+                                    <option value="High School" {{ old('level') === 'High School' ? 'selected' : '' }}>High School</option>
+                                    <option value="Senior High School" {{ old('level') === 'Senior High School' ? 'selected' : '' }}>Senior High School</option>
+                                </select>
                             </div>
+                            <div>
+                                <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">Subject *</label>
+                                <input type="text" name="subject" id="subject" value="{{ old('subject', 'Math') }}" required
+                                    placeholder="Example: Math, English, Science, Filipino"
+                                    class="required-field w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2">
+                                <p class="mt-1 text-xs text-gray-500">You can type a custom subject name.</p>
+                            </div>
+                        </div>
 
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
                                 <label for="time_reward_minutes" class="block text-sm font-medium text-gray-700 mb-2">Time Reward (minutes) *</label>
                                 <input type="number" name="time_reward_minutes" id="time_reward_minutes" value="{{ old('time_reward_minutes', 15) }}" min="1" required
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
+                                    class="required-field w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2">
                                 @error('time_reward_minutes')
+                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                @enderror
+                            </div>
+                            <div>
+                                <label for="passing_score" class="block text-sm font-medium text-gray-700 mb-2">Passing Percentage *</label>
+                                <input type="number" name="passing_score" id="passing_score" value="{{ old('passing_score', 70) }}" min="0" max="100" required
+                                    class="required-field w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2">
+                                @error('passing_score')
                                     <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                                 @enderror
                             </div>
@@ -177,6 +203,34 @@
             }
             quizFormEl.dataset.quizBuilderInit = '1';
 
+            function setRequiredFieldState(field) {
+                if (!field || field.type === 'hidden' || field.disabled) return;
+                if (!field.hasAttribute('required')) return;
+
+                const hasValue = String(field.value ?? '').trim() !== '';
+                if (hasValue) {
+                    field.style.borderColor = '#16A34A';
+                    field.style.boxShadow = '0 0 0 1px #16A34A';
+                } else {
+                    field.style.borderColor = '#DC2626';
+                    field.style.boxShadow = '0 0 0 1px #DC2626';
+                }
+            }
+
+            function bindRequiredFieldFeedback(scope = document) {
+                const fields = scope.querySelectorAll('input[required], select[required], textarea[required]');
+                fields.forEach((field) => {
+                    if (field.dataset.requiredBound === '1') return;
+                    field.dataset.requiredBound = '1';
+                    setRequiredFieldState(field);
+                    field.addEventListener('input', () => setRequiredFieldState(field));
+                    field.addEventListener('change', () => setRequiredFieldState(field));
+                    field.addEventListener('blur', () => setRequiredFieldState(field));
+                });
+            }
+
+            bindRequiredFieldFeedback();
+
             // Global question counter (starts at 0, increments for each new question)
             // Stored on window object so onclick handlers can access it
             window.quizQuestionIndex = 0;
@@ -263,6 +317,7 @@
                 `;
                 
                 container.appendChild(questionDiv);
+                bindRequiredFieldFeedback(questionDiv);
                 
                 // Scroll to the newly added question and focus on the question text input
                 questionDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -452,15 +507,8 @@
                 });
             }
 
-            // Add first question on page load
-            if (document.readyState === 'loading') {
-                document.addEventListener('DOMContentLoaded', function() {
-                    window.addQuestion();
-                });
-            } else {
-                // DOM already loaded
-                window.addQuestion();
-            }
+            // Phase 2 uses seeded/randomized question bank by default.
+            // Manual questions can still be added only when parent clicks "Add Question".
         })();
     </script>
     @endpush

@@ -3,6 +3,18 @@
 return [
     /*
     |--------------------------------------------------------------------------
+    | Policy apply debounce (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | Household dnsmasq updates are coalesced so rapid saves (e.g. blocked sites)
+    | do not restart dnsmasq repeatedly on a Raspberry Pi. Allowed range is clamped
+    | to 3–5 seconds in PolicyApplyDebouncer::fromConfig().
+    |
+    */
+    'policy_apply_debounce_seconds' => (int) env('POLICY_APPLY_DEBOUNCE_SECONDS', 4),
+
+    /*
+    |--------------------------------------------------------------------------
     | Network Log Path
     |--------------------------------------------------------------------------
     |

@@ -56,15 +56,18 @@
                 </div>
             @endif
 
-            {{-- Info Banner: Explains what browsing logs are --}}
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p class="text-sm text-blue-800">
-                    <strong>What are Browsing Logs?</strong> Browsing logs are automatically created records of every website 
-                    your child's device visits. They are collected by the ParseNetworkLogs background job (runs every 10 minutes) 
-                    which parses network traffic logs. You can use these logs to monitor your child's internet activity and 
-                    ensure they're following your rules.
-                </p>
-            </div>
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    @if(request()->filled('device_id'))
+                        <li>The list below is filtered to <strong>one child</strong>. Use the <strong>Device</strong> filter to pick another child or <strong>All devices</strong>.</li>
+                    @endif
+                    <li>This page lists websites your children opened on their devices.</li>
+                    <li>Each row shows the site, when it was visited, and which device it was.</li>
+                    <li>Use dates and <strong>Search</strong> to look up a day or a site name, then tap <strong>Filter</strong>.</li>
+                    <li>New visits can take a short moment before they show up here.</li>
+                </ul>
+            </x-collapsible-instructions>
 
             {{-- Filters Section: Device, Date Range, Search --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreDeviceRequest;
 use App\Http\Requests\UpdateDeviceRequest;
 use App\Models\Device;
+use App\Models\DeviceRegistrationRequest;
 use App\Services\DeviceService;
 use App\Services\NetworkService;
 use App\Services\TimeTrackingService;
@@ -14,21 +15,22 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
  * Device Controller
- * 
+ *
  * This controller handles all device management operations for parents.
  * It provides CRUD operations, status management, time allocation, and
  * integration with network services for device blocking/unblocking.
- * 
+ *
  * What is a Controller?
  * - A controller handles HTTP requests and responses
  * - It receives requests from routes, processes them, and returns responses
  * - It coordinates between models (database), services (business logic), and views (UI)
- * 
+ *
  * Key Responsibilities:
  * 1. List devices (Accounts view - Image 4, Child Devices stats - Image 3)
  * 2. Create new devices
@@ -38,17 +40,17 @@ use Illuminate\View\View;
  * 6. Manage time allocation
  * 7. Display device statistics (time usage, quiz scores, website history)
  * 8. Get real-time connected devices
- * 
+ *
  * Authorization:
  * - All methods require authentication (user must be logged in)
  * - DevicePolicy ensures users can only manage their own devices
  * - Uses $this->authorize() to check permissions before operations
- * 
+ *
  * Integration Points:
  * - NetworkService: For network-level blocking/unblocking
  * - TimeTrackingService: For time allocation and tracking
  * - DeviceService: For MAC address normalization and utilities
- * 
+ *
  * Usage Example:
  * ```php
  * // Route automatically calls controller method
@@ -66,37 +68,31 @@ class DeviceController extends Controller
 
     /**
      * DeviceService instance for device management utilities.
-     * 
+     *
      * DeviceService provides helper methods for:
      * - MAC address normalization
      * - Device statistics calculation
      * - Status synchronization
-     * 
-     * @var DeviceService
      */
     protected DeviceService $deviceService;
 
     /**
      * NetworkService instance for network-level operations.
-     * 
+     *
      * NetworkService handles:
      * - Blocking/unblocking devices at network level
      * - Getting connected devices
      * - Checking network status
-     * 
-     * @var NetworkService
      */
     protected NetworkService $networkService;
 
     /**
      * TimeTrackingService instance for time management.
-     * 
+     *
      * TimeTrackingService handles:
      * - Calculating remaining time
      * - Checking time expiration
      * - Managing time allocation
-     * 
-     * @var TimeTrackingService
      */
     protected TimeTrackingService $timeTrackingService;
 
@@ -107,14 +103,14 @@ class DeviceController extends Controller
 
     /**
      * Constructor - Called automatically when controller is created.
-     * 
+     *
      * Laravel's dependency injection automatically provides these services.
      * This is called "dependency injection" - Laravel creates the services for us.
-     * 
-     * @param DeviceService $deviceService Device management utilities
-     * @param NetworkService $networkService Network-level operations
-     * @param TimeTrackingService $timeTrackingService Time management
-     * @param UsageChartService $usageChartService Per-device / dashboard usage chart payload
+     *
+     * @param  DeviceService  $deviceService  Device management utilities
+     * @param  NetworkService  $networkService  Network-level operations
+     * @param  TimeTrackingService  $timeTrackingService  Time management
+     * @param  UsageChartService  $usageChartService  Per-device / dashboard usage chart payload
      */
     public function __construct(
         DeviceService $deviceService,
@@ -130,25 +126,25 @@ class DeviceController extends Controller
 
     /**
      * Display the Accounts/Device Management view (Image 4).
-     * 
+     *
      * Route: GET /accounts
-     * 
+     *
      * This is the main device management interface showing all devices in a table.
      * Based on design reference Image 4: "ACCOUNTS" tab with device management table.
-     * 
+     *
      * What It Shows:
      * - Device MAC addresses
      * - Assigned roles (CHILD, GUEST, PARENT)
      * - Device names
      * - Blocklist/Whitelist functionality
-     * 
+     *
      * Layout Structure (from Image 4):
      * - Yellow header bar with "ACCOUNTS" title
      * - Action buttons: Blocklist, Whitelist, + New
      * - Main table with columns: DEVICES MAC ADDRESS, ASSIGNED ROLES, NAME
-     * 
+     *
      * @return View The accounts/device management view
-     * 
+     *
      * Usage:
      * User visits /accounts to see all their devices in a table.
      */
@@ -163,35 +159,161 @@ class DeviceController extends Controller
             ->orderBy('name')
             ->get();
 
+        $pendingRegistrationCount = DeviceRegistrationRequest::query()
+            ->where('status', 'pending')
+            ->count();
+
         // Return the accounts view with devices data
         // compact('devices') creates ['devices' => $devices] array
         // View will display devices in a table matching Image 4 design
-        return view('devices.accounts', compact('devices'));
+        return view('devices.accounts', compact('devices', 'pendingRegistrationCount'));
+    }
+
+    public function requestRegistrationForm(): View
+    {
+        return view('devices.request_registration');
+    }
+
+    public function submitRegistrationRequest(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'device_name' => ['required', 'string', 'max:255'],
+        ]);
+
+        $rawIp = (string) $request->ip();
+        $ipAddress = filter_var($rawIp, FILTER_VALIDATE_IP) ? $rawIp : null;
+        $source = (string) ($request->userAgent() ?? 'unknown');
+        $macAddress = $request->header('X-Device-Mac');
+        $hostname = $ipAddress ? gethostbyaddr($ipAddress) : null;
+
+        $fingerprint = sha1(
+            strtolower(trim((string) $macAddress)).'|'.strtolower((string) $hostname).'|'.$ipAddress.'|'.strtolower($source)
+        );
+
+        $limiterKey = 'device-registration-request:'.$fingerprint;
+        if (RateLimiter::tooManyAttempts($limiterKey, 3)) {
+            return back()->withErrors([
+                'device_name' => 'Too many repeated registration attempts from this device. Please wait before retrying.',
+            ])->withInput();
+        }
+        RateLimiter::hit($limiterKey, 3600);
+
+        $existing = DeviceRegistrationRequest::query()
+            ->where('fingerprint', $fingerprint)
+            ->where('status', 'pending')
+            ->first();
+
+        if ($existing) {
+            $existing->update([
+                'device_name' => $validated['device_name'],
+                'mac_address' => $macAddress,
+                'hostname' => $hostname,
+                'ip_address' => $ipAddress,
+                'request_source' => $source,
+                'seen_on_home_wifi' => $this->isPrivateIp($ipAddress),
+                'requests_count' => $existing->requests_count + 1,
+                'last_requested_at' => now(),
+            ]);
+        } else {
+            DeviceRegistrationRequest::create([
+                'device_name' => $validated['device_name'],
+                'mac_address' => $macAddress,
+                'hostname' => $hostname,
+                'ip_address' => $ipAddress,
+                'request_source' => $source,
+                'fingerprint' => $fingerprint,
+                'status' => 'pending',
+                'seen_on_home_wifi' => $this->isPrivateIp($ipAddress),
+                'last_requested_at' => now(),
+            ]);
+        }
+
+        return back()->with('success', 'Registration request submitted. A Parent Owner will review it soon.');
+    }
+
+    public function approveRegistrationRequest(Request $request, DeviceRegistrationRequest $registrationRequest): RedirectResponse
+    {
+        $allowedInitialTimes = range(5, 480, 5);
+        $request->validate([
+            'assigned_role' => ['required', 'string', 'in:child,parent,guest'],
+            'device_name' => ['nullable', 'string', 'max:255'],
+            'initial_time_minutes' => ['nullable', 'integer', 'in:'.implode(',', $allowedInitialTimes)],
+        ]);
+
+        abort_if($registrationRequest->status !== 'pending', 422, 'This request is no longer pending.');
+
+        $assignedRole = $request->string('assigned_role')->toString();
+        $deviceName = trim((string) $request->input('device_name', $registrationRequest->device_name));
+        if ($deviceName === '') {
+            $deviceName = $registrationRequest->device_name;
+        }
+        $initialTime = (int) $request->input('initial_time_minutes', 60);
+        if (! in_array($initialTime, $allowedInitialTimes, true)) {
+            $initialTime = 60;
+        }
+        $status = in_array($assignedRole, ['parent', 'guest'], true) ? 'whitelisted' : 'active';
+        $macHex = strtoupper(substr(preg_replace('/[^a-f0-9]/i', '', $registrationRequest->fingerprint), 0, 12));
+        $fallbackMac = implode(':', str_split(str_pad($macHex, 12, '0'), 2));
+        $mac = $registrationRequest->mac_address ?: $fallbackMac;
+
+        Device::create([
+            'user_id' => Auth::id(),
+            'name' => $deviceName,
+            'mac_address' => $this->deviceService->normalizeMacAddress($mac),
+            'role' => $assignedRole,
+            'status' => $status,
+            'ip_address' => $registrationRequest->ip_address,
+            'remaining_time_minutes' => $assignedRole === 'child' ? $initialTime : 0,
+            'total_time_allocated' => $assignedRole === 'child' ? $initialTime : 0,
+        ]);
+
+        $registrationRequest->update([
+            'status' => 'approved',
+            'assigned_role' => $assignedRole,
+            'device_name' => $deviceName,
+            'user_id' => Auth::id(),
+        ]);
+
+        return redirect()->route('accounts.index')
+            ->with('success', 'Device request approved.')
+            ->with('info', 'Network rules update on the gateway in a few seconds. Check the status line below if live updates are enabled.');
+    }
+
+    public function rejectRegistrationRequest(DeviceRegistrationRequest $registrationRequest): RedirectResponse
+    {
+        abort_if($registrationRequest->status !== 'pending', 422, 'This request is no longer pending.');
+
+        $registrationRequest->update([
+            'status' => 'rejected',
+            'user_id' => Auth::id(),
+        ]);
+
+        return redirect()->route('accounts.create')->with('success', 'Device request disapproved.');
     }
 
     /**
      * Display the Child Devices stats view (Image 3).
-     * 
+     *
      * Route: GET /devices or GET /devices/{device}
-     * 
+     *
      * This view shows statistics for a selected device:
      * - TIME USAGE graph (daily / weekly / monthly / yearly via usage-chart JSON)
      * - QUIZ SCORE list (all quiz attempts with scores)
      * - WEBSITE HISTORY list (recently visited websites)
-     * 
+     *
      * Based on design reference Image 3: "CHILD DEVICES" tab with stats.
-     * 
+     *
      * Layout Structure (from Image 3):
      * - Yellow header bar with "CHILD DEVICES" title
      * - Child dropdown selector (filter by device)
      * - Card 1: TIME USAGE (line graph + time offline/online table)
      * - Card 2: QUIZ SCORE (list of quiz scores)
      * - Card 3: WEBSITE HISTORY (list of visited websites)
-     * 
-     * @param Request $request HTTP request (may contain 'device' query parameter)
-     * @param Device|null $device Optional device to show stats for (from route parameter)
+     *
+     * @param  Request  $request  HTTP request (may contain 'device' query parameter)
+     * @param  Device|null  $device  Optional device to show stats for (from route parameter)
      * @return View The child devices stats view
-     * 
+     *
      * Usage:
      * - GET /devices - Shows stats for first device (or empty if no devices)
      * - GET /devices?device=1 - Shows stats for device with ID 1 (from query parameter)
@@ -207,7 +329,7 @@ class DeviceController extends Controller
 
         // If device is provided via query parameter, load it
         // Query parameter format: /child_devices?device=1
-        if (!$device && $request->has('device')) {
+        if (! $device && $request->has('device')) {
             $deviceId = $request->input('device');
             $device = Auth::user()->devices()->find($deviceId);
         }
@@ -216,7 +338,7 @@ class DeviceController extends Controller
         // Route model binding automatically resolves Device from route {device} parameter
 
         // If no device specified, use first device (or null if no devices)
-        if (!$device && $devices->isNotEmpty()) {
+        if (! $device && $devices->isNotEmpty()) {
             $device = $devices->first();
         }
 
@@ -272,61 +394,83 @@ class DeviceController extends Controller
 
     /**
      * Show the form for creating a new device.
-     * 
+     *
      * Route: GET /devices/create
-     * 
+     *
      * Displays a form where parents can add a new device.
      * Form includes fields for: name, MAC address, role, status, time allocation.
-     * 
+     *
      * @return View The device creation form
-     * 
+     *
      * Usage:
      * User visits /devices/create to see the form for adding a new device.
      */
     public function create(): View
+    {
+        // Standard create flow intentionally hides manual MAC input.
+        return $this->renderCreateView(false);
+    }
+
+    public function createAdvanced(): View
+    {
+        // Advanced/debug path keeps manual MAC workflow.
+        return $this->renderCreateView(true);
+    }
+
+    private function renderCreateView(bool $advancedMode): View
     {
         // Check authorization - can user create devices?
         // $this->authorize() calls DevicePolicy::create()
         // In our system, all authenticated users can create devices
         $this->authorize('create', Device::class);
 
-        // Get connected devices from network (optional helper)
-        // This shows available MAC addresses that parents can register
-        // getConnectedDevices() returns array of devices currently on network
-        $connectedDevices = $this->networkService->getConnectedDevices();
+        $connectedDevices = [];
 
-        // Only suggest devices not already registered for this parent (match by normalized MAC)
-        $registeredMacs = Auth::user()->devices()
-            ->pluck('mac_address')
-            ->map(fn (string $mac) => $this->deviceService->normalizeMacAddress($mac))
-            ->all();
+        if ($advancedMode) {
+            // Get connected devices from network (optional helper)
+            // This shows available MAC addresses that parents can register
+            // getConnectedDevices() returns array of devices currently on network
+            $connectedDevices = $this->networkService->getConnectedDevices();
 
-        $deviceService = $this->deviceService;
-        $connectedDevices = array_values(array_filter(
-            $connectedDevices,
-            function (array $row) use ($registeredMacs, $deviceService): bool {
-                $raw = $row['mac_address'] ?? '';
-                if ($raw === '') {
-                    return true;
+            // Only suggest devices not already registered for this parent (match by normalized MAC)
+            $registeredMacs = Auth::user()->devices()
+                ->pluck('mac_address')
+                ->map(fn (string $mac) => $this->deviceService->normalizeMacAddress($mac))
+                ->all();
+
+            $deviceService = $this->deviceService;
+            $connectedDevices = array_values(array_filter(
+                $connectedDevices,
+                function (array $row) use ($registeredMacs, $deviceService): bool {
+                    $raw = $row['mac_address'] ?? '';
+                    if ($raw === '') {
+                        return true;
+                    }
+
+                    $normalized = $deviceService->normalizeMacAddress($raw);
+
+                    return ! in_array($normalized, $registeredMacs, true);
                 }
-
-                $normalized = $deviceService->normalizeMacAddress($raw);
-
-                return ! in_array($normalized, $registeredMacs, true);
-            }
-        ));
+            ));
+        }
 
         // Return the create view
         // compact('connectedDevices') passes connected devices to view
         // View can display these as suggestions for MAC addresses
-        return view('devices.device_create', compact('connectedDevices'));
+        $pendingRegistrationRequests = DeviceRegistrationRequest::query()
+            ->where('status', 'pending')
+            ->latest('last_requested_at')
+            ->limit(30)
+            ->get();
+
+        return view('devices.device_create', compact('connectedDevices', 'advancedMode', 'pendingRegistrationRequests'));
     }
 
     /**
      * Store a newly created device in storage.
-     * 
+     *
      * Route: POST /devices
-     * 
+     *
      * What It Does:
      * 1. Validates form data (via StoreDeviceRequest)
      * 2. Normalizes MAC address to standard format
@@ -334,10 +478,10 @@ class DeviceController extends Controller
      * 4. Creates device in database
      * 5. Applies network-level blocking if status is 'blocked'
      * 6. Redirects to accounts view with success message
-     * 
-     * @param StoreDeviceRequest $request Validated form data (name, mac_address, status, etc.)
+     *
+     * @param  StoreDeviceRequest  $request  Validated form data (name, mac_address, status, etc.)
      * @return RedirectResponse Redirects to accounts view with success message
-     * 
+     *
      * Usage:
      * User submits create form, this method processes it and creates the device.
      */
@@ -350,20 +494,23 @@ class DeviceController extends Controller
         // StoreDeviceRequest ensures all required fields exist and are valid
         $validated = $request->validated();
 
-        // Normalize MAC address to standard format (XX:XX:XX:XX:XX:XX, uppercase)
-        // This ensures consistent format in database
-        // Example: "aa-bb-cc-dd-ee-ff" becomes "AA:BB:CC:DD:EE:FF"
-        $validated['mac_address'] = $this->deviceService->normalizeMacAddress($validated['mac_address']);
+        // Standard flow does not require manual MAC input.
+        // When missing, generate a synthetic MAC reserved for local app records.
+        if (! empty($validated['mac_address'])) {
+            $validated['mac_address'] = $this->deviceService->normalizeMacAddress($validated['mac_address']);
+        } else {
+            $validated['mac_address'] = $this->generateSyntheticMac();
+        }
 
         // Set default time allocation if not provided
         // Default is 15 minutes for new devices
-        if (!isset($validated['remaining_time_minutes'])) {
+        if (! isset($validated['remaining_time_minutes'])) {
             $validated['remaining_time_minutes'] = 15; // Default 15 minutes
         }
 
         // Set total_time_allocated to match remaining_time_minutes if not provided
         // This tracks the total time allocated for reporting purposes
-        if (!isset($validated['total_time_allocated'])) {
+        if (! isset($validated['total_time_allocated'])) {
             $validated['total_time_allocated'] = $validated['remaining_time_minutes'];
         }
 
@@ -399,17 +546,30 @@ class DeviceController extends Controller
             ->with('success', 'Device created successfully!');
     }
 
+    private function generateSyntheticMac(): string
+    {
+        // Use locally-administered prefix so generated values are clearly synthetic.
+        // 02 indicates locally administered, unicast MAC.
+        do {
+            $suffix = strtoupper(Str::random(10));
+            $suffix = preg_replace('/[^A-F0-9]/', 'A', $suffix);
+            $mac = implode(':', str_split('02'.substr(str_pad($suffix, 10, '0'), 0, 10), 2));
+        } while (Device::where('mac_address', $mac)->exists());
+
+        return $mac;
+    }
+
     /**
      * Show the form for editing the specified device.
-     * 
+     *
      * Route: GET /devices/{device}/edit
-     * 
+     *
      * Displays a form pre-filled with existing device data.
      * Also shows device statistics (connection status, sessions, logs).
-     * 
-     * @param Device $device The device to edit (Laravel automatically finds it by ID from URL)
+     *
+     * @param  Device  $device  The device to edit (Laravel automatically finds it by ID from URL)
      * @return View The device edit form with existing data and statistics
-     * 
+     *
      * Usage:
      * User visits /devices/1/edit to edit device with ID 1.
      */
@@ -446,9 +606,9 @@ class DeviceController extends Controller
 
     /**
      * Update the specified device in storage.
-     * 
+     *
      * Route: PUT /devices/{device}
-     * 
+     *
      * What It Does:
      * 1. Validates form data (via UpdateDeviceRequest)
      * 2. Checks authorization (user owns device)
@@ -456,11 +616,11 @@ class DeviceController extends Controller
      * 4. Updates device in database
      * 5. Syncs network-level blocking if status changed
      * 6. Redirects with success message
-     * 
-     * @param UpdateDeviceRequest $request Validated form data
-     * @param Device $device The device to update (found by ID from URL)
+     *
+     * @param  UpdateDeviceRequest  $request  Validated form data
+     * @param  Device  $device  The device to update (found by ID from URL)
      * @return RedirectResponse Redirects to accounts view with success message
-     * 
+     *
      * Usage:
      * User submits edit form, this method processes it and updates the device.
      */
@@ -507,22 +667,22 @@ class DeviceController extends Controller
 
     /**
      * Remove the specified device from storage.
-     * 
+     *
      * Route: DELETE /devices/{device}
-     * 
+     *
      * What It Does:
      * 1. Checks authorization (user owns device)
      * 2. Unblocks device at network level (if blocked)
      * 3. Deletes device from database (cascades to related records)
      * 4. Redirects with success message
-     * 
+     *
      * Important:
      * - Deleting a device will cascade delete related records (browsing logs, sessions, etc.)
      * - This is handled by database foreign key constraints
-     * 
-     * @param Device $device The device to delete (found by ID from URL)
+     *
+     * @param  Device  $device  The device to delete (found by ID from URL)
      * @return RedirectResponse Redirects to accounts view with success message
-     * 
+     *
      * Usage:
      * User clicks delete button, this method removes the device.
      */
@@ -550,23 +710,23 @@ class DeviceController extends Controller
 
     /**
      * Update device status (active/blocked/whitelisted).
-     * 
+     *
      * Route: POST /devices/{device}/status
-     * 
+     *
      * This method allows quick status updates without full form submission.
      * Used by AJAX requests or quick action buttons.
-     * 
+     *
      * What It Does:
      * 1. Validates status value
      * 2. Checks authorization
      * 3. Updates device status
      * 4. Syncs network-level blocking
      * 5. Returns JSON response (for AJAX) or redirects
-     * 
-     * @param Request $request HTTP request containing 'status' field
-     * @param Device $device The device to update
+     *
+     * @param  Request  $request  HTTP request containing 'status' field
+     * @param  Device  $device  The device to update
      * @return JsonResponse|RedirectResponse JSON response for AJAX, redirect for regular requests
-     * 
+     *
      * Usage:
      * - AJAX: POST /devices/1/status with {status: 'blocked'}
      * - Form: Submit form with status field
@@ -615,22 +775,22 @@ class DeviceController extends Controller
 
     /**
      * Update device time allocation.
-     * 
+     *
      * Route: POST /devices/{device}/time
-     * 
+     *
      * This method allows updating time allocation without full form submission.
      * Used by quick action buttons or AJAX requests.
-     * 
+     *
      * What It Does:
      * 1. Validates time values
      * 2. Checks authorization
      * 3. Updates time allocation
      * 4. Returns JSON response (for AJAX) or redirects
-     * 
-     * @param Request $request HTTP request containing time fields
-     * @param Device $device The device to update
+     *
+     * @param  Request  $request  HTTP request containing time fields
+     * @param  Device  $device  The device to update
      * @return JsonResponse|RedirectResponse JSON response for AJAX, redirect for regular requests
-     * 
+     *
      * Usage:
      * - AJAX: POST /devices/1/time with {remaining_time_minutes: 60, total_time_allocated: 120}
      * - Form: Submit form with time fields
@@ -669,14 +829,14 @@ class DeviceController extends Controller
 
     /**
      * Get real-time connected devices (AJAX endpoint).
-     * 
+     *
      * Route: GET /devices/api/connected
-     * 
+     *
      * This method returns a list of devices currently connected to the network.
      * Used by the UI to show connection status in real-time.
-     * 
+     *
      * @return JsonResponse JSON response with connected devices array
-     * 
+     *
      * Usage:
      * - AJAX: GET /devices/api/connected
      * - Returns: {success: true, devices: [{mac_address: "...", ip_address: "...", ...}]}
@@ -696,18 +856,18 @@ class DeviceController extends Controller
 
     /**
      * Get quiz scores for a device.
-     * 
+     *
      * This is a helper method used by index() to calculate quiz scores.
-     * 
+     *
      * What It Does:
      * 1. Queries QuizAttempt table for this device
      * 2. Groups attempts by quiz
      * 3. Calculates scores (correct/total)
      * 4. Returns array with quiz data
-     * 
-     * @param Device $device The device to get quiz scores for
+     *
+     * @param  Device  $device  The device to get quiz scores for
      * @return array<int, array<string, mixed>> Array of quiz score data
-     * 
+     *
      * Usage:
      * Called internally by index() method to populate quiz scores list.
      */
@@ -752,25 +912,25 @@ class DeviceController extends Controller
 
     /**
      * Get website history for a device.
-     * 
+     *
      * This is a helper method used by index() to get recently visited websites.
      * It queries the BrowsingLog table to get actual browsing history records.
-     * 
+     *
      * What It Does:
      * 1. Queries BrowsingLog table for this device
      * 2. Gets the most recent browsing logs (limit 10-15)
      * 3. Orders by visited_at DESC (newest first)
      * 4. Returns collection of BrowsingLog models (not just domain strings)
-     * 
+     *
      * Why Limit to 10-15 Records?
      * - The Child Devices page shows a summary view, not full history
      * - Too many records would clutter the UI
      * - Full history is available via the "Browsing History" button
      * - Improves page load performance
-     * 
-     * @param Device $device The device to get website history for
+     *
+     * @param  Device  $device  The device to get website history for
      * @return \Illuminate\Database\Eloquent\Collection Collection of BrowsingLog models
-     * 
+     *
      * Usage:
      * Called internally by index() method to populate website history section.
      * The view will display these logs with domain, URL, and visited_at timestamp.
@@ -788,13 +948,22 @@ class DeviceController extends Controller
             ->get();
     }
 
+    private function isPrivateIp(?string $ip): bool
+    {
+        if (! $ip) {
+            return false;
+        }
+
+        return ! filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE);
+    }
+
     /**
      * Display the Blocklist page.
-     * 
+     *
      * Route: GET /accounts/blocklist
-     * 
+     *
      * This page shows all blocked devices and allows managing the blocklist.
-     * 
+     *
      * @return View The blocklist page
      */
     public function blocklist(): View
@@ -810,11 +979,11 @@ class DeviceController extends Controller
 
     /**
      * Display the Whitelist page.
-     * 
+     *
      * Route: GET /accounts/whitelist
-     * 
+     *
      * This page shows all whitelisted devices and allows managing the whitelist.
-     * 
+     *
      * @return View The whitelist page
      */
     public function whitelist(): View
@@ -830,14 +999,14 @@ class DeviceController extends Controller
 
     /**
      * Update device role.
-     * 
+     *
      * Route: POST /accounts/{device}/update-role
-     * 
+     *
      * This method updates the role of a device (CHILD, GUEST, PARENT).
      * Called from the accounts page dropdown.
-     * 
-     * @param Request $request HTTP request containing the new role
-     * @param Device $device The device to update
+     *
+     * @param  Request  $request  HTTP request containing the new role
+     * @param  Device  $device  The device to update
      * @return RedirectResponse Redirects back with success message
      */
     public function updateRole(Request $request, Device $device): RedirectResponse

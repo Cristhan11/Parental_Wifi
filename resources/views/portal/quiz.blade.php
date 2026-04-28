@@ -43,9 +43,9 @@
                                     <label class="portal-mc-label">
                                         <input type="radio"
                                                name="answers[{{ $index }}]"
-                                               value="{{ chr(97 + $optionIndex) }}"
+                                               value="{{ strtoupper(chr(65 + $optionIndex)) }}"
                                                required>
-                                        <span>{{ strtoupper(chr(97 + $optionIndex)) }}) {{ $option }}</span>
+                                        <span>{{ strtoupper(chr(65 + $optionIndex)) }}) {{ $option }}</span>
                                     </label>
                                 @endforeach
                             </div>

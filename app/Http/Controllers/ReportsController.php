@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\BulkSaveReportingRecipientsRequest;
 use App\Http\Requests\StoreReportingRecipientRequest;
 use App\Http\Requests\UpdateReportingPreferencesRequest;
 use App\Http\Requests\UpdateReportingRecipientRequest;
@@ -12,6 +13,7 @@ use App\Models\ReportingRecipient;
 use App\Support\ReportingTimezoneOptions;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\View\View;
 
 /**
@@ -107,6 +109,56 @@ class ReportsController extends Controller
         return redirect()
             ->route('reports.index')
             ->with('success', 'Reporting preferences updated.');
+    }
+
+    /**
+     * Replace the signed-in user’s recipient list with the submitted rows (updates, creates, and deletes missing ids).
+     */
+    public function bulkSaveRecipients(BulkSaveReportingRecipientsRequest $request): RedirectResponse
+    {
+        $user = $request->user();
+        $this->ensureCanManageReports($user->role);
+
+        /** @var array<int, array{id?: int|null, label?: string|null, email: string, is_enabled?: bool}> $rows */
+        $rows = array_values($request->validated('recipients'));
+
+        DB::transaction(function () use ($user, $rows): void {
+            $keepIds = collect($rows)
+                ->pluck('id')
+                ->filter(fn ($id) => $id !== null && $id !== '')
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all();
+
+            $deleteQuery = ReportingRecipient::query()->where('user_id', $user->id);
+            if ($keepIds !== []) {
+                $deleteQuery->whereNotIn('id', $keepIds);
+            }
+            $deleteQuery->delete();
+
+            foreach ($rows as $row) {
+                $id = isset($row['id']) && $row['id'] !== null ? (int) $row['id'] : null;
+                $payload = [
+                    'label' => $row['label'] ?? null,
+                    'email' => $row['email'],
+                    'is_enabled' => (bool) ($row['is_enabled'] ?? false),
+                ];
+
+                if ($id) {
+                    $recipient = ReportingRecipient::query()
+                        ->where('user_id', $user->id)
+                        ->where('id', $id)
+                        ->firstOrFail();
+                    $recipient->update($payload);
+                } else {
+                    ReportingRecipient::create(array_merge($payload, ['user_id' => $user->id]));
+                }
+            }
+        });
+
+        return redirect()
+            ->route('reports.index')
+            ->with('success', 'Recipients saved.');
     }
 
     public function storeRecipient(StoreReportingRecipientRequest $request): RedirectResponse

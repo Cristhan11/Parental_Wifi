@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreBlockedWebsiteRequest;
 use App\Http\Requests\UpdateBlockedWebsiteRequest;
 use App\Models\BlockedWebsite;
+use App\PolicyApplyFlags;
 use App\Services\DomainBlockingService;
+use App\Services\PolicyApplyDebouncer;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -43,51 +45,20 @@ class BlockedWebsiteController extends Controller
     use AuthorizesRequests;
 
     public function __construct(
-        protected DomainBlockingService $domainBlockingService
+        protected DomainBlockingService $domainBlockingService,
+        protected PolicyApplyDebouncer $policyApplyDebouncer,
     ) {}
 
-    /**
-     * @return bool True when dnsmasq sync script reported success
-     */
-    protected function runDnsSyncForCurrentUser(): bool
+    protected function redirectToIndexAfterBlocklistChange(string $successMessage): RedirectResponse
     {
-        try {
-            return $this->domainBlockingService->syncDnsmasqBlocklistForUser(Auth::user());
-        } catch (\Throwable $e) {
-            Log::warning('DNS sync exception: '.$e->getMessage(), ['user_id' => Auth::id()]);
-
-            return false;
-        }
+        return redirect()->route('blocked-websites.index')
+            ->with('success', $successMessage)
+            ->with('info', 'Applying rules on the gateway. Watch the status line below; this usually takes a few seconds.');
     }
 
-    /**
-     * @return bool True when dnsmasq sync script reported success
-     */
-    protected function runDnsSyncForUser(?\App\Models\User $user): bool
+    protected function queueBlocklistApplyForUserId(int $userId): void
     {
-        if (! $user) {
-            return true;
-        }
-        try {
-            return $this->domainBlockingService->syncDnsmasqBlocklistForUser($user);
-        } catch (\Throwable $e) {
-            Log::warning('DNS sync exception: '.$e->getMessage(), ['user_id' => $user->id]);
-
-            return false;
-        }
-    }
-
-    protected function redirectToIndexWithDnsNotice(string $successMessage, bool $dnsSyncOk, int $parentUserId): RedirectResponse
-    {
-        $flash = ['success' => $successMessage];
-
-        if (! $dnsSyncOk && config('services.dnsmasq.warn_when_sync_fails')) {
-            $flash['warning'] = 'The list was saved, but dnsmasq may still be using an older block list, so removed sites can stay blocked. '
-                .'On the Raspberry Pi, add scripts/update_dnsmasq_global_blocklist.sh to sudoers (see docs/SUDOERS_UPDATE_DNS_BLOCKING.md), '
-                ."then run: php artisan dnsmasq:sync-blocklist {$parentUserId}";
-        }
-
-        return redirect()->route('blocked-websites.index')->with($flash);
+        $this->policyApplyDebouncer->requestApply($userId, PolicyApplyFlags::Blocklist);
     }
 
     /**
@@ -128,7 +99,9 @@ class BlockedWebsiteController extends Controller
      */
     public function create(): View
     {
-        return view('blocked-websites.create');
+        $commonWebsites = $this->domainBlockingService->getCommonWebsiteChoices();
+
+        return view('blocked-websites.create', compact('commonWebsites'));
     }
 
     /**
@@ -146,33 +119,20 @@ class BlockedWebsiteController extends Controller
         $validated = $request->validated();
         $validated['user_id'] = Auth::id();
 
-        // Detect related domains if block_type is 'app'
+        // Detect related domains automatically
         if ($validated['block_type'] === 'app' && isset($validated['domain'])) {
-            $relatedDomains = $this->domainBlockingService->detectRelatedDomains(
-                $validated['domain'],
-                $request->input('app_name')
-            );
-
-            // Merge with user-provided related domains
-            $userRelatedDomains = $validated['related_domains'] ?? [];
-            $validated['related_domains'] = array_unique(array_merge($relatedDomains, $userRelatedDomains));
+            $validated['related_domains'] = $this->domainBlockingService->detectRelatedDomains($validated['domain']);
         }
 
-        // Set defaults
-        $validated['block_subdomains'] = $validated['block_subdomains'] ?? false;
+        // Always block subdomains for stronger app/domain enforcement.
+        $validated['block_subdomains'] = true;
 
         // Create blocked website
         $blockedWebsite = BlockedWebsite::create($validated);
 
-        $dnsOk = $this->runDnsSyncForCurrentUser();
-        if (! $dnsOk) {
-            Log::warning('DNS sync failed after create; blocked_website saved', [
-                'blocked_website_id' => $blockedWebsite->id,
-                'user_id' => Auth::id(),
-            ]);
-        }
+        $this->queueBlocklistApplyForUserId((int) Auth::id());
 
-        return $this->redirectToIndexWithDnsNotice('Website blocked successfully.', $dnsOk, (int) Auth::id());
+        return $this->redirectToIndexAfterBlocklistChange('Website blocked successfully.');
     }
 
     /**
@@ -228,9 +188,9 @@ class BlockedWebsiteController extends Controller
 
         $blockedWebsite->update($validated);
 
-        $dnsOk = $this->runDnsSyncForCurrentUser();
+        $this->queueBlocklistApplyForUserId((int) Auth::id());
 
-        return $this->redirectToIndexWithDnsNotice('Blocked website updated successfully.', $dnsOk, (int) Auth::id());
+        return $this->redirectToIndexAfterBlocklistChange('Blocked website updated successfully.');
     }
 
     /**
@@ -253,9 +213,9 @@ class BlockedWebsiteController extends Controller
 
         $blockedWebsite->delete();
 
-        $dnsOk = $this->runDnsSyncForUser($user);
+        $this->queueBlocklistApplyForUserId($parentUserId);
 
-        return $this->redirectToIndexWithDnsNotice('Blocked website removed successfully.', $dnsOk, $parentUserId);
+        return $this->redirectToIndexAfterBlocklistChange('Blocked website removed successfully.');
     }
 
     /**

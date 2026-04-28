@@ -34,13 +34,15 @@ class ProfileTest extends TestCase
 
         $response
             ->assertSessionHasNoErrors()
-            ->assertRedirect('/profile');
+            ->assertRedirect(route('verification.notice'));
 
         $user->refresh();
 
         $this->assertSame('Test User', $user->name);
         $this->assertSame('test@example.com', $user->email);
         $this->assertNull($user->email_verified_at);
+        $this->assertNotNull($user->email_verification_code_hash);
+        $this->assertNotNull($user->email_verification_code_expires_at);
     }
 
     public function test_email_verification_status_is_unchanged_when_the_email_address_is_unchanged(): void
@@ -101,6 +103,28 @@ class ProfileTest extends TestCase
     {
         $user = User::factory()->create([
             'role' => User::ROLE_ADMIN,
+        ]);
+
+        $response = $this
+            ->actingAs($user)
+            ->from('/profile')
+            ->delete('/profile', [
+                'password' => 'password',
+            ]);
+
+        $response
+            ->assertRedirect('/profile')
+            ->assertSessionHas('profile_delete_blocked');
+
+        $this->assertNotNull($user->fresh());
+        $this->assertAuthenticatedAs($user);
+    }
+
+    public function test_household_operator_cannot_delete_their_account_from_profile(): void
+    {
+        $user = User::factory()->create([
+            'role' => User::ROLE_PARENT_ADMIN,
+            'approved_at' => now(),
         ]);
 
         $response = $this

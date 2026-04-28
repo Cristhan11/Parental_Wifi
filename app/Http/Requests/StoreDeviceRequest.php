@@ -4,19 +4,20 @@ namespace App\Http\Requests;
 
 use App\Rules\ValidMacAddress;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 /**
  * Store Device Request
- * 
+ *
  * This form request handles validation for creating new devices.
  * It validates all input data before the device is created in the database.
- * 
+ *
  * What is a Form Request?
  * - A form request is Laravel's way of validating form data
  * - It runs automatically before the controller method is called
  * - If validation fails, user is redirected back with error messages
  * - If validation passes, controller method receives validated data
- * 
+ *
  * How It Works:
  * 1. User submits form to create device
  * 2. Laravel creates StoreDeviceRequest instance
@@ -24,14 +25,14 @@ use Illuminate\Foundation\Http\FormRequest;
  * 4. Laravel validates all fields against rules
  * 5. If valid: controller method is called with validated data
  * 6. If invalid: user is redirected back with error messages
- * 
+ *
  * Validation Rules Explained:
  * - name: Required, must be a string, max 255 characters
  * - mac_address: Required, must be valid MAC format, must be unique in devices table
  * - status: Required, must be one of: active, blocked, whitelisted
  * - remaining_time_minutes: Optional, must be integer between 0 and 9999
  * - total_time_allocated: Optional, must be integer between 0 and 9999
- * 
+ *
  * Usage Example:
  * ```php
  * // In DeviceController::store()
@@ -53,19 +54,19 @@ class StoreDeviceRequest extends FormRequest
 {
     /**
      * Determine if the user is authorized to make this request.
-     * 
+     *
      * This method checks if the user has permission to create devices.
      * In our system, all authenticated parents can create devices.
-     * 
+     *
      * What This Checks:
      * - User is authenticated (logged in)
      * - User has permission to create devices
-     * 
+     *
      * Note: Device ownership is automatically assigned to the current user
      * in the controller, so we don't need to check ownership here.
-     * 
+     *
      * @return bool True if user can create devices, false otherwise
-     * 
+     *
      * Usage:
      * This method is called automatically by Laravel before validation.
      * If it returns false, Laravel returns 403 Forbidden error.
@@ -79,48 +80,48 @@ class StoreDeviceRequest extends FormRequest
 
     /**
      * Get the validation rules that apply to the request.
-     * 
+     *
      * This method returns an array of validation rules for each field.
      * Laravel will validate all fields against these rules before allowing
      * the controller method to be called.
-     * 
+     *
      * Validation Rules:
-     * 
+     *
      * 1. name (required):
      *    - 'required': Field must be provided (cannot be empty)
      *    - 'string': Value must be a string (not array or object)
      *    - 'max:255': Maximum length is 255 characters (database column limit)
      *    - Purpose: Device name for identification (e.g., "John's iPhone")
-     * 
+     *
      * 2. mac_address (required):
      *    - 'required': Field must be provided (cannot be empty)
      *    - 'string': Value must be a string
      *    - ValidMacAddress: Custom rule validates MAC format (XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX)
      *    - 'unique:devices,mac_address': MAC address must be unique (cannot exist in devices table)
      *    - Purpose: Unique identifier for device (used for network blocking)
-     * 
+     *
      * 3. status (required):
      *    - 'required': Field must be provided
      *    - 'in:active,blocked,whitelisted': Value must be one of these three options
      *    - Purpose: Initial device status (active=normal, blocked=no internet, whitelisted=unrestricted)
-     * 
+     *
      * 4. remaining_time_minutes (optional):
      *    - 'nullable': Field is optional (can be empty)
      *    - 'integer': Value must be a whole number (not decimal)
      *    - 'min:0': Minimum value is 0 (cannot be negative)
      *    - 'max:9999': Maximum value is 9999 (prevents unreasonably large values)
      *    - Purpose: Initial time allocation for device (defaults to 15 minutes if not provided)
-     * 
+     *
      * 5. total_time_allocated (optional):
      *    - 'nullable': Field is optional (can be empty)
      *    - 'integer': Value must be a whole number
      *    - 'min:0': Minimum value is 0
      *    - 'max:9999': Maximum value is 9999
      *    - Purpose: Total time allocated for tracking (defaults to remaining_time_minutes if not provided)
-     * 
+     *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array|string>
-     *         Array of validation rules, keyed by field name
-     * 
+     *                                                                                     Array of validation rules, keyed by field name
+     *
      * Usage:
      * This method is called automatically by Laravel during validation.
      * You don't call it directly.
@@ -141,9 +142,10 @@ class StoreDeviceRequest extends FormRequest
             // Format: XX:XX:XX:XX:XX:XX or XX-XX-XX-XX-XX-XX
             // Must be unique in the devices table (one MAC = one device)
             'mac_address' => [
-                'required',                    // Field must be provided
                 'string',                      // Value must be a string
-                new ValidMacAddress(),         // Custom rule: validates MAC format
+                'nullable',                    // Field is optional on standard flow
+                Rule::requiredIf($this->boolean('advanced_mode')), // Required only on advanced/debug flow
+                new ValidMacAddress,         // Custom rule: validates MAC format
                 'unique:devices,mac_address',  // Must be unique in devices table
             ],
 
@@ -190,12 +192,12 @@ class StoreDeviceRequest extends FormRequest
 
     /**
      * Get custom error messages for validation rules.
-     * 
+     *
      * This method allows us to provide custom error messages that are more
      * user-friendly than Laravel's default messages.
-     * 
+     *
      * @return array<string, string> Array of custom error messages, keyed by field.rule
-     * 
+     *
      * Usage:
      * This method is called automatically by Laravel when validation fails.
      * You don't call it directly.
@@ -212,7 +214,7 @@ class StoreDeviceRequest extends FormRequest
 
             'role.required' => 'Device role is required.',
             'role.in' => 'Device role must be one of: child, guest, or parent.',
-            
+
             'status.required' => 'Device status is required.',
             'status.in' => 'Device status must be one of: active, blocked, or whitelisted.',
 

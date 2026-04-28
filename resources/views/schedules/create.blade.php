@@ -21,14 +21,17 @@
 
     <div class="py-12">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
-            {{-- Info Banner --}}
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p class="text-sm text-blue-800">
-                    <strong>What is a Schedule?</strong> Schedules define when devices can access the internet. 
-                    You can set time windows (e.g., 3:00 PM - 9:00 PM) and optional daily duration limits. 
-                    The system automatically enforces these schedules every minute.
-                </p>
-            </div>
+            <x-collapsible-instructions class="mb-4">
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>Schedules set when your child can use the internet.</li>
+                    <li>Use the form below to pick a <strong>device</strong> and a <strong>day</strong>, then choose <strong>start</strong> and <strong>end</strong> times for that day.</li>
+                    <li>After the allowed schedule time, internet is turned off for that device.</li>
+                    <li>If you set a daily limit, internet also turns off after the allowed minutes are used.</li>
+                    <li>You can make different schedules for weekdays, weekends, or bedtime.</li>
+                    <li>Tap <strong>Create schedule</strong> when you are finished. Turn off <strong>Active</strong> only if you want to save this rule but not use it yet.</li>
+                </ul>
+            </x-collapsible-instructions>
 
             @if($errors->any())
                 <div class="mb-4 p-4 rounded-lg" style="background-color: #EF4444; color: white;">
@@ -147,6 +150,43 @@
     </div>
 
     <script>
+        function setRequiredFieldState(field) {
+            if (!field || field.type === 'hidden' || field.disabled) return;
+            if (!field.hasAttribute('required')) return;
+
+            const hasValue = String(field.value ?? '').trim() !== '';
+            if (hasValue) {
+                field.style.borderColor = '#16A34A';
+                field.style.boxShadow = '0 0 0 1px #16A34A';
+            } else {
+                field.style.borderColor = '#DC2626';
+                field.style.boxShadow = '0 0 0 1px #DC2626';
+            }
+        }
+
+        function bindRequiredFieldFeedback(scope = document) {
+            const fields = scope.querySelectorAll('input[required], select[required], textarea[required]');
+            fields.forEach((field) => {
+                if (field.dataset.requiredBound === '1') return;
+                field.dataset.requiredBound = '1';
+                setRequiredFieldState(field);
+                field.addEventListener('input', () => setRequiredFieldState(field));
+                field.addEventListener('change', () => setRequiredFieldState(field));
+                field.addEventListener('blur', () => setRequiredFieldState(field));
+            });
+        }
+
+        function initializeRequiredFeedback() {
+            bindRequiredFieldFeedback();
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initializeRequiredFeedback);
+        } else {
+            initializeRequiredFeedback();
+        }
+        window.addEventListener('pageshow', initializeRequiredFeedback);
+
         // Client-side validation for time comparison
         document.querySelector('form').addEventListener('submit', function(e) {
             const startTime = document.getElementById('start_time').value;

@@ -56,16 +56,17 @@
                 </div>
             @endif
 
-            {{-- Info Banner: Explains what access attempts are --}}
-            <div class="mb-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p class="text-sm text-blue-800">
-                    <strong>What are Access Attempts?</strong> Access attempts are security events that occur when children 
-                    interact with blocked or flagged websites. <strong>Blocked Website</strong> attempts occur when a child tries 
-                    to access a blocked site (access is denied). <strong>Flagged Website</strong> visits occur when a child visits 
-                    a flagged site (access is allowed but logged for your review). Monitoring these events helps you ensure your 
-                    children are following your internet usage rules.
-                </p>
-            </div>
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    @if(request()->filled('device_id'))
+                        <li>The list below is filtered to <strong>one child</strong>. Use the <strong>Device</strong> filter to pick another child or <strong>All devices</strong>.</li>
+                    @endif
+                    <li>This page shows when a child tried a <strong>blocked</strong> site or visited a <strong>flagged</strong> site you are watching.</li>
+                    <li><strong>Blocked</strong>: the site did not open. <strong>Flagged</strong>: the site opened and the visit is saved for your reports.</li>
+                    <li>Use <strong>Device</strong>, <strong>Type</strong>, dates, and <strong>Search</strong> to narrow the list, then tap <strong>Filter</strong>.</li>
+                </ul>
+            </x-collapsible-instructions>
 
             {{-- Filters Section: Device, Type, Date Range, Search --}}
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200 mb-4 p-4">

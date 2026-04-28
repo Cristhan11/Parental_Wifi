@@ -20,6 +20,13 @@ class EnsureParentDashboardAccess
 
         $user = auth()->user();
 
+        $user->upgradeLegacyOwnerToParentAdminIfEligible();
+        $user = $user->fresh();
+
+        if ($user->hasAdminCapability() && ($user->requires_email_setup || $user->force_password_change)) {
+            return redirect()->route('owner.onboarding.edit');
+        }
+
         if ($user->canAccessParentDashboard()) {
             return $next($request);
         }

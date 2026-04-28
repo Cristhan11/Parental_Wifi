@@ -2,16 +2,16 @@
 
 /**
  * QuizController - Parent Dashboard Quiz Management
- * 
+ *
  * This controller handles all quiz-related operations for parents in the dashboard.
  * Parents use this to create, edit, delete, and import quizzes that their children will take.
- * 
+ *
  * How it works:
  * - Parents log in and access /quizzes
  * - They can create quizzes with multiple questions
  * - Questions are stored as JSON in the database
  * - Parents can also import quizzes from Excel files
- * 
+ *
  * Security: Only authenticated parents can access these routes, and they can only
  * manage quizzes they created (checked via user_id).
  */
@@ -21,8 +21,10 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ImportQuizRequest;
 use App\Http\Requests\StoreQuizRequest;
 use App\Http\Requests\UpdateQuizRequest;
+use App\Models\QuestionBankItem;
 use App\Models\Quiz;
-use App\Services\QuizImportService;
+use App\Models\User;
+use App\Services\QuestionBankExcelService;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,74 +33,133 @@ use Illuminate\View\View;
 
 class QuizController extends Controller
 {
+    private const RANDOM_MODE_TITLE = 'Random Quiz Mode Settings';
+
     /**
      * QuizImportService - Handles Excel file import functionality
-     * 
+     *
      * This service is injected via dependency injection. It's used to:
      * - Read Excel files and extract quiz data
      * - Generate Excel templates for download
-     * 
+     *
      * Why use a service? Separates business logic from controller, making code
      * more organized and testable.
      */
-    protected QuizImportService $importService;
+    protected QuestionBankExcelService $questionBankExcelService;
 
     /**
      * Constructor - Called automatically when controller is created
-     * 
+     *
      * Laravel's dependency injection automatically provides QuizImportService.
      * This is called "dependency injection" - Laravel creates the service for us.
      */
-    public function __construct(QuizImportService $importService)
+    public function __construct(QuestionBankExcelService $questionBankExcelService)
     {
-        $this->importService = $importService;
+        $this->questionBankExcelService = $questionBankExcelService;
     }
 
     /**
      * Display a listing of quizzes for the authenticated parent.
-     * 
+     *
      * Route: GET /quizzes
-     * 
+     *
      * What it does:
      * 1. Gets the currently logged-in parent user
      * 2. Fetches all quizzes created by this parent
      * 3. Counts how many times each quiz has been attempted (for statistics)
      * 4. Orders them by newest first (latest())
      * 5. Displays them in a table view
-     * 
+     *
      * Why withCount('attempts')? This efficiently counts quiz attempts without
      * loading all attempt records, which is faster for large datasets.
-     * 
+     *
      * @return View The quizzes index page showing all quizzes in a table
      */
-    public function index(): View
+    public function index(Request $request): View
     {
-        // Get all quizzes for the logged-in parent
-        // Auth::user() gets the currently authenticated user
-        // ->quizzes() gets all quizzes this parent created (via relationship)
-        $quizzes = Auth::user()->quizzes()
-            ->withCount('attempts')  // Count attempts for each quiz (e.g., "5 attempts")
-            ->latest()                // Order by newest first (created_at DESC)
-            ->get();                  // Execute query and get results
+        $user = Auth::user();
+        $randomModeQuiz = $this->getOrCreateRandomModeQuiz($user);
+        $randomModeDeviceIds = $randomModeQuiz->devices()
+            ->where('devices.role', 'child')
+            ->pluck('devices.id')
+            ->all();
+        $assignableDevices = $this->quizAssignableDevices();
 
-        // Return the view with quizzes data
-        // compact('quizzes') creates ['quizzes' => $quizzes] array
-        return view('quizzes.index', compact('quizzes'));
+        // Build filter options from this parent's own quizzes.
+        $filterLevels = $user->quizzes()
+            ->where('title', '!=', self::RANDOM_MODE_TITLE)
+            ->whereNotNull('level')
+            ->distinct()
+            ->orderByRaw("CASE level WHEN 'Elementary' THEN 1 WHEN 'High School' THEN 2 WHEN 'Senior High School' THEN 3 ELSE 4 END")
+            ->pluck('level');
+        $filterSubjects = $user->quizzes()
+            ->where('title', '!=', self::RANDOM_MODE_TITLE)
+            ->whereNotNull('subject')
+            ->distinct()
+            ->orderByRaw("CASE 
+                WHEN LOWER(subject) = 'math' THEN 1
+                WHEN LOWER(subject) = 'science' THEN 2
+                WHEN LOWER(subject) = 'english' THEN 3
+                ELSE 4
+            END")
+            ->orderBy('subject')
+            ->pluck('subject');
+
+        // Search + filter query (parent-friendly list controls)
+        $quizzes = $user->quizzes()
+            ->where('title', '!=', self::RANDOM_MODE_TITLE)
+            ->withCount('attempts')
+            ->when($request->filled('q'), function ($query) use ($request) {
+                $term = trim((string) $request->string('q'));
+                $query->where(function ($q) use ($term) {
+                    $q->where('title', 'like', "%{$term}%")
+                        ->orWhere('description', 'like', "%{$term}%")
+                        ->orWhere('subject', 'like', "%{$term}%")
+                        ->orWhere('level', 'like', "%{$term}%");
+                });
+            })
+            ->when($request->filled('level'), fn ($query) => $query->where('level', $request->string('level')->toString()))
+            ->when($request->filled('subject'), fn ($query) => $query->where('subject', $request->string('subject')->toString()))
+            ->when($request->filled('status'), function ($query) use ($request) {
+                if ($request->string('status')->toString() === 'active') {
+                    $query->where('is_active', true);
+                } elseif ($request->string('status')->toString() === 'inactive') {
+                    $query->where('is_active', false);
+                }
+            })
+            ->orderByRaw("CASE 
+                WHEN LOWER(subject) = 'math' THEN 1
+                WHEN LOWER(subject) = 'science' THEN 2
+                WHEN LOWER(subject) = 'english' THEN 3
+                ELSE 4
+            END")
+            ->orderBy('subject')
+            ->latest()
+            ->get();
+
+        return view('quizzes.index', compact(
+            'quizzes',
+            'filterLevels',
+            'filterSubjects',
+            'randomModeQuiz',
+            'randomModeDeviceIds',
+            'assignableDevices'
+        ));
     }
 
     /**
      * Show the form for creating a new quiz.
-     * 
+     *
      * Route: GET /quizzes/create
-     * 
+     *
      * What it does:
      * - Displays an empty form where parents can create a new quiz
      * - Form includes fields for: title, description, passing score, time reward
      * - JavaScript dynamically adds/removes questions
-     * 
+     *
      * The form is handled by JavaScript to allow adding multiple questions
      * without page reloads (dynamic form building).
-     * 
+     *
      * @return View The quiz creation form
      */
     public function create(): View
@@ -111,18 +172,18 @@ class QuizController extends Controller
 
     /**
      * Store a newly created quiz in storage.
-     * 
+     *
      * Route: POST /quizzes
-     * 
+     *
      * What it does:
      * 1. Validates the form data (via StoreQuizRequest)
      * 2. Formats questions with sequential IDs (1, 2, 3, ...)
      * 3. Stores quiz in database
      * 4. Redirects back to quiz list with success message
-     * 
+     *
      * Why format questions? Questions come from form as array [0, 1, 2, ...]
      * but we want them stored with IDs [1, 2, 3, ...] for consistency.
-     * 
+     *
      * Questions are stored as JSON in the database. JSON (JavaScript Object Notation)
      * is a text format for storing structured data. Example:
      * {
@@ -130,8 +191,8 @@ class QuizController extends Controller
      *     {"id": 1, "question": "What is 2+2?", "type": "multiple_choice", ...}
      *   ]
      * }
-     * 
-     * @param StoreQuizRequest $request Validated form data (title, questions, etc.)
+     *
+     * @param  StoreQuizRequest  $request  Validated form data (title, questions, etc.)
      * @return RedirectResponse Redirects to quiz list with success message
      */
     public function store(StoreQuizRequest $request): RedirectResponse
@@ -139,20 +200,15 @@ class QuizController extends Controller
         // Get validated form data (StoreQuizRequest ensures all required fields exist)
         // This prevents invalid data from reaching the database
         $validated = $request->validated();
+        $scoringMode = 'pass_score';
+        $passingScore = (int) ($validated['passing_score'] ?? 70);
+        $fixedReward = (int) ($validated['time_reward_minutes'] ?? 15);
+        $minutesPerCorrect = 1;
 
         // Format questions with sequential IDs
         // Questions come from form as: [0 => question1, 1 => question2, ...]
         // We convert to: [id => 1, id => 2, ...] for better readability
         $questions = [];
-        foreach ($validated['questions'] as $index => $question) {
-            $questions[] = [
-                'id' => $index + 1,  // Start IDs at 1 (not 0) - more user-friendly
-                'question' => $question['question'],  // Question text
-                'type' => $question['type'],  // multiple_choice, fill_blank, or true_false
-                'options' => $question['options'] ?? [],  // Options array (empty for fill_blank)
-                'correct_answer' => $question['correct_answer'],  // The correct answer
-            ];
-        }
 
         // Create quiz record in database
         // Quiz::create() automatically saves to database
@@ -160,8 +216,13 @@ class QuizController extends Controller
             'user_id' => Auth::id(),  // Link quiz to current parent (who created it)
             'title' => $validated['title'],  // Quiz name (e.g., "Math Quiz")
             'description' => $validated['description'] ?? null,  // Optional description
-            'passing_score' => $validated['passing_score'],  // Percentage needed to pass (0-100)
-            'time_reward_minutes' => $validated['time_reward_minutes'],  // Minutes granted if passed
+            'level' => $validated['level'],
+            'subject' => $validated['subject'],
+            'question_count' => (int) ($validated['question_count'] ?? 10),
+            'scoring_mode' => $scoringMode,
+            'minutes_per_correct' => $minutesPerCorrect,
+            'passing_score' => $passingScore,
+            'time_reward_minutes' => $fixedReward,
             'max_passes_per_day' => $validated['max_passes_per_day'] ?? null,
             'retry_cooldown_minutes' => $validated['retry_cooldown_minutes'] ?? null,
             'questions' => ['questions' => $questions],  // Store as JSON: {questions: [...]}
@@ -179,18 +240,18 @@ class QuizController extends Controller
 
     /**
      * Show the form for editing the specified quiz.
-     * 
+     *
      * Route: GET /quizzes/{quiz}/edit
-     * 
+     *
      * What it does:
      * 1. Checks if parent owns this quiz (security check)
      * 2. Loads quiz data from database
      * 3. Displays edit form pre-filled with existing quiz data
-     * 
+     *
      * Security: Prevents parents from editing other parents' quizzes.
      * If someone tries to edit a quiz they don't own, they get a 403 Forbidden error.
-     * 
-     * @param Quiz $quiz The quiz to edit (Laravel automatically finds it by ID from URL)
+     *
+     * @param  Quiz  $quiz  The quiz to edit (Laravel automatically finds it by ID from URL)
      * @return View The quiz edit form with existing data
      */
     public function edit(Quiz $quiz): View
@@ -201,6 +262,48 @@ class QuizController extends Controller
         // Auth::id() is the currently logged-in parent
         if ($quiz->user_id !== Auth::id()) {
             abort(403, 'Unauthorized action.');  // 403 = Forbidden
+        }
+
+        // Backward compatibility for early seeded/built-in quizzes that were created
+        // with empty question JSON. Hydrate visible questions from question bank for edit UI.
+        $existingQuestions = $quiz->questions['questions'] ?? [];
+        if (empty($existingQuestions) && $quiz->level && $quiz->subject) {
+            $questionCount = max(1, (int) ($quiz->question_count ?? 10));
+            $generatedQuestions = QuestionBankItem::query()
+                ->where('level', $quiz->level)
+                ->where('subject', $quiz->subject)
+                ->where('status', 'Active')
+                ->inRandomOrder()
+                ->limit($questionCount)
+                ->get()
+                ->values()
+                ->map(function (QuestionBankItem $item, int $index): array {
+                    $options = [
+                        (string) $item->option_a,
+                        (string) $item->option_b,
+                        (string) $item->option_c,
+                        (string) $item->option_d,
+                    ];
+
+                    $correctMap = [
+                        'A' => 0,
+                        'B' => 1,
+                        'C' => 2,
+                        'D' => 3,
+                    ];
+                    $correctIndex = $correctMap[strtoupper((string) $item->correct_option)] ?? 0;
+
+                    return [
+                        'id' => $index + 1,
+                        'question' => (string) $item->question_text,
+                        'type' => 'multiple_choice',
+                        'options' => $options,
+                        'correct_answer' => $options[$correctIndex] ?? $options[0],
+                    ];
+                })
+                ->all();
+
+            $quiz->setAttribute('questions', ['questions' => $generatedQuestions]);
         }
 
         $devices = $this->quizAssignableDevices();
@@ -216,23 +319,23 @@ class QuizController extends Controller
 
     /**
      * Update the specified quiz in storage.
-     * 
+     *
      * Route: PUT /quizzes/{quiz}
-     * 
+     *
      * What it does:
      * 1. Validates the updated form data
      * 2. Checks parent owns the quiz (security)
      * 3. Formats questions with IDs (same as store method)
      * 4. Updates quiz in database
      * 5. Redirects with success message
-     * 
+     *
      * Special handling for is_active checkbox:
      * - HTML checkboxes don't send a value when unchecked
      * - We use a hidden input with value "0" to always get a value
      * - "0" = false, "1" = true (converted to boolean)
-     * 
-     * @param UpdateQuizRequest $request Validated form data
-     * @param Quiz $quiz The quiz to update (found by ID from URL)
+     *
+     * @param  UpdateQuizRequest  $request  Validated form data
+     * @param  Quiz  $quiz  The quiz to update (found by ID from URL)
      * @return RedirectResponse Redirects to quiz list with success message
      */
     public function update(UpdateQuizRequest $request, Quiz $quiz): RedirectResponse
@@ -245,10 +348,14 @@ class QuizController extends Controller
 
         // Get validated form data
         $validated = $request->validated();
+        $scoringMode = 'pass_score';
+        $passingScore = (int) ($validated['passing_score'] ?? 70);
+        $fixedReward = (int) ($validated['time_reward_minutes'] ?? 15);
+        $minutesPerCorrect = 1;
 
         // Format questions with sequential IDs (same process as store method)
         $questions = [];
-        foreach ($validated['questions'] as $index => $question) {
+        foreach (($validated['questions'] ?? []) as $index => $question) {
             $questions[] = [
                 'id' => $index + 1,
                 'question' => $question['question'],
@@ -263,8 +370,13 @@ class QuizController extends Controller
         $quiz->update([
             'title' => $validated['title'],
             'description' => $validated['description'] ?? null,
-            'passing_score' => $validated['passing_score'],
-            'time_reward_minutes' => $validated['time_reward_minutes'],
+            'level' => $validated['level'],
+            'subject' => $validated['subject'],
+            'question_count' => (int) ($validated['question_count'] ?? ($quiz->question_count ?: 10)),
+            'scoring_mode' => $scoringMode,
+            'minutes_per_correct' => $minutesPerCorrect,
+            'passing_score' => $passingScore,
+            'time_reward_minutes' => $fixedReward,
             'max_passes_per_day' => $validated['max_passes_per_day'] ?? null,
             'retry_cooldown_minutes' => $validated['retry_cooldown_minutes'] ?? null,
             'questions' => ['questions' => $questions],  // Update questions JSON
@@ -275,6 +387,29 @@ class QuizController extends Controller
 
         return redirect()->route('quizzes.index')
             ->with('success', 'Quiz updated successfully!');
+    }
+
+    public function updateRandomModeSettings(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'minutes_per_correct' => ['required', 'integer', 'min:1', 'max:60'],
+            'retry_cooldown_minutes' => ['nullable', 'integer', 'min:0', 'max:10080'],
+            'max_passes_per_day' => ['nullable', 'integer', 'min:1', 'max:500'],
+            'devices' => ['nullable', 'array'],
+            'devices.*' => ['integer'],
+        ]);
+
+        $quiz = $this->getOrCreateRandomModeQuiz(Auth::user());
+        $quiz->update([
+            'minutes_per_correct' => (int) $validated['minutes_per_correct'],
+            'retry_cooldown_minutes' => $validated['retry_cooldown_minutes'] ?? null,
+            'max_passes_per_day' => $validated['max_passes_per_day'] ?? null,
+            'is_active' => true,
+        ]);
+        $quiz->devices()->sync($this->sanitizedQuizDeviceIds($request));
+
+        return redirect()->route('quizzes.index')
+            ->with('success', 'Random Quiz Mode settings updated.');
     }
 
     /**
@@ -302,21 +437,21 @@ class QuizController extends Controller
 
     /**
      * Remove the specified quiz from storage.
-     * 
+     *
      * Route: DELETE /quizzes/{quiz}
-     * 
+     *
      * What it does:
      * 1. Checks parent owns the quiz (security)
      * 2. Checks if quiz has been attempted by children
      * 3. If attempts exist, prevents deletion (preserves history)
      * 4. If no attempts, deletes quiz from database
-     * 
+     *
      * Why prevent deletion if attempts exist?
      * - Preserves quiz history for parents to review
      * - Maintains data integrity (attempts reference the quiz)
      * - Parents can deactivate instead (set is_active = false)
-     * 
-     * @param Quiz $quiz The quiz to delete
+     *
+     * @param  Quiz  $quiz  The quiz to delete
      * @return RedirectResponse Redirects to quiz list with message
      */
     public function destroy(Quiz $quiz): RedirectResponse
@@ -345,16 +480,16 @@ class QuizController extends Controller
 
     /**
      * Show the Excel import form.
-     * 
+     *
      * Route: GET /quizzes/import
-     * 
+     *
      * What it does:
      * - Displays a form where parents can upload an Excel file
      * - Form includes file upload input and link to download template
-     * 
+     *
      * Why Excel import? Allows parents to create many quizzes quickly
      * by filling out a spreadsheet instead of using the web form.
-     * 
+     *
      * @return View The Excel import form
      */
     public function import(): View
@@ -364,72 +499,88 @@ class QuizController extends Controller
 
     /**
      * Process the Excel import.
-     * 
+     *
      * Route: POST /quizzes/import
-     * 
+     *
      * What it does:
      * 1. Validates the uploaded Excel file (via ImportQuizRequest)
      * 2. Calls QuizImportService to read and parse the Excel file
      * 3. Creates quiz in database from Excel data
      * 4. Redirects with success or error message
-     * 
+     *
      * Excel Format Expected:
      * - Row 1: Headers (Quiz Title, Description, Passing Percentage, Time Reward, Question, Type, Options A-D, Correct Answer)
      * - Row 2+: Quiz metadata (first row) and questions (remaining rows)
-     * 
+     *
      * Error Handling: If import fails (invalid format, missing data, etc.),
      * catches the exception and shows error message to user.
-     * 
-     * @param ImportQuizRequest $request Validated file upload request
+     *
+     * @param  ImportQuizRequest  $request  Validated file upload request
      * @return RedirectResponse Redirects to quiz list (success) or import form (error)
      */
     public function processImport(ImportQuizRequest $request): RedirectResponse
     {
-        try {
-            // Call QuizImportService to handle the Excel file
-            // $request->file('excel_file') gets the uploaded file
-            // Auth::id() links the quiz to the current parent
-            $quiz = $this->importService->importFromExcel(
-                $request->file('excel_file'),
-                Auth::id()
-            );
+        $result = $this->questionBankExcelService->import(
+            $request->file('excel_file'),
+            (int) Auth::id(),
+            $request->string('mode')->toString()
+        );
 
-            // Success: Redirect to quiz list with success message
-            return redirect()->route('quizzes.index')
-                ->with('success', "Quiz '{$quiz->title}' imported successfully!");
-        } catch (\Exception $e) {
-            // Error: Redirect back to import form with error message
-            // $e->getMessage() gets the error description
+        if (! empty($result['errors'])) {
             return redirect()->route('quizzes.import')
-                ->with('error', 'Import failed: ' . $e->getMessage());
+                ->with('error', implode(' ', array_slice($result['errors'], 0, 5)));
         }
+
+        return redirect()->route('quizzes.index')
+            ->with('success', "Question bank import complete. Added: {$result['created']}, Updated: {$result['updated']}.");
     }
 
     /**
      * Download Excel template.
-     * 
+     *
      * Route: GET /quizzes/template/download
-     * 
+     *
      * What it does:
      * - Generates an Excel file with the correct format
      * - Includes headers and example rows
      * - Downloads the file to user's computer
-     * 
+     *
      * Why template? Shows parents exactly how to format their Excel file
      * with headers and example data they can copy/modify.
-     * 
+     *
      * @return StreamedResponse Excel file download
      */
     public function downloadTemplate()
     {
-        try {
-            // Call QuizImportService to generate Excel template
-            // Returns a file download response
-            return $this->importService->generateTemplate();
-        } catch (\Exception $e) {
-            // If template generation fails, redirect with error
-            return redirect()->route('quizzes.import')
-                ->with('error', 'Failed to generate template: ' . $e->getMessage());
-        }
+        return $this->questionBankExcelService->template();
+    }
+
+    public function exportQuestionBank()
+    {
+        return $this->questionBankExcelService->exportForUser((int) Auth::id());
+    }
+
+    protected function getOrCreateRandomModeQuiz(User $user): Quiz
+    {
+        return Quiz::firstOrCreate(
+            [
+                'user_id' => $user->id,
+                'title' => self::RANDOM_MODE_TITLE,
+            ],
+            [
+                'description' => 'Global random quiz mode settings for child devices.',
+                'level' => null,
+                'subject' => null,
+                'question_count' => 10,
+                'scoring_mode' => 'time_reward',
+                'minutes_per_correct' => 1,
+                'passing_score' => 0,
+                'time_reward_minutes' => 1,
+                'max_passes_per_day' => null,
+                'retry_cooldown_minutes' => null,
+                'questions' => ['questions' => []],
+                'is_active' => true,
+            ]
+        );
     }
 }
