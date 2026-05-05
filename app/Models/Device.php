@@ -39,6 +39,8 @@ class Device extends Model
         'remaining_time_minutes',
         'total_time_allocated',
         'last_seen_at',
+        'preferred_quiz_id',
+        'preferred_video_id',
     ];
 
     /**
@@ -77,6 +79,16 @@ class Device extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
+    }
+
+    public function preferredQuiz(): BelongsTo
+    {
+        return $this->belongsTo(Quiz::class, 'preferred_quiz_id');
+    }
+
+    public function preferredVideo(): BelongsTo
+    {
+        return $this->belongsTo(Video::class, 'preferred_video_id');
     }
 
     /**
@@ -209,6 +221,8 @@ class Device extends Model
     public function quizzes(): BelongsToMany
     {
         return $this->belongsToMany(Quiz::class, 'device_quiz')
+            ->using(DeviceQuizPivot::class)
+            ->withPivot(['random_bank_levels'])
             ->withTimestamps();
     }
 

@@ -102,6 +102,24 @@ Parents should register devices without typing MAC addresses.
 
 ---
 
+## Child captive portal — first experience (Part 2; see `Simplify_project_child_portal.md`)
+
+This section aligns Part 1 with **Part 2** of the simplify plan (full detail, age brackets, recommendation logic, and checklists live in **`Simplify_project_child_portal.md`**).
+
+### How the child opens the portal (not a portal-page button)
+
+- When time is exhausted, the **phone or tablet OS** usually shows a **Wi‑Fi / captive-portal notification** (labels vary: e.g. **“Sign in to Wi‑Fi”**, **“Open network login page”**). The child **uses that system UI** to open the browser to the portal URL.
+- That action is **device/OS chrome**, not a required duplicate **“Sign in to Wi‑Fi”** button on the Laravel portal for recognized child devices. The portal may use optional helper copy only.
+
+### What the child must see first on the portal (replace legacy landing)
+
+- **Do not** use the legacy pattern: a long scroll of **“Available Quizzes”** tiles (every assigned quiz on first paint) as the default home for known child devices.
+- **Do** use a **chooser-first** screen: **only two primary actions — Quiz and Video** — as the **visual focus**, in a **compact centered layout** that occupies a **fraction of the viewport** (not a full dashboard of same-sized cards). Device name and time remaining are **secondary** (small strip or footer).
+- **After** the child picks Quiz or Video, show the **recommended** activity with **Start**; full lists and extra controls (e.g. **More**, subject/**Other**, random quiz) follow **progressive disclosure** per Part 2.
+- **Style:** refresh the overall child-portal look (palette, spacing, focal hierarchy) while keeping **offline-first / local-only** assets on the Pi (no CDN for critical portal UI).
+
+---
+
 ## 3) Make Quiz Assignment Easier with Built-In Question Bank
 ### Objective
 Parents should assign quizzes quickly without manually creating all questions.
@@ -385,6 +403,7 @@ System changes should apply immediately after key events while staying lightweig
 - In random quiz time-reward mode, each correct answer grants configured minutes (no pass-score requirement).
 - Policy updates from registration/device approval/time grants become visible/effective within a few seconds.
 - Critical pages remain usable when internet is slow or unavailable because required assets are served locally from Raspberry Pi.
+- **Child portal (Part 2):** opening the portal via the **OS captive / Wi‑Fi notification** leads to a **first screen** that foregrounds **Quiz** and **Video** only (focal, fraction-of-display layout); individual quizzes are not listed as the default grid on first paint. Full acceptance detail: **`Simplify_project_child_portal.md`**.
 
 ---
 

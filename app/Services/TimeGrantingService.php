@@ -43,6 +43,8 @@ class TimeGrantingService
      */
     protected NoDogSplashService $noDogSplashService;
 
+    protected TimeTrackingService $timeTrackingService;
+
     /**
      * Constructor - inject dependencies.
      * 
@@ -53,10 +55,14 @@ class TimeGrantingService
      * @param NetworkService $networkService Service for network-level blocking
      * @param NoDogSplashService $noDogSplashService Service for portal redirects
      */
-    public function __construct(NetworkService $networkService, NoDogSplashService $noDogSplashService)
-    {
+    public function __construct(
+        NetworkService $networkService,
+        NoDogSplashService $noDogSplashService,
+        TimeTrackingService $timeTrackingService
+    ) {
         $this->networkService = $networkService;
         $this->noDogSplashService = $noDogSplashService;
+        $this->timeTrackingService = $timeTrackingService;
     }
 
     /**
@@ -96,7 +102,7 @@ class TimeGrantingService
      * }
      * ```
      */
-    public function grantTimeFromQuiz(Device $device, QuizAttempt $quizAttempt): ?DeviceTimeGrant
+    public function grantTimeFromQuiz(Device $device, QuizAttempt $quizAttempt, array $portalSync = []): ?DeviceTimeGrant
     {
         // Security check: Ensure the quiz attempt belongs to the same device
         // This prevents one device from granting time to another device
@@ -172,7 +178,7 @@ class TimeGrantingService
         // grantTime() handles the actual time granting and device unblocking
         // source='quiz' tells us this time came from quiz completion
         // sourceId=$quizAttempt->id links to the specific quiz attempt (audit trail)
-        return $this->grantTime($device, $minutes, 'quiz', $quizAttempt->id);
+        return $this->grantTime($device, $minutes, 'quiz', $quizAttempt->id, $portalSync);
     }
 
     /**
@@ -224,7 +230,7 @@ class TimeGrantingService
      * }
      * ```
      */
-    public function grantTimeFromVideo(Device $device, VideoCompletion $videoCompletion): ?DeviceTimeGrant
+    public function grantTimeFromVideo(Device $device, VideoCompletion $videoCompletion, array $portalSync = []): ?DeviceTimeGrant
     {
         // Security check: Ensure the video completion belongs to the same device
         // This prevents one device from granting time to another device
@@ -320,7 +326,7 @@ class TimeGrantingService
         // grantTime() handles the actual time granting and device unblocking
         // source='video' tells us this time came from video completion
         // sourceId=$videoCompletion->id links to the specific video completion (audit trail)
-        return $this->grantTime($device, $minutes, 'video', $videoCompletion->id);
+        return $this->grantTime($device, $minutes, 'video', $videoCompletion->id, $portalSync);
     }
 
     /**
@@ -349,6 +355,7 @@ class TimeGrantingService
      * @param int $minutes Amount of time to grant (must be > 0)
      * @param string $source Source of grant: 'quiz', 'video', or 'manual'
      * @param int|null $sourceId Optional: ID of QuizAttempt or VideoCompletion (for audit trail)
+     * @param array<string, mixed> $portalSync Optional: for quiz/video portal grants, pass ['client_ip' => string] to sync IP, session, and captive auth for parent dashboard live state
      * @return DeviceTimeGrant The created time grant record
      * @throws InvalidArgumentException If minutes <= 0
      * 
@@ -367,7 +374,7 @@ class TimeGrantingService
      * $grant = $service->grantTime($device, 10, 'manual', null);
      * ```
      */
-    public function grantTime(Device $device, int $minutes, string $source, ?int $sourceId = null): DeviceTimeGrant
+    public function grantTime(Device $device, int $minutes, string $source, ?int $sourceId = null, array $portalSync = []): DeviceTimeGrant
     {
         // Validate minutes is positive (programming error if <= 0)
         // This throws an exception because it's a programming error, not a business logic failure
@@ -395,6 +402,12 @@ class TimeGrantingService
             // Unblock device so it can browse again
             // This updates device status from 'blocked' to 'active'
             $this->unblockDevice($device);
+            $device->refresh();
+        }
+
+        if ($portalSync !== []) {
+            $this->applyPortalPresenceSync($device, $source, $portalSync);
+            $device->refresh();
         }
 
         // Log the time grant operation for debugging and audit trail
@@ -412,19 +425,85 @@ class TimeGrantingService
             // Emit realtime feedback to parent dashboard after successful grant.
             // Why here: this is the single source-of-truth point where remaining
             // time has already been updated and (if needed) unblock flow completed.
+            $activeSession = $device->activeSession();
+            $activeStarted = $activeSession?->started_at?->toIso8601String();
             event(new TimeGranted(
                 userId: $device->user_id,
                 deviceId: $device->id,
                 deviceName: $device->name,
                 minutesGranted: $minutes,
                 remainingMinutes: (int) ($device->remaining_time_minutes ?? 0),
-                source: $source
+                source: $source,
+                isConnected: ! empty($device->ip_address),
+                activeSessionStartedAt: $activeStarted,
+                ipAddress: $device->ip_address
             ));
         }
 
         // Return the created DeviceTimeGrant record
         // This can be used by callers to track the grant (e.g., display to user)
         return $grant;
+    }
+
+    /**
+     * After a portal quiz/video grant, align DB presence with the child request so the parent
+     * dashboard can show Connected and session-backed usage without waiting for MonitorDeviceConnections.
+     *
+     * @param  array<string, mixed>  $portalSync
+     */
+    protected function applyPortalPresenceSync(Device $device, string $source, array $portalSync): void
+    {
+        if (! in_array($source, ['quiz', 'video'], true)) {
+            return;
+        }
+
+        $clientIp = trim((string) ($portalSync['client_ip'] ?? ''));
+        if ($clientIp === '' || ! $this->isUsablePortalClientIp($clientIp)) {
+            return;
+        }
+
+        $device->update([
+            'ip_address' => $clientIp,
+            'last_seen_at' => now(),
+        ]);
+
+        $device->refresh();
+
+        if ($device->status === 'active' && (int) ($device->remaining_time_minutes ?? 0) > 0) {
+            try {
+                $this->noDogSplashService->allowDeviceThrough($device);
+            } catch (\Exception $e) {
+                Log::debug('allowDeviceThrough after portal grant failed (non-fatal)', [
+                    'device_id' => $device->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        if ($device->status === 'active') {
+            try {
+                $this->timeTrackingService->startSession($device->fresh());
+            } catch (\Exception $e) {
+                Log::debug('startSession after portal grant failed (non-fatal)', [
+                    'device_id' => $device->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+    }
+
+    protected function isUsablePortalClientIp(string $ip): bool
+    {
+        if (filter_var($ip, FILTER_VALIDATE_IP) === false) {
+            return false;
+        }
+
+        $isLoopback = in_array($ip, ['127.0.0.1', '::1'], true);
+        if ($isLoopback && ! app()->environment(['local', 'testing'])) {
+            return false;
+        }
+
+        return true;
     }
 
     /**

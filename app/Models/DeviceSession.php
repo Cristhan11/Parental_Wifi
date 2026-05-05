@@ -135,10 +135,9 @@ class DeviceSession extends Model
             return round($this->duration_seconds / 60, 2);
         }
 
-        // If session is still active, calculate from start time to now
+        // If session is still active, calculate from start time to now (sub-minute precision)
         if ($this->isActive()) {
-            // diffInMinutes() calculates difference from started_at to now()
-            return round($this->started_at->diffInMinutes(now()), 2);
+            return round($this->started_at->diffInSeconds(now()) / 60, 2);
         }
 
         return 0;  // No duration if session hasn't started

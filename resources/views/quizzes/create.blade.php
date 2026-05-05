@@ -23,14 +23,14 @@
                     <form action="{{ route('quizzes.store') }}" method="POST" id="quizForm">
                         @csrf
 
-                        <div class="mb-6 rounded-md border p-4" style="border-color: #EAB308; background-color: #FFDE15;">
-                            <h3 class="text-sm font-semibold text-black">How this works</h3>
-                            <ul class="mt-2 list-disc pl-5 text-sm text-black space-y-1">
-                                <li>Fill in the basic quiz information first.</li>
-                                <li>Required fields are highlighted in red until completed, then turn green.</li>
-                                <li>Add questions below and assign the quiz to child devices.</li>
+                        <x-collapsible-instructions class="mb-6">
+                            <p class="mb-2 font-semibold">Instructions</p>
+                            <ul class="list-inside list-disc space-y-1">
+                                <li>Fill in the quiz name and rules first. Red boxes mean something is missing; they turn green when the value is OK.</li>
+                                <li>Add your questions below, then pick which <strong>child</strong> devices can use this quiz (you can change that later on <strong>Edit</strong>).</li>
+                                <li>Tap <strong>Save</strong> at the bottom to store the quiz. Use the back arrow to return to the list without saving.</li>
                             </ul>
-                        </div>
+                        </x-collapsible-instructions>
 
                         {{-- Quiz Metadata: Title, Description, Passing Score, Time Reward --}}
                         <div class="mb-6">
@@ -53,12 +53,13 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
-                                <label for="level" class="block text-sm font-medium text-gray-700 mb-2">Level *</label>
+                                <label for="level" class="block text-sm font-medium text-gray-700 mb-2">School level *</label>
                                 <select name="level" id="level" required class="required-field w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2">
-                                    <option value="Elementary" {{ old('level') === 'Elementary' ? 'selected' : '' }}>Elementary</option>
-                                    <option value="High School" {{ old('level') === 'High School' ? 'selected' : '' }}>High School</option>
-                                    <option value="Senior High School" {{ old('level') === 'Senior High School' ? 'selected' : '' }}>Senior High School</option>
+                                    @foreach(\App\Support\QuizSchoolLevel::levels() as $lvl)
+                                        <option value="{{ $lvl }}" {{ old('level', \App\Support\QuizSchoolLevel::ELEMENTARY) === $lvl ? 'selected' : '' }}>{{ $lvl }}</option>
+                                    @endforeach
                                 </select>
+                                <p class="mt-1 text-xs text-gray-500">Used with subject to match the question bank. You can assign any quiz to any child device.</p>
                             </div>
                             <div>
                                 <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">Subject *</label>

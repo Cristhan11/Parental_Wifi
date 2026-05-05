@@ -18,21 +18,19 @@
         /*
          * Do NOT hide ::-webkit-media-controls-overlay-play-button or clip the controls enclosure:
          * on iOS/Android WebKit that removes the main play target and can break the control bar.
-         * Hiding the timeline (desktop only) still discourages scrubbing on large screens.
+         * Hide timeline / time / speed where Blink/WebKit allow it; mobile also gets JS seek clamp below.
          */
-        @media (min-width: 768px) {
-            #videoPlayer::-webkit-media-controls-timeline {
-                display: none !important;
-            }
-            #videoPlayer::-webkit-media-controls-current-time-display {
-                display: none !important;
-            }
-            #videoPlayer::-webkit-media-controls-time-remaining-display {
-                display: none !important;
-            }
-            #videoPlayer::-webkit-media-controls-playback-rate-button {
-                display: none !important;
-            }
+        #videoPlayer::-webkit-media-controls-timeline {
+            display: none !important;
+        }
+        #videoPlayer::-webkit-media-controls-current-time-display {
+            display: none !important;
+        }
+        #videoPlayer::-webkit-media-controls-time-remaining-display {
+            display: none !important;
+        }
+        #videoPlayer::-webkit-media-controls-playback-rate-button {
+            display: none !important;
         }
         @if($video->dictionary_words_enabled)
         #videoPlayer::-webkit-media-controls-fullscreen-button {
@@ -72,6 +70,10 @@
                         playsinline
                         webkit-playsinline
                         x5-playsinline
+                        @if($video->dictionary_words_enabled)
+                        controlslist="nofullscreen noremoteplayback"
+                        disablepictureinpicture
+                        @endif
                         ontimeupdate="handleTimeUpdate()"
                         onended="handleVideoEnded()"
                         onerror="handleVideoError(event)"
@@ -148,6 +150,8 @@
         const shownWords = [];
         /** How long each dictionary word overlay stays visible (8s + 3s). */
         const dictionaryWordDisplayMs = 11000;
+        const dictionaryWordsEnabled = @json((bool) $video->dictionary_words_enabled);
+        let portalFsRedirecting = false;
 
         function portalFullscreenElement() {
             return document.fullscreenElement
@@ -173,6 +177,7 @@
             } else {
                 const exit = document.exitFullscreen
                     || document.webkitExitFullscreen
+                    || document.webkitCancelFullScreen
                     || document.mozCancelFullScreen
                     || document.msExitFullscreen;
                 if (exit) {
@@ -182,7 +187,45 @@
         }
 
         function portalOnFullscreenChange() {
-            if (!portalFsBtn) {
+            /* Native <video> fullscreen hides our overlay (sibling of <video>). Move fullscreen to the stage wrapper. */
+            if (dictionaryWordsEnabled && videoPlayer && videoStage && !portalFsRedirecting) {
+                const active = portalFullscreenElement();
+                if (active === videoPlayer) {
+                    portalFsRedirecting = true;
+                    try {
+                        if (document.exitFullscreen) {
+                            document.exitFullscreen();
+                        } else if (document.webkitExitFullscreen) {
+                            document.webkitExitFullscreen();
+                        } else if (document.webkitCancelFullScreen) {
+                            document.webkitCancelFullScreen();
+                        } else if (document.mozCancelFullScreen) {
+                            document.mozCancelFullScreen();
+                        } else if (document.msExitFullscreen) {
+                            document.msExitFullscreen();
+                        }
+                    } catch (e) {
+                        console.warn('Exit video fullscreen failed:', e);
+                    }
+                    try {
+                        const req = videoStage.requestFullscreen
+                            || videoStage.webkitRequestFullscreen
+                            || videoStage.webkitRequestFullScreen
+                            || videoStage.mozRequestFullScreen
+                            || videoStage.msRequestFullscreen;
+                        if (req) {
+                            req.call(videoStage);
+                        }
+                    } catch (e) {
+                        console.warn('Enter stage fullscreen failed:', e);
+                    }
+                    window.setTimeout(function () {
+                        portalFsRedirecting = false;
+                    }, 600);
+                }
+            }
+
+            if (!portalFsBtn || !videoStage) {
                 return;
             }
             const on = portalFullscreenElement() === videoStage;
@@ -199,6 +242,26 @@
             document.addEventListener('webkitfullscreenchange', portalOnFullscreenChange);
             document.addEventListener('mozfullscreenchange', portalOnFullscreenChange);
             document.addEventListener('MSFullscreenChange', portalOnFullscreenChange);
+
+            /* iOS WebKit: video-only fullscreen does not include DOM overlays; exit so the child can use the yellow stage fullscreen control. */
+            if (dictionaryWordsEnabled && videoPlayer) {
+                videoPlayer.addEventListener('webkitbeginfullscreen', function () {
+                    if (portalFsRedirecting) {
+                        return;
+                    }
+                    portalFsRedirecting = true;
+                    try {
+                        if (typeof videoPlayer.webkitExitFullscreen === 'function') {
+                            videoPlayer.webkitExitFullscreen();
+                        }
+                    } catch (e) {
+                        console.warn('webkitExitFullscreen failed:', e);
+                    }
+                    window.setTimeout(function () {
+                        portalFsRedirecting = false;
+                    }, 400);
+                });
+            }
         }
 
         const playPauseBtn = document.getElementById('portalVideoPlayPauseBtn');
@@ -244,7 +307,7 @@
                 switch (video.error.code) {
                     case 1: errorMsg += 'Video loading aborted. Please try refreshing the page.'; break;
                     case 2: errorMsg += 'Network error while loading video. Please check your connection.'; break;
-                    case 3: errorMsg += 'Video codec not supported by your browser. Please try a different browser or video format.'; break;
+                    case 3: errorMsg += 'Playback failed (decode). Often this is a bad or interrupted download—try refreshing. If it keeps happening, re-encode the file as H.264 + AAC in MP4, or try another browser.'; break;
                     case 4: errorMsg += 'Video format not supported. Please use MP4, WebM, or OGG format.'; break;
                     default: errorMsg += 'Unknown error occurred. Please try again.';
                 }
@@ -308,12 +371,50 @@
             wordSubmissionForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
         }
 
-        videoPlayer.addEventListener('timeupdate', function() {
-            if (!videoPlayer.lastValidTime) {
-                videoPlayer.lastValidTime = 0;
+        (function preventPortalVideoSkip() {
+            if (!videoPlayer) {
+                return;
             }
-            videoPlayer.lastValidTime = videoPlayer.currentTime;
-        });
+            const seekToleranceSec = 0.85;
+            let portalSeekInProgress = false;
+
+            videoPlayer.portalMaxTime = 0;
+
+            videoPlayer.addEventListener('seeking', function () {
+                portalSeekInProgress = true;
+            });
+
+            videoPlayer.addEventListener('seeked', function () {
+                portalSeekInProgress = false;
+                const maxT = videoPlayer.portalMaxTime || 0;
+                if (videoPlayer.currentTime > maxT + seekToleranceSec) {
+                    try {
+                        videoPlayer.currentTime = maxT;
+                    } catch (e) {
+                        console.warn('Seek clamp failed:', e);
+                    }
+                }
+            });
+
+            videoPlayer.addEventListener('timeupdate', function () {
+                /* Native `seeking` stays true during many scrub drags so we do not treat preview times as watched. */
+                if (portalSeekInProgress || videoPlayer.seeking) {
+                    return;
+                }
+                const ct = videoPlayer.currentTime;
+                const prev = videoPlayer.portalMaxTime || 0;
+                if (ct > prev) {
+                    videoPlayer.portalMaxTime = ct;
+                }
+            });
+
+            videoPlayer.addEventListener('ratechange', function () {
+                if (videoPlayer.playbackRate !== 1) {
+                    videoPlayer.playbackRate = 1;
+                }
+            });
+            videoPlayer.playbackRate = 1;
+        })();
 
         function goBack() {
             if (confirm('Are you sure you want to leave? Your progress will be lost.')) {

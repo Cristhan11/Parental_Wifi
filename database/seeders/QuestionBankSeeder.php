@@ -10,6 +10,7 @@ class QuestionBankSeeder extends Seeder
     public function run(): void
     {
         $distribution = [
+            'Kindergarten' => ['Math' => 20, 'English' => 20, 'Science' => 20],
             'Elementary' => ['Math' => 50, 'English' => 50, 'Science' => 50],
             'High School' => ['Math' => 34, 'English' => 33, 'Science' => 33],
             'Senior High School' => ['Math' => 20, 'English' => 20, 'Science' => 20],
@@ -45,6 +46,9 @@ class QuestionBankSeeder extends Seeder
     protected function buildQuestion(string $level, string $subject, int $index): array
     {
         return match ("{$level}|{$subject}") {
+            'Kindergarten|Math' => $this->kindergartenMath($index),
+            'Kindergarten|English' => $this->kindergartenEnglish($index),
+            'Kindergarten|Science' => $this->kindergartenScience($index),
             'Elementary|Math' => $this->elementaryMath($index),
             'Elementary|English' => $this->elementaryEnglish($index),
             'Elementary|Science' => $this->elementaryScience($index),
@@ -56,6 +60,53 @@ class QuestionBankSeeder extends Seeder
             'Senior High School|Science' => $this->seniorHighScience($index),
             default => $this->fallbackQuestion($level, $subject, $index),
         };
+    }
+
+    protected function kindergartenMath(int $index): array
+    {
+        $n = 2 + ($index % 4);
+        $dots = trim(str_repeat('● ', $n));
+
+        return $this->mcq(
+            "How many dots? {$dots}",
+            [(string) ($n - 1), (string) $n, (string) ($n + 1), (string) ($n + 2)],
+            1,
+            'K Math: counting small sets.'
+        );
+    }
+
+    protected function kindergartenEnglish(int $index): array
+    {
+        $items = [
+            ['Which letter comes after A?', ['B', 'C', 'D', 'Z'], 0],
+            ['Which word names a color?', ['blue', 'run', 'jump', 'eat'], 0],
+            ['What do we call a person who teaches in school?', ['teacher', 'table', 'chair', 'window'], 0],
+        ];
+        [$question, $options, $correct] = $items[$index % count($items)];
+
+        return $this->mcq(
+            $question,
+            $options,
+            $correct,
+            'K English: letters and simple vocabulary.'
+        );
+    }
+
+    protected function kindergartenScience(int $index): array
+    {
+        $items = [
+            ['What do we see in the sky on a sunny day?', ['Moon only', 'The Sun', 'Snow', 'Fish'], 1],
+            ['Which one is an animal?', ['Rock', 'Dog', 'Car', 'Spoon'], 1],
+            ['We use our ___ to hear sounds.', ['eyes', 'ears', 'feet', 'hair'], 1],
+        ];
+        [$question, $options, $correct] = $items[$index % count($items)];
+
+        return $this->mcq(
+            $question,
+            $options,
+            $correct,
+            'K Science: senses, sky, living things.'
+        );
     }
 
     /**

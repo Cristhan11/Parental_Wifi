@@ -7,6 +7,15 @@
 
     <div class="py-12">
         <div class="max-w-7xl mx-auto sm:px-6 lg:px-8 space-y-6">
+            <x-collapsible-instructions>
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li><strong>Profile</strong> updates your name and email used to sign in.</li>
+                    <li><strong>Password</strong> is only if you want a new one—you must type your current password to confirm.</li>
+                    <li><strong>Delete account</strong> removes your account for good. Only use it if you are sure.</li>
+                </ul>
+            </x-collapsible-instructions>
+
             <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
                 <div class="max-w-xl">
                     @include('profile.partials.update-profile-information-form')

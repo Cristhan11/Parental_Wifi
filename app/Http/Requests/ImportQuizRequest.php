@@ -16,6 +16,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class ImportQuizRequest extends FormRequest
 {
@@ -45,6 +46,12 @@ class ImportQuizRequest extends FormRequest
         return [
             'excel_file' => ['required', 'file', 'mimes:xlsx', 'max:5120'],
             'mode' => ['required', 'in:add_new,update_existing'],
+            'quiz_id' => [
+                'nullable',
+                'integer',
+                Rule::requiredIf(fn () => $this->input('mode') === 'update_existing'),
+                Rule::exists('quizzes', 'id')->where(fn ($q) => $q->where('user_id', $this->user()?->id)),
+            ],
         ];
     }
 

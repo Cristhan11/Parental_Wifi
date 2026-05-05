@@ -52,6 +52,14 @@
                 </div>
             @endif
 
+            <x-collapsible-instructions class="mb-4">
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li><strong>+ New</strong> adds a video. Open <strong>Edit</strong> to change the link, time reward, optional dictionary words, and which devices can watch it.</li>
+                    <li>The list shows duration, dictionary-word mode, time reward, status, and how many times each video was completed.</li>
+                </ul>
+            </x-collapsible-instructions>
+
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                 <div class="p-6">
                     {{-- 

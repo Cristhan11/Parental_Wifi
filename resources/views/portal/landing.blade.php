@@ -7,21 +7,29 @@
     <title>Portal - Parental WiFi</title>
     <link rel="stylesheet" href="/css/portal-captive.css">
 </head>
-<body class="portal">
+<body class="portal portal--landing">
     <div class="portal-wrap">
         <div class="portal-inner">
-            <header class="portal-hero">
-                <h1 class="portal-title">Welcome!</h1>
-                <p class="portal-subtitle">
-                    @if(!empty($device))
-                        Complete activities to earn internet time
-                    @elseif(!empty($showDeviceRegistration))
-                        New device? Ask a parent to add you, or send a request below.
-                    @else
-                        Complete activities to earn internet time
-                    @endif
-                </p>
-            </header>
+            @php
+                $portalBase = array_filter(['mac' => $device->mac_address ?? null, 'tok' => request('tok')]);
+                $portalFlow = $flow ?? 'chooser';
+                $portalShowEarnHeader = ! empty($showDeviceRegistration) || empty($device) || $portalFlow === 'chooser';
+            @endphp
+
+            @if($portalShowEarnHeader)
+                <header class="portal-hero portal-hero--compact">
+                    <h1 class="portal-title">Earn time</h1>
+                    <p class="portal-subtitle">
+                        @if(!empty($device))
+                            Quiz or video — earn minutes.
+                        @elseif(!empty($showDeviceRegistration))
+                            New device? Ask a parent to add you, or send a request below.
+                        @else
+                            Connect to home Wi‑Fi, then open this page again.
+                        @endif
+                    </p>
+                </header>
+            @endif
 
             @if(session('portal_info'))
                 <div class="portal-banner portal-banner--info">
@@ -70,100 +78,165 @@
                     </form>
                 </section>
             @elseif($device)
-                <section class="portal-card">
-                    <h2 class="portal-card__title">
-                        <svg class="portal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 18h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-                        </svg>
-                        Your Device
-                    </h2>
-                    <div class="portal-stat-grid">
-                        <div>
-                            <p class="portal-stat-label">Device Name</p>
-                            <p class="portal-stat-value">{{ $device->name }}</p>
+                <aside class="portal-meta-strip" aria-label="Device status">
+                    <span class="portal-meta-strip__name">{{ $device->name }}</span>
+                    <span class="portal-meta-strip__time">{{ $device->getRemainingTimeFormatted() }} left</span>
+                </aside>
+
+                @if(($flow ?? 'chooser') === 'chooser')
+                    <section class="portal-stage" aria-label="Choose activity type">
+                        <p class="portal-stage__tagline">Pick one</p>
+                        <div class="portal-type-pair">
+                            @if($eligibleQuizzes->isNotEmpty() || $randomMixEligible)
+                                <a class="portal-type-card portal-type-card--quiz" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => ($eligibleQuizzes->isEmpty() && $randomMixEligible) ? 'quiz_more' : 'quiz'])) }}">
+                                    <span class="portal-type-card__icon" aria-hidden="true">
+                                        <svg viewBox="0 0 48 48" width="40" height="40" fill="none"><path d="M12 8h24v6H12V8zm0 10h24v22H12V18zm4 4v14h16V22H16z" fill="currentColor"/></svg>
+                                    </span>
+                                    <span class="portal-type-card__label">Quiz</span>
+                                    <span class="portal-type-card__hint">Questions &amp; brain snacks</span>
+                                </a>
+                            @else
+                                <div class="portal-type-card portal-type-card--disabled" role="group" aria-labelledby="quiz-unavailable-title">
+                                    <span id="quiz-unavailable-title" class="portal-type-card__label">Quiz</span>
+                                    <p class="portal-type-card__hint">No quizzes assigned yet. Ask a parent to assign one on the dashboard.</p>
+                                </div>
+                            @endif
+
+                            @if($eligibleVideos->isNotEmpty())
+                                <a class="portal-type-card portal-type-card--video" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'video'])) }}">
+                                    <span class="portal-type-card__icon portal-type-card__icon--video" aria-hidden="true">
+                                        <svg viewBox="0 0 48 48" width="40" height="40" fill="none" focusable="false">
+                                            <rect x="9" y="12" width="30" height="20" rx="3.5" ry="3.5" stroke="currentColor" stroke-width="2.25" fill="none"/>
+                                            <path fill="currentColor" d="M19 16v12l10-6-10-6z"/>
+                                        </svg>
+                                    </span>
+                                    <span class="portal-type-card__label">Video</span>
+                                    <span class="portal-type-card__hint">Watch &amp; remember the words</span>
+                                </a>
+                            @else
+                                <div class="portal-type-card portal-type-card--disabled">
+                                    <span class="portal-type-card__label">Video</span>
+                                    <p class="portal-type-card__hint">No videos assigned yet.</p>
+                                </div>
+                            @endif
                         </div>
-                        <div>
-                            <p class="portal-stat-label">Time Remaining</p>
-                            <p class="portal-stat-value">{{ $device->getRemainingTimeFormatted() }}</p>
-                        </div>
+                        @if($eligibleQuizzes->isEmpty() && $eligibleVideos->isEmpty())
+                            <div class="portal-empty portal-empty--inline">
+                                <p>Nothing to do here yet. Ask a parent to assign a quiz or video.</p>
+                            </div>
+                        @endif
+                        <p class="portal-captive-hint">Opened from Wi‑Fi sign‑in? You’re in the right place.</p>
+                    </section>
+                @elseif(($flow ?? '') === 'quiz')
+                    <div class="portal-flow-nav portal-flow-nav--tight">
+                        <a href="{{ route('portal.landing', $portalBase) }}" class="portal-back-link">← Back</a>
                     </div>
-                </section>
-
-                @if($quizzes->count() > 0)
-                    <section class="portal-activities">
-                        <h2 class="portal-section-title">
-                            <svg class="portal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                            </svg>
-                            Available Quizzes
-                        </h2>
-                        <div class="portal-grid">
-                            @foreach($quizzes as $quiz)
-                                <a href="{{ route('portal.quiz.show', ['quiz' => $quiz->id, 'mac' => $device->mac_address]) }}"
-                                   class="portal-tile">
-                                    <div class="portal-tile__body">
-                                        <h3 class="portal-tile__title">{{ $quiz->title }}</h3>
-                                        <p class="portal-tile__desc">{{ $quiz->description ?? 'Take this quiz to earn internet time!' }}</p>
+                    @if($recommendedQuiz)
+                        <section class="portal-reco portal-reco--quiz-tight" aria-labelledby="reco-quiz-title">
+                            <h2 id="reco-quiz-title" class="portal-reco__title">Your quiz</h2>
+                            <div class="portal-reco-grid">
+                                <div class="portal-reco-card">
+                                    <h3 class="portal-reco-card__name">{{ $recommendedQuiz->title }}</h3>
+                                    @if($recommendedQuiz->description)
+                                        <p class="portal-reco-card__desc">{{ \Illuminate\Support\Str::limit(strip_tags($recommendedQuiz->description), 100) }}</p>
+                                    @endif
+                                    <p class="portal-reco-card__reward">
+                                        @if($recommendedQuiz->scoring_mode === 'time_reward')
+                                            +{{ (int) $recommendedQuiz->minutes_per_correct }} min per correct answer
+                                        @else
+                                            Pass for {{ (int) $recommendedQuiz->time_reward_minutes }} min
+                                        @endif
+                                    </p>
+                                    <a class="portal-btn-start" href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $recommendedQuiz->id])) }}">Start</a>
+                                    <a class="portal-link-more" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'quiz_more'])) }}">More quizzes</a>
+                                </div>
+                                @if($randomMixEligible && $randomModeQuiz)
+                                    <div class="portal-reco-random-card">
+                                        <a class="portal-btn-random" href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $randomModeQuiz->id])) }}">Random quiz</a>
+                                        <p class="portal-btn-random-hint">Mixed topics — each correct answer earns time.</p>
                                     </div>
-                                    <div class="portal-tile__footer">
-                                        <div>
-                                            <p class="portal-tile__reward-label">Time Reward</p>
-                                            <p class="portal-tile__reward">{{ $quiz->time_reward_minutes }} min</p>
-                                        </div>
-                                        <svg class="portal-tile__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </div>
-                                </a>
-                            @endforeach
+                                @endif
+                            </div>
+                        </section>
+                    @else
+                        <div class="portal-empty">
+                            <p>No quiz ready right now.</p>
+                            <a class="portal-back-link" href="{{ route('portal.landing', $portalBase) }}">← Back</a>
                         </div>
-                    </section>
-                @endif
-
-                @if($videos->count() > 0)
-                    <section class="portal-activities">
-                        <h2 class="portal-section-title">
-                            <svg class="portal-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                            </svg>
-                            Available Videos
-                        </h2>
-                        <div class="portal-grid">
-                            @foreach($videos as $video)
-                                <a href="{{ route('portal.video.show', ['video' => $video->id, 'mac' => $device->mac_address]) }}"
-                                   class="portal-tile">
-                                    <div class="portal-tile__body">
-                                        <h3 class="portal-tile__title">{{ $video->title }}</h3>
-                                        <p class="portal-tile__desc">{{ $video->description ?? 'Watch this video to earn internet time!' }}</p>
-                                        <p class="portal-tile__meta">
-                                            Duration: {{ gmdate('i:s', $video->duration_seconds) }}
-                                            @if($video->dictionary_words_enabled)
-                                                • {{ $video->word_count }} words
-                                            @endif
-                                        </p>
-                                    </div>
-                                    <div class="portal-tile__footer">
-                                        <div>
-                                            <p class="portal-tile__reward-label">Time Reward</p>
-                                            <p class="portal-tile__reward">{{ $video->time_reward_minutes }} min</p>
-                                        </div>
-                                        <svg class="portal-tile__chevron" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-                                        </svg>
-                                    </div>
-                                </a>
-                            @endforeach
+                    @endif
+                @elseif(($flow ?? '') === 'video')
+                    <div class="portal-flow-nav portal-flow-nav--tight">
+                        <a href="{{ route('portal.landing', $portalBase) }}" class="portal-back-link">← Back</a>
+                    </div>
+                    @if($recommendedVideo)
+                        <section class="portal-reco portal-reco--quiz-tight" aria-labelledby="reco-video-title">
+                            <h2 id="reco-video-title" class="portal-reco__title">Your video</h2>
+                            <div class="portal-reco-card">
+                                <h3 class="portal-reco-card__name">{{ $recommendedVideo->title }}</h3>
+                                @if($recommendedVideo->description)
+                                    <p class="portal-reco-card__desc">{{ \Illuminate\Support\Str::limit(strip_tags($recommendedVideo->description), 100) }}</p>
+                                @endif
+                                <p class="portal-reco-card__reward">Earn {{ (int) $recommendedVideo->time_reward_minutes }} min when you finish</p>
+                                <a class="portal-btn-start" href="{{ route('portal.video.show', array_merge($portalBase, ['video' => $recommendedVideo->id])) }}">Start</a>
+                                <a class="portal-link-more" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'video_more'])) }}">More videos</a>
+                            </div>
+                        </section>
+                    @else
+                        <div class="portal-empty">
+                            <p>No video ready right now.</p>
+                            <a class="portal-back-link" href="{{ route('portal.landing', $portalBase) }}">← Back</a>
                         </div>
-                    </section>
-                @endif
+                    @endif
+                @elseif(($flow ?? '') === 'quiz_more')
+                    <div class="portal-flow-nav">
+                        <a href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'quiz'])) }}" class="portal-back-link">← Back</a>
+                    </div>
+                    <h2 class="portal-section-title portal-section-title--left">All your quizzes</h2>
 
-                @if($quizzes->count() === 0 && $videos->count() === 0)
-                    <div class="portal-empty">
-                        <svg class="portal-empty__icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <p>No quizzes or videos available at this time.</p>
-                        <p class="portal-muted-text">Please check back later or contact your parent.</p>
+                    @if($quizGroups['Other']->isNotEmpty())
+                        <div class="portal-other-random-row">
+                            <div class="portal-chip-stack">
+                                <span class="portal-chip portal-chip--static">Other</span>
+                                <div class="portal-mini-grid">
+                                    @foreach($quizGroups['Other'] as $quiz)
+                                        <a href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $quiz->id])) }}" class="portal-tile portal-tile--compact">
+                                            <span class="portal-tile__title">{{ $quiz->title }}</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
+                    @foreach(['Math', 'English', 'Science'] as $subject)
+                        @if($quizGroups[$subject]->isNotEmpty())
+                            <section class="portal-browse-block">
+                                <h3 class="portal-browse-block__heading">{{ $subject }}</h3>
+                                <div class="portal-mini-grid">
+                                    @foreach($quizGroups[$subject] as $quiz)
+                                        <a href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $quiz->id])) }}" class="portal-tile portal-tile--compact">
+                                            <span class="portal-tile__title">{{ $quiz->title }}</span>
+                                        </a>
+                                    @endforeach
+                                </div>
+                            </section>
+                        @endif
+                    @endforeach
+
+                    @if($quizGroups['Math']->isEmpty() && $quizGroups['English']->isEmpty() && $quizGroups['Science']->isEmpty() && $quizGroups['Other']->isEmpty())
+                        <p class="portal-muted-text">No quizzes in your list.</p>
+                    @endif
+                @elseif(($flow ?? '') === 'video_more')
+                    <div class="portal-flow-nav">
+                        <a href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'video'])) }}" class="portal-back-link">← Back</a>
+                    </div>
+                    <h2 class="portal-section-title portal-section-title--left">All your videos</h2>
+                    <div class="portal-mini-grid">
+                        @foreach($eligibleVideos as $video)
+                            <a href="{{ route('portal.video.show', array_merge($portalBase, ['video' => $video->id])) }}" class="portal-tile portal-tile--compact">
+                                <span class="portal-tile__title">{{ $video->title }}</span>
+                            </a>
+                        @endforeach
                     </div>
                 @endif
             @endif

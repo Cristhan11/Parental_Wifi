@@ -26,6 +26,22 @@
                 </div>
             @endif
 
+            @if (session('error'))
+                <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md text-sm">
+                    {{ session('error') }}
+                </div>
+            @endif
+
+            @if ($errors->any())
+                <div class="bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded-md text-sm">
+                    <ul class="list-inside list-disc space-y-1">
+                        @foreach ($errors->all() as $message)
+                            <li>{{ $message }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+
             <x-collapsible-instructions>
                 <p class="mb-2 font-semibold">Instructions</p>
                 <ul class="list-inside list-disc space-y-1">

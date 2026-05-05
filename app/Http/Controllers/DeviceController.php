@@ -6,6 +6,8 @@ use App\Http\Requests\StoreDeviceRequest;
 use App\Http\Requests\UpdateDeviceRequest;
 use App\Models\Device;
 use App\Models\DeviceRegistrationRequest;
+use App\Models\Quiz;
+use App\Services\BandwidthUsageService;
 use App\Services\DeviceService;
 use App\Services\NetworkService;
 use App\Services\TimeTrackingService;
@@ -101,6 +103,8 @@ class DeviceController extends Controller
      */
     protected UsageChartService $usageChartService;
 
+    protected BandwidthUsageService $bandwidthUsageService;
+
     /**
      * Constructor - Called automatically when controller is created.
      *
@@ -111,17 +115,20 @@ class DeviceController extends Controller
      * @param  NetworkService  $networkService  Network-level operations
      * @param  TimeTrackingService  $timeTrackingService  Time management
      * @param  UsageChartService  $usageChartService  Per-device / dashboard usage chart payload
+     * @param  BandwidthUsageService  $bandwidthUsageService  Per-device bandwidth chart payload
      */
     public function __construct(
         DeviceService $deviceService,
         NetworkService $networkService,
         TimeTrackingService $timeTrackingService,
-        UsageChartService $usageChartService
+        UsageChartService $usageChartService,
+        BandwidthUsageService $bandwidthUsageService
     ) {
         $this->deviceService = $deviceService;
         $this->networkService = $networkService;
         $this->timeTrackingService = $timeTrackingService;
         $this->usageChartService = $usageChartService;
+        $this->bandwidthUsageService = $bandwidthUsageService;
     }
 
     /**
@@ -356,6 +363,13 @@ class DeviceController extends Controller
 
         // If device exists, calculate statistics
         if ($device) {
+            $device->load([
+                'quizzes' => fn ($q) => $q
+                    ->where('title', '!=', Quiz::RANDOM_MODE_SETTINGS_TITLE)
+                    ->orderBy('title'),
+                'videos' => fn ($q) => $q->orderBy('title'),
+            ]);
+
             // Get quiz scores for this device
             // Query QuizAttempt table and calculate scores
             $quizScores = $this->getQuizScores($device);
@@ -385,6 +399,27 @@ class DeviceController extends Controller
         }
 
         $payload = $this->usageChartService->buildChartPayload(
+            $request->user(),
+            $range,
+            (int) $device->id
+        );
+
+        return response()->json($payload);
+    }
+
+    /**
+     * JSON for the Child Devices page bandwidth line chart (single selected device).
+     */
+    public function childDeviceBandwidthChart(Request $request, Device $device): JsonResponse
+    {
+        $this->authorize('view', $device);
+
+        $range = strtolower((string) $request->query('range', 'yearly'));
+        if (! in_array($range, ['daily', 'weekly', 'monthly', 'yearly'], true)) {
+            $range = 'yearly';
+        }
+
+        $payload = $this->bandwidthUsageService->buildChartPayload(
             $request->user(),
             $range,
             (int) $device->id
@@ -601,8 +636,29 @@ class DeviceController extends Controller
             }
         }
 
+        $portalFavoriteQuizzes = collect();
+        $portalFavoriteVideos = collect();
+        if (($device->role ?? 'child') === 'child') {
+            $portalFavoriteQuizzes = $device->quizzes()
+                ->where('is_active', true)
+                ->where('title', '!=', Quiz::RANDOM_MODE_SETTINGS_TITLE)
+                ->orderBy('title')
+                ->get(['quizzes.id', 'quizzes.title']);
+            $portalFavoriteVideos = $device->videos()
+                ->where('is_active', true)
+                ->orderBy('title')
+                ->get(['videos.id', 'videos.title']);
+        }
+
         // Return the edit view with device data and statistics
-        return view('devices.device_edit', compact('device', 'stats', 'isConnected', 'deviceIp'));
+        return view('devices.device_edit', compact(
+            'device',
+            'stats',
+            'isConnected',
+            'deviceIp',
+            'portalFavoriteQuizzes',
+            'portalFavoriteVideos'
+        ));
     }
 
     /**
@@ -886,15 +942,22 @@ class DeviceController extends Controller
         $quizScores = [];
         foreach ($attempts as $attempt) {
             $quizId = $attempt->quiz_id;
-            $quizTitle = $attempt->quiz->title ?? 'Unknown Quiz';
+            $quizTitle = $attempt->quiz?->title ?? 'Unknown Quiz';
 
-            // Get total questions from quiz
-            $questions = $attempt->quiz->questions['questions'] ?? [];
-            $totalQuestions = count($questions);
-
-            // Calculate correct answers
-            // score is stored as percentage, so correct = (score / 100) * total
-            $correctAnswers = (int) round(($attempt->score / 100) * $totalQuestions);
+            $totalFromAttempt = (int) ($attempt->total_questions ?? 0);
+            if ($totalFromAttempt > 0) {
+                $totalQuestions = $totalFromAttempt;
+                $correctAnswers = max(0, min($totalQuestions, (int) ($attempt->correct_count ?? 0)));
+            } else {
+                $questions = $attempt->quiz?->questions['questions'] ?? [];
+                if (! is_array($questions)) {
+                    $questions = [];
+                }
+                $totalQuestions = count($questions);
+                $correctAnswers = $totalQuestions > 0
+                    ? (int) max(0, min($totalQuestions, round($attempt->score / 100 * $totalQuestions)))
+                    : 0;
+            }
 
             // Store quiz score data
             $quizScores[] = [

@@ -10,6 +10,7 @@ use App\Models\Video;
 use App\Models\VideoCompletion;
 use App\Models\VideoWordDisplay;
 use App\Services\DeviceService;
+use App\Services\PortalActivityRecommendationService;
 use App\Services\TimeGrantingService;
 use App\Services\VideoWordService;
 use Illuminate\Http\RedirectResponse;
@@ -27,14 +28,18 @@ class PortalController extends Controller
 
     protected DeviceService $deviceService;
 
+    protected PortalActivityRecommendationService $portalRecommendations;
+
     public function __construct(
         TimeGrantingService $timeGrantingService,
         VideoWordService $videoWordService,
         DeviceService $deviceService,
+        PortalActivityRecommendationService $portalRecommendations,
     ) {
         $this->timeGrantingService = $timeGrantingService;
         $this->videoWordService = $videoWordService;
         $this->deviceService = $deviceService;
+        $this->portalRecommendations = $portalRecommendations;
     }
 
     /**
@@ -89,29 +94,29 @@ class PortalController extends Controller
             ]);
         }
 
-        // Get available quizzes for this device
-        // ->quizzes() gets all quizzes assigned to this device (many-to-many relationship)
-        // ->where('is_active', true) filters to only active quizzes (parents can deactivate)
-        // ->get() executes query and returns collection of Quiz models
-        $quizzes = $device->quizzes()
-            ->where('is_active', true)
-            ->get();
+        $flow = $request->query('flow', 'chooser');
+        if (! in_array($flow, ['chooser', 'quiz', 'video', 'quiz_more', 'video_more'], true)) {
+            $flow = 'chooser';
+        }
 
-        // Get available videos for this device
-        // ->videos() gets all videos assigned to this device (many-to-many relationship)
-        // ->where('is_active', true) filters to only active videos
-        // ->get() executes query and returns collection of Video models
-        $videos = $device->videos()
-            ->where('is_active', true)
-            ->get();
+        $eligibleQuizzes = $this->portalRecommendations->eligibleQuizzes($device);
+        $eligibleVideos = $this->portalRecommendations->eligibleVideos($device);
+        $recommendedQuiz = $this->portalRecommendations->recommendQuiz($device);
+        $recommendedVideo = $this->portalRecommendations->recommendVideo($device);
+        $quizGroups = $this->portalRecommendations->quizzesGroupedBySubject($eligibleQuizzes);
+        $randomMixEligible = $this->portalRecommendations->randomMixEligible($device);
+        $randomModeQuiz = $this->portalRecommendations->randomModeQuiz($device);
 
-        // Return landing page view with data
-        // Passes device, quizzes, and videos to the Blade template
-        // Template will display them in a user-friendly format
         return view('portal.landing', [
-            'device' => $device,      // Device information (name, remaining time, etc.)
-            'quizzes' => $quizzes,    // Collection of available quizzes
-            'videos' => $videos,      // Collection of available videos
+            'device' => $device,
+            'flow' => $flow,
+            'eligibleQuizzes' => $eligibleQuizzes,
+            'eligibleVideos' => $eligibleVideos,
+            'recommendedQuiz' => $recommendedQuiz,
+            'recommendedVideo' => $recommendedVideo,
+            'quizGroups' => $quizGroups,
+            'randomMixEligible' => $randomMixEligible,
+            'randomModeQuiz' => $randomModeQuiz,
         ]);
     }
 
@@ -547,9 +552,10 @@ class PortalController extends Controller
                 ->values()
                 ->all();
         } elseif ($quiz->scoring_mode === 'time_reward') {
-            // Global random quiz mode: pull from all active bank items.
+            $levels = $quiz->effectiveRandomBankLevelsForDevice($device);
             $questions = QuestionBankItem::query()
                 ->where('status', 'Active')
+                ->whereIn('level', $levels)
                 ->inRandomOrder()
                 ->limit((int) ($quiz->question_count ?: 10))
                 ->get()
@@ -564,6 +570,11 @@ class PortalController extends Controller
                 })
                 ->values()
                 ->all();
+        }
+
+        if ((($quiz->level && $quiz->subject) || $quiz->scoring_mode === 'time_reward') && count($questions) === 0) {
+            return redirect()->route('portal.landing', ['mac' => $device->mac_address])
+                ->with('error', 'No questions are available for this quiz right now.');
         }
 
         // Store quiz attempt in session for progress tracking
@@ -718,10 +729,11 @@ class PortalController extends Controller
                 if ($quiz->scoring_mode === 'time_reward') {
                     $minutes = (int) $correctCount * max(1, (int) $quiz->minutes_per_correct);
                     if ($minutes > 0) {
-                        $this->timeGrantingService->grantTime($device, $minutes, 'quiz', $attempt->id);
+                        $portalSync = ['client_ip' => $request->ip() ?: ''];
+                        $this->timeGrantingService->grantTime($device, $minutes, 'quiz', $attempt->id, $portalSync);
                     }
                 } else {
-                    $this->timeGrantingService->grantTimeFromQuiz($device, $attempt);
+                    $this->timeGrantingService->grantTimeFromQuiz($device, $attempt, ['client_ip' => $request->ip() ?: '']);
                 }
             } catch (\Exception $e) {
                 // Log error but don't fail the request
@@ -862,6 +874,29 @@ class PortalController extends Controller
 
         $absolutePath = $disk->path($video->video_path);
         $mime = @mime_content_type($absolutePath) ?: $video->getMimeType();
+
+        /*
+         * Long videos: each stream request can stay open for many minutes (Range requests
+         * still run PHP until that chunk is sent). Low max_execution_time (60–180s is common)
+         * kills PHP mid-stream → truncated bytes → MEDIA_ERR_DECODE.
+         *
+         * Use a large explicit ceiling (configurable): set_time_limit(0) is ignored on some
+         * Windows/hosting setups; ini_set is more reliable. Turn off output buffering so the
+         * server does not hold huge buffers.
+         */
+        $streamMaxSec = (int) config('portal.video_stream_max_execution_seconds', 86400);
+        if ($streamMaxSec < 300) {
+            $streamMaxSec = 300;
+        }
+        @ini_set('max_execution_time', (string) $streamMaxSec);
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($streamMaxSec);
+        }
+        ignore_user_abort(true);
+        @ini_set('zlib.output_compression', '0');
+        while (ob_get_level() > 0) {
+            ob_end_clean();
+        }
 
         return response()->file($absolutePath, [
             'Content-Type' => $mime,
@@ -1084,7 +1119,7 @@ class PortalController extends Controller
                 // TimeGrantingService adds time to device
                 // Example: If time_reward_minutes is 15, device gets 15 more minutes
                 // Pass fresh completion to ensure all fields are up-to-date
-                $this->timeGrantingService->grantTimeFromVideo($device, $completion);
+                $this->timeGrantingService->grantTimeFromVideo($device, $completion, ['client_ip' => $request->ip() ?: '']);
 
                 Log::info('Time granted successfully after video completion', [
                     'device_id' => $device->id,

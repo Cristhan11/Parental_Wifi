@@ -12,12 +12,13 @@
     - Yellow header bar with left arrow icon and "CHILD DEVICES" title (with smartphone icon)
     - Child dropdown selector (filter by device)
     - Card 1: TIME USAGE (full-width line graph + range filters)
-    - Card 2: QUIZ SCORE (list of quiz scores)
-    - Card 3: WEBSITE HISTORY (list of visited websites)
+    - Card 2: ASSIGNED QUIZ & VIDEO (table of content assigned to this device)
+    - Card 3: QUIZ SCORE (list of quiz scores)
+    - Card 4: WEBSITE HISTORY (list of visited websites)
     
     Data Flow:
     1. DeviceController@index fetches device data and statistics
-    2. Passes $devices, $device, $quizScores, $websiteHistory; chart data loads via GET child_devices/{id}/usage-chart
+    2. Passes $devices, $device (with quizzes/videos loaded), $quizScores, $websiteHistory; chart via GET child_devices/{id}/usage-chart
     3. View displays statistics in cards matching Image 3 design
     
     Design Reference: Image 3 - "CHILD DEVICES" tab
@@ -114,11 +115,18 @@
 
             @if($device)
                 <div class="grid min-w-0 grid-cols-1 gap-6">
-                    {{-- Card 1: TIME USAGE (matching Image 3) --}}
+                    {{-- Card 1: Single graph card with metric dropdown --}}
                     <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                         <div class="p-6">
                             <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-                                <h3 class="text-lg font-semibold text-gray-900">TIME USAGE</h3>
+                                <div class="flex items-center gap-3">
+                                    <h3 id="childGraphTitle" class="text-lg font-semibold text-gray-900">TIME USAGE</h3>
+                                    <select id="childGraphType"
+                                        class="rounded-full border-2 border-gray-300 bg-white text-black px-3 py-1 text-[11px] sm:text-xs font-semibold font-montserrat focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                                        <option value="usage" selected>Child Usage Time</option>
+                                        <option value="bandwidth">Bandwidth Consumption</option>
+                                    </select>
+                                </div>
                                 <div class="flex flex-col items-stretch sm:items-end gap-2">
                                     <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">FILTER</span>
                                     <div class="flex flex-wrap gap-2 justify-start sm:justify-end">
@@ -153,17 +161,98 @@
                         </div>
                     </div>
 
-                    {{-- Card 2: QUIZ SCORE (matching Image 3) --}}
+                    {{-- Card: Assigned quiz & video (read-only; two columns, scrollable lists) --}}
+                    <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
+                        <div class="p-6">
+                            <h3 class="mb-4 text-lg font-semibold text-blue-900">ASSIGNED QUIZ &amp; VIDEO</h3>
+
+                            @if($device->quizzes->isEmpty() && $device->videos->isEmpty())
+                                <p class="text-sm text-gray-500">No quizzes or videos assigned to this child yet.</p>
+                                <p class="mt-1 text-xs text-gray-400">
+                                    Assign content to this device in Accounts so it appears in the child portal.
+                                </p>
+                            @else
+                                <div class="grid min-w-0 grid-cols-1 gap-4 md:grid-cols-2 md:items-start">
+                                    {{-- Quizzes column --}}
+                                    <div class="min-w-0 flex flex-col">
+                                        <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700">Quizzes</p>
+                                        <div class="max-h-80 min-h-0 overflow-y-auto overflow-x-auto rounded-lg border border-gray-200">
+                                            @if($device->quizzes->isEmpty())
+                                                <p class="p-4 text-sm text-gray-500">No quizzes assigned.</p>
+                                            @else
+                                                <table class="min-w-full border-collapse text-sm">
+                                                    <thead class="sticky top-0 z-10 bg-gray-50">
+                                                        <tr class="border-b border-gray-200">
+                                                            <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-700">Title</th>
+                                                            <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-700">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody class="bg-white">
+                                                        @foreach($device->quizzes as $quiz)
+                                                            <tr class="border-b border-gray-100 last:border-b-0">
+                                                                <td class="min-w-0 px-3 py-2.5 text-gray-800">{{ $quiz->title }}</td>
+                                                                <td class="whitespace-nowrap px-3 py-2.5">
+                                                                    @if($quiz->is_active)
+                                                                        <span class="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">Active</span>
+                                                                    @else
+                                                                        <span class="inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">Inactive</span>
+                                                                    @endif
+                                                                </td>
+                                                            </tr>
+                                                        @endforeach
+                                                    </tbody>
+                                                </table>
+                                            @endif
+                                        </div>
+                                    </div>
+                                    {{-- Videos column --}}
+                                    <div class="min-w-0 flex flex-col">
+                                        <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-700">Videos</p>
+                                        <div class="max-h-80 min-h-0 overflow-y-auto overflow-x-auto rounded-lg border border-gray-200">
+                                            @if($device->videos->isEmpty())
+                                                <p class="p-4 text-sm text-gray-500">No videos assigned.</p>
+                                            @else
+                                                <table class="min-w-full border-collapse text-sm">
+                                                    <thead class="sticky top-0 z-10 bg-gray-50">
+                                                        <tr class="border-b border-gray-200">
+                                                            <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-700">Title</th>
+                                                            <th scope="col" class="px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wide text-gray-700">Status</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody class="bg-white">
+                                                        @foreach($device->videos as $video)
+                                                            <tr class="border-b border-gray-100 last:border-b-0">
+                                                                <td class="min-w-0 px-3 py-2.5 text-gray-800">{{ $video->title }}</td>
+                                                                <td class="whitespace-nowrap px-3 py-2.5">
+                                                                    @if($video->is_active)
+                                                                        <span class="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-800">Active</span>
+                                                                    @else
+                                                                        <span class="inline-flex rounded-full bg-gray-200 px-2 py-0.5 text-xs font-semibold text-gray-700">Inactive</span>
+                                                                    @endif
+                                                                </td>
+                                                            </tr>
+                                                        @endforeach
+                                                    </tbody>
+                                                </table>
+                                            @endif
+                                        </div>
+                                    </div>
+                                </div>
+                            @endif
+                        </div>
+                    </div>
+
+                    {{-- Card: QUIZ SCORE (matching Image 3) --}}
                     <div class="bg-gray-100 overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                         <div class="p-6">
                             <h3 class="text-lg font-semibold text-gray-900 mb-4">QUIZ SCORE</h3>
                             
                             @if(count($quizScores) > 0)
                                 <div class="space-y-2">
-                                    @foreach($quizScores as $index => $quizScore)
+                                    @foreach($quizScores as $quizScore)
                                         <div class="flex min-w-0 flex-col gap-2 p-3 sm:flex-row sm:items-center sm:justify-between rounded bg-white">
                                             <span class="min-w-0 text-sm font-medium text-gray-900">
-                                                QUIZ {{ $index + 1 }}: {{ $quizScore['correct'] }}/{{ $quizScore['total'] }}
+                                                {{ $quizScore['quiz_title'] ?? 'Quiz' }}: {{ $quizScore['correct'] }}/{{ $quizScore['total'] }}
                                             </span>
                                             @if($quizScore['passed'])
                                                 <span class="px-2 py-1 text-xs font-semibold rounded-full" style="background-color: #10B981; color: white;">Passed</span>
@@ -179,7 +268,7 @@
                         </div>
                     </div>
 
-                    {{-- Card 3: WEBSITE HISTORY (matching Image 3) --}}
+                    {{-- Card: WEBSITE HISTORY (matching Image 3) --}}
                     {{-- This section displays recent browsing logs for the selected device --}}
                     {{-- Browsing logs are automatically created by the ParseNetworkLogs background job --}}
                     <div class="bg-gray-100 overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
@@ -247,9 +336,11 @@
             'use strict';
 
             const chartUrlBase = @json(route('child_devices.usage-chart', $device));
+            const bandwidthChartUrlBase = @json(route('child_devices.bandwidth-chart', $device));
 
             window.childTimeUsageChartInstance = window.childTimeUsageChartInstance ?? null;
             window.currentChildUsageChartRange = window.currentChildUsageChartRange ?? 'yearly';
+            window.currentChildGraphType = window.currentChildGraphType ?? 'usage';
             window.__childUsageChartRefreshImpl = null;
 
             document.addEventListener('DOMContentLoaded', function() {
@@ -257,6 +348,8 @@
                 if (!ctx || typeof Chart === 'undefined') return;
 
                 const filterButtons = document.querySelectorAll('[data-child-usage-chart-range]');
+                const graphTypeSelect = document.getElementById('childGraphType');
+                const graphTitle = document.getElementById('childGraphTitle');
                 const setActiveFilter = (range) => {
                     window.currentChildUsageChartRange = range;
                     filterButtons.forEach((btn) => {
@@ -279,6 +372,18 @@
                     setActiveFilter('yearly');
                 }
 
+                if (graphTypeSelect) {
+                    window.currentChildGraphType = graphTypeSelect.value || 'usage';
+                }
+
+                const updateGraphTitle = () => {
+                    if (!graphTitle) return;
+                    graphTitle.textContent = window.currentChildGraphType === 'bandwidth'
+                        ? 'BANDWIDTH CONSUMPTION'
+                        : 'TIME USAGE';
+                };
+                updateGraphTitle();
+
                 const makeBorderColor = (index) => {
                     const hue = (index * 55) % 360;
                     return `hsl(${hue} 70% 35%)`;
@@ -291,20 +396,22 @@
                     }
                 };
 
-                const buildDatasets = (series) => {
+                const buildDatasets = (series, isBandwidth, clampMax = null) => {
                     return series.map((item, idx) => {
                         const borderColor = makeBorderColor(idx);
                         return {
                             label: item.device_name,
-                            data: item.values,
+                            data: Array.isArray(item.values)
+                                ? item.values.map((v) => (clampMax !== null ? Math.min(Number(v), clampMax) : Number(v)))
+                                : [],
                             borderColor,
-                            backgroundColor: 'rgba(255, 222, 21, 0.10)',
+                            backgroundColor: isBandwidth ? 'rgba(34, 197, 94, 0.10)' : 'rgba(255, 222, 21, 0.10)',
                             borderWidth: 2.5,
                             fill: false,
                             tension: 0.35,
                             pointRadius: 4,
                             pointHoverRadius: 7,
-                            pointBackgroundColor: '#FFDE15',
+                            pointBackgroundColor: isBandwidth ? '#22C55E' : '#FFDE15',
                             pointBorderColor: borderColor,
                             pointBorderWidth: 2
                         };
@@ -314,16 +421,27 @@
                 const renderChart = (payload) => {
                     const labels = payload.labels ?? [];
                     const series = payload.series ?? [];
+                    const isBandwidth = window.currentChildGraphType === 'bandwidth';
 
                     destroyChartIfNeeded();
 
                     const allValues = series.flatMap((s) => Array.isArray(s.values) ? s.values : []);
                     const maxVal = Math.max(...allValues, 0);
-                    const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
-                    const dailyFixedMax = payload.range === 'daily' ? 60 : null;
+                    const bandwidthDefaultMaxByRange = (() => {
+                        if (payload.range === 'daily') return 20;
+                        if (payload.range === 'weekly') return 120;
+                        if (payload.range === 'monthly') return 500;
+                        if (payload.range === 'yearly') return 2000;
+                        return 120;
+                    })();
+                    const suggestedMax = maxVal > 0
+                        ? maxVal * 1.2
+                        : (isBandwidth ? bandwidthDefaultMaxByRange : 10);
+                    const dailyFixedMax = !isBandwidth && payload.range === 'daily' ? 60 : null;
 
                     // Per-bucket caps (same as dashboard): match max usable time in one bucket, not whole chart.
                     const maxByRangeInChartUnit = (() => {
+                        if (isBandwidth) return null;
                         if (payload.range === 'daily') return 60;
                         if (payload.range === 'weekly') return 24;
                         if (payload.range === 'monthly') return 168;
@@ -331,8 +449,13 @@
                         return null;
                     })();
 
+                    const hardCap = isBandwidth
+                        ? bandwidthDefaultMaxByRange
+                        : (dailyFixedMax !== null ? dailyFixedMax : maxByRangeInChartUnit);
+                    const hardCapApplies = hardCap !== null && maxVal > hardCap;
+
                     const showLegend = series.length > 0 && series.length <= 6;
-                    const datasets = buildDatasets(series);
+                    const datasets = buildDatasets(series, isBandwidth, hardCapApplies ? hardCap : null);
 
                     window.childTimeUsageChartInstance = new Chart(ctx, {
                         type: 'line',
@@ -354,13 +477,16 @@
                                     backgroundColor: 'rgba(0, 0, 0, 0.85)',
                                     titleColor: '#fff',
                                     bodyColor: '#fff',
-                                    borderColor: '#FFDE15',
+                                    borderColor: isBandwidth ? '#22C55E' : '#FFDE15',
                                     borderWidth: 2,
                                     padding: 12,
                                     cornerRadius: 8,
                                     callbacks: {
                                         label: (context) => {
                                             const label = context.dataset?.label ? context.dataset.label + ': ' : '';
+                                            if (isBandwidth) {
+                                                return label + context.parsed.y + ' Gbit';
+                                            }
                                             const unit = payload.unit === 'hours' ? ' hr' : ' min';
                                             return label + context.parsed.y + unit;
                                         }
@@ -372,10 +498,14 @@
                                     beginAtZero: true,
                                     ...(dailyFixedMax !== null
                                         ? { max: dailyFixedMax }
-                                        : (maxByRangeInChartUnit !== null ? { max: maxByRangeInChartUnit } : { suggestedMax })),
+                                        : (maxByRangeInChartUnit !== null
+                                            ? { max: maxByRangeInChartUnit }
+                                            : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax }))),
                                     title: {
                                         display: true,
-                                        text: payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)',
+                                        text: isBandwidth
+                                            ? 'Bandwidth (Gbit)'
+                                            : (payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)'),
                                         font: { family: 'Montserrat Variable', size: 12, weight: 'bold' },
                                         color: '#000000',
                                         padding: { top: 6, bottom: 6 }
@@ -383,6 +513,13 @@
                                     ticks: {
                                         font: { size: 12, weight: 'bold', family: 'Montserrat Variable' },
                                         ...(dailyFixedMax !== null ? { stepSize: 10 } : {}),
+                                        callback: (value) => {
+                                            const v = Number(value);
+                                            if (hardCapApplies && hardCap !== null && v === hardCap) {
+                                                return '>' + hardCap;
+                                            }
+                                            return value;
+                                        },
                                         color: '#000000',
                                         padding: 8
                                     },
@@ -403,15 +540,16 @@
                     });
                 };
 
-                const fetchChildUsageChart = async (range) => {
-                    const url = chartUrlBase + (chartUrlBase.includes('?') ? '&' : '?') + 'range=' + encodeURIComponent(range);
+                const fetchChildChart = async (range) => {
+                    const base = window.currentChildGraphType === 'bandwidth' ? bandwidthChartUrlBase : chartUrlBase;
+                    const url = base + (base.includes('?') ? '&' : '?') + 'range=' + encodeURIComponent(range);
                     const res = await fetch(url, {
                         method: 'GET',
                         headers: { 'X-Requested-With': 'XMLHttpRequest' },
                         credentials: 'same-origin'
                     });
                     if (!res.ok) {
-                        throw new Error('Usage chart request failed: ' + res.status);
+                        throw new Error('Child graph request failed: ' + res.status);
                     }
                     return await res.json();
                 };
@@ -422,10 +560,10 @@
                     refreshInFlight = true;
                     try {
                         const range = window.currentChildUsageChartRange || 'yearly';
-                        const payload = await fetchChildUsageChart(range);
+                        const payload = await fetchChildChart(range);
                         renderChart(payload);
                     } catch (e) {
-                        console.error('Failed to refresh child device usage chart', reason, e);
+                        console.error('Failed to refresh child graph', reason, e);
                     } finally {
                         refreshInFlight = false;
                     }
@@ -437,6 +575,13 @@
                         window.__childUsageChartRefreshImpl('filter-change');
                     });
                 });
+                if (graphTypeSelect) {
+                    graphTypeSelect.addEventListener('change', () => {
+                        window.currentChildGraphType = graphTypeSelect.value || 'usage';
+                        updateGraphTitle();
+                        window.__childUsageChartRefreshImpl('graph-type-change');
+                    });
+                }
 
                 window.__childUsageChartRefreshImpl('initial-load');
 

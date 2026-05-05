@@ -30,4 +30,18 @@ return [
     */
 
     'dev_client_mac' => env('PORTAL_DEV_CLIENT_MAC'),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Portal video stream: PHP execution time ceiling
+    |--------------------------------------------------------------------------
+    |
+    | Streaming a long MP4 keeps the PHP request open for the whole download.
+    | If this is too low, the response is cut off mid-file and the browser shows
+    | MEDIA_ERR_DECODE ("playback failed"). Default 86400 (24h) is safe for 30+
+    | minute files. Set PORTAL_VIDEO_STREAM_MAX_EXECUTION in .env to override.
+    |
+    */
+
+    'video_stream_max_execution_seconds' => (int) env('PORTAL_VIDEO_STREAM_MAX_EXECUTION', 86400),
 ];

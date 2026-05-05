@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\QuizSchoolLevel;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -17,6 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 class Quiz extends Model
 {
     use HasFactory;
+
+    /** Synthetic row for Time Reward (Random Quiz) mode; excluded from normal portal quiz lists. */
+    public const RANDOM_MODE_SETTINGS_TITLE = 'Random Quiz Mode Settings';
 
     /**
      * The attributes that are mass assignable.
@@ -100,6 +104,8 @@ class Quiz extends Model
     public function devices(): BelongsToMany
     {
         return $this->belongsToMany(Device::class, 'device_quiz')
+            ->using(DeviceQuizPivot::class)
+            ->withPivot(['random_bank_levels'])
             ->withTimestamps();
     }
 
@@ -131,5 +137,38 @@ class Quiz extends Model
         }
 
         return $score >= $this->passing_score;  // >= means "greater than or equal to"
+    }
+
+    public function isRandomModeSettingsQuiz(): bool
+    {
+        return $this->title === self::RANDOM_MODE_SETTINGS_TITLE;
+    }
+
+    /**
+     * School levels for random bank draws for this device (pivot on device_quiz).
+     * Only used when this quiz is the Random Quiz Mode settings row.
+     *
+     * @return list<string>
+     */
+    public function effectiveRandomBankLevelsForDevice(Device $device): array
+    {
+        $allowed = QuizSchoolLevel::levels();
+        if (! $this->isRandomModeSettingsQuiz()) {
+            return $allowed;
+        }
+
+        $attached = $this->devices()->where('devices.id', $device->id)->first();
+        if (! $attached) {
+            return $allowed;
+        }
+
+        $stored = $attached->pivot->random_bank_levels ?? null;
+        if (! is_array($stored) || $stored === []) {
+            return $allowed;
+        }
+
+        $filtered = array_values(array_unique(array_intersect($allowed, $stored)));
+
+        return $filtered !== [] ? $filtered : $allowed;
     }
 }

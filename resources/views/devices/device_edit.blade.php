@@ -125,6 +125,39 @@
                             @enderror
                         </div>
 
+                        @if(($device->role ?? 'child') === 'child')
+                            <div class="mb-6 p-4 rounded-md border border-yellow-200 bg-yellow-50">
+                                <h3 class="text-sm font-semibold text-gray-900 mb-3">Child portal</h3>
+                                <p class="text-sm text-gray-600 mb-4">Assign quizzes and videos to this device on their pages. Optionally pin what appears first on the portal.</p>
+                                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label for="preferred_quiz_id" class="block text-sm font-medium text-gray-700 mb-2">Preferred quiz on portal (optional)</label>
+                                        <select name="preferred_quiz_id" id="preferred_quiz_id" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
+                                            <option value="">— None —</option>
+                                            @foreach($portalFavoriteQuizzes as $pq)
+                                                <option value="{{ $pq->id }}" {{ (int) old('preferred_quiz_id', $device->preferred_quiz_id) === (int) $pq->id ? 'selected' : '' }}>{{ $pq->title }}</option>
+                                            @endforeach
+                                        </select>
+                                        @error('preferred_quiz_id')
+                                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                        @enderror
+                                    </div>
+                                    <div>
+                                        <label for="preferred_video_id" class="block text-sm font-medium text-gray-700 mb-2">Preferred video on portal (optional)</label>
+                                        <select name="preferred_video_id" id="preferred_video_id" class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
+                                            <option value="">— None —</option>
+                                            @foreach($portalFavoriteVideos as $pv)
+                                                <option value="{{ $pv->id }}" {{ (int) old('preferred_video_id', $device->preferred_video_id) === (int) $pv->id ? 'selected' : '' }}>{{ $pv->title }}</option>
+                                            @endforeach
+                                        </select>
+                                        @error('preferred_video_id')
+                                            <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                                        @enderror
+                                    </div>
+                                </div>
+                            </div>
+                        @endif
+
                         {{-- Device Status --}}
                         <div class="mb-6">
                             <label for="status" class="block text-sm font-medium text-gray-700 mb-2">Device Status *</label>

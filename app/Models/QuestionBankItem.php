@@ -10,8 +10,6 @@ class QuestionBankItem extends Model
 {
     use HasFactory;
 
-    public const LEVELS = ['Elementary', 'High School', 'Senior High School'];
-
     public const SUBJECTS = ['Math', 'English', 'Science'];
 
     public const STATUSES = ['Active', 'Inactive'];

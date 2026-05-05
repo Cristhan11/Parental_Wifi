@@ -22,14 +22,14 @@
                         @csrf
                         @method('PUT')
 
-                        <div class="mb-6 rounded-md border p-4" style="border-color: #EAB308; background-color: #FFDE15;">
-                            <h3 class="text-sm font-semibold text-black">How this works</h3>
-                            <ul class="mt-2 list-disc pl-5 text-sm text-black space-y-1">
-                                <li>Update the quiz details and questions you want children to answer.</li>
-                                <li>Required fields are highlighted in red until completed, then turn green.</li>
-                                <li>Save when done to apply changes to assigned child devices.</li>
+                        <x-collapsible-instructions class="mb-6">
+                            <p class="mb-2 font-semibold">Instructions</p>
+                            <ul class="list-inside list-disc space-y-1">
+                                <li>Update the quiz name, settings, and questions you want children to answer.</li>
+                                <li>Red boxes mean a required value is missing. They turn green when the value is valid.</li>
+                                <li>Choose which <strong>child</strong> devices can take this quiz, then tap <strong>Save Changes</strong>.</li>
                             </ul>
-                        </div>
+                        </x-collapsible-instructions>
 
                         @if ($errors->any())
                             <div class="mb-6 p-4 bg-red-50 border border-red-200 rounded-md" role="alert">
@@ -63,12 +63,13 @@
 
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
-                                <label for="level" class="block text-sm font-medium text-gray-700 mb-2">Level *</label>
+                                <label for="level" class="block text-sm font-medium text-gray-700 mb-2">School level *</label>
                                 <select name="level" id="level" required class="required-field w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2">
-                                    <option value="Elementary" {{ old('level', $quiz->level) === 'Elementary' ? 'selected' : '' }}>Elementary</option>
-                                    <option value="High School" {{ old('level', $quiz->level) === 'High School' ? 'selected' : '' }}>High School</option>
-                                    <option value="Senior High School" {{ old('level', $quiz->level) === 'Senior High School' ? 'selected' : '' }}>Senior High School</option>
+                                    @foreach(\App\Support\QuizSchoolLevel::levels() as $lvl)
+                                        <option value="{{ $lvl }}" {{ old('level', $quiz->level ?? \App\Support\QuizSchoolLevel::ELEMENTARY) === $lvl ? 'selected' : '' }}>{{ $lvl }}</option>
+                                    @endforeach
                                 </select>
+                                <p class="mt-1 text-xs text-gray-500">Used with subject to match the question bank. You can assign any quiz to any child device.</p>
                             </div>
                             <div>
                                 <label for="subject" class="block text-sm font-medium text-gray-700 mb-2">Subject *</label>
@@ -293,7 +294,9 @@
                 return div.innerHTML;
             }
 
-            window.addQuestion = function(questionData = null) {
+            // questionData: existing question or null. opts.scrollAndFocus: false when loading from DB (keeps page at top).
+            window.addQuestion = function(questionData = null, opts = {}) {
+            const scrollAndFocus = opts.scrollAndFocus !== false;
             try {
                 const container = document.getElementById('questionsContainer');
                 if (!container) {
@@ -372,17 +375,16 @@
                 container.appendChild(questionDiv);
                 bindRequiredFieldFeedback(questionDiv);
                 
-                // Scroll to the newly added question and focus on the question text input
-                questionDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-                
-                // Focus on the question text textarea after a short delay to ensure it's rendered
-                setTimeout(() => {
-                    const textarea = questionDiv.querySelector('textarea[name*="[question]"]');
-                    if (textarea) {
-                        textarea.focus();
-                        textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                    }
-                }, 100);
+                if (scrollAndFocus) {
+                    questionDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    setTimeout(() => {
+                        const textarea = questionDiv.querySelector('textarea[name*="[question]"]');
+                        if (textarea) {
+                            textarea.focus();
+                            textarea.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        }
+                    }, 100);
+                }
                 
                 window.quizQuestionIndex++;
             } catch (error) {
@@ -569,7 +571,7 @@
                         console.log('Loading', existingQuestions.length, 'existing questions');
                         existingQuestions.forEach((question, index) => {
                             console.log('Loading question', index + 1, question);
-                            window.addQuestion(question);
+                            window.addQuestion(question, { scrollAndFocus: false });
                         });
                     }
                     
@@ -589,7 +591,7 @@
                     console.log('Loading', existingQuestions.length, 'existing questions');
                     existingQuestions.forEach((question, index) => {
                         console.log('Loading question', index + 1, question);
-                        window.addQuestion(question);
+                        window.addQuestion(question, { scrollAndFocus: false });
                     });
                 }
             }

@@ -20,6 +20,8 @@ class QuizManagementTest extends TestCase
             'user_id' => $user->id,
             'title' => 'Original',
             'description' => 'Old desc',
+            'level' => 'Elementary',
+            'subject' => 'Math',
             'passing_score' => 50,
             'time_reward_minutes' => 15,
             'max_passes_per_day' => null,
@@ -83,6 +85,7 @@ class QuizManagementTest extends TestCase
         $this->assertCount(2, $quiz->questions['questions']);
         $this->assertSame('What is 2+2?', $quiz->questions['questions'][0]['question']);
         $this->assertSame('Paris', $quiz->questions['questions'][1]['correct_answer']);
+        $this->assertSame('Elementary', $quiz->level);
     }
 
     /**
@@ -95,6 +98,8 @@ class QuizManagementTest extends TestCase
             'user_id' => $user->id,
             'title' => 'TF Quiz',
             'description' => null,
+            'level' => 'Elementary',
+            'subject' => 'Math',
             'passing_score' => 50,
             'time_reward_minutes' => 15,
             'max_passes_per_day' => null,
@@ -156,6 +161,11 @@ class QuizManagementTest extends TestCase
             'user_id' => $user->id,
             'title' => 'Cooldown Quiz',
             'description' => null,
+            'level' => 'Elementary',
+            'subject' => 'Math',
+            'question_count' => 1,
+            'scoring_mode' => 'pass_score',
+            'minutes_per_correct' => 1,
             'passing_score' => 50,
             'time_reward_minutes' => 10,
             'max_passes_per_day' => null,
@@ -271,5 +281,28 @@ class QuizManagementTest extends TestCase
         ];
 
         $this->actingAs($user)->post(route('quizzes.store'), $payload)->assertSessionHasErrors(['devices.0']);
+    }
+
+    public function test_random_quiz_mode_saves_question_bank_levels(): void
+    {
+        $user = User::factory()->create();
+        $child = Device::factory()->create(['user_id' => $user->id, 'role' => 'child']);
+
+        $this->actingAs($user)->post(route('quizzes.random-mode.update'), [
+            'minutes_per_correct' => 2,
+            'device_random_levels' => [
+                (string) $child->id => ['Kindergarten', 'Elementary'],
+            ],
+        ])->assertRedirect(route('quizzes.index'));
+
+        $quiz = Quiz::query()
+            ->where('user_id', $user->id)
+            ->where('title', Quiz::RANDOM_MODE_SETTINGS_TITLE)
+            ->first();
+        $this->assertNotNull($quiz);
+        $quiz->load('devices');
+        $attached = $quiz->devices->firstWhere('id', $child->id);
+        $this->assertNotNull($attached);
+        $this->assertSame(['Kindergarten', 'Elementary'], $attached->pivot->random_bank_levels);
     }
 }

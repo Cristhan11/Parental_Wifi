@@ -25,7 +25,7 @@ class BuiltInQuizSeeder extends Seeder
             return;
         }
 
-        $levels = ['Elementary', 'High School', 'Senior High School'];
+        $levels = ['Kindergarten', 'Elementary', 'High School', 'Senior High School'];
         $subjects = ['Math', 'English', 'Science'];
 
         foreach ($levels as $level) {

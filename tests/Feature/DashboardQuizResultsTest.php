@@ -22,6 +22,8 @@ class DashboardQuizResultsTest extends TestCase
             'user_id' => $user->id,
             'title' => 'Math 101',
             'description' => null,
+            'level' => 'Elementary',
+            'subject' => 'Math',
             'passing_score' => 50,
             'time_reward_minutes' => 15,
             'questions' => [

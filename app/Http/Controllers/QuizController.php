@@ -25,16 +25,20 @@ use App\Models\QuestionBankItem;
 use App\Models\Quiz;
 use App\Models\User;
 use App\Services\QuestionBankExcelService;
+use App\Support\QuestionBankExportUiState;
+use App\Support\QuizSchoolLevel;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Validator;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class QuizController extends Controller
 {
-    private const RANDOM_MODE_TITLE = 'Random Quiz Mode Settings';
-
     /**
      * QuizImportService - Handles Excel file import functionality
      *
@@ -79,6 +83,7 @@ class QuizController extends Controller
     {
         $user = Auth::user();
         $randomModeQuiz = $this->getOrCreateRandomModeQuiz($user);
+        $randomModeQuiz->load('devices');
         $randomModeDeviceIds = $randomModeQuiz->devices()
             ->where('devices.role', 'child')
             ->pluck('devices.id')
@@ -87,13 +92,13 @@ class QuizController extends Controller
 
         // Build filter options from this parent's own quizzes.
         $filterLevels = $user->quizzes()
-            ->where('title', '!=', self::RANDOM_MODE_TITLE)
+            ->where('title', '!=', Quiz::RANDOM_MODE_SETTINGS_TITLE)
             ->whereNotNull('level')
             ->distinct()
-            ->orderByRaw("CASE level WHEN 'Elementary' THEN 1 WHEN 'High School' THEN 2 WHEN 'Senior High School' THEN 3 ELSE 4 END")
+            ->orderByRaw("CASE level WHEN 'Kindergarten' THEN 1 WHEN 'Elementary' THEN 2 WHEN 'High School' THEN 3 WHEN 'Senior High School' THEN 4 ELSE 5 END")
             ->pluck('level');
         $filterSubjects = $user->quizzes()
-            ->where('title', '!=', self::RANDOM_MODE_TITLE)
+            ->where('title', '!=', Quiz::RANDOM_MODE_SETTINGS_TITLE)
             ->whereNotNull('subject')
             ->distinct()
             ->orderByRaw("CASE 
@@ -107,7 +112,7 @@ class QuizController extends Controller
 
         // Search + filter query (parent-friendly list controls)
         $quizzes = $user->quizzes()
-            ->where('title', '!=', self::RANDOM_MODE_TITLE)
+            ->where('title', '!=', Quiz::RANDOM_MODE_SETTINGS_TITLE)
             ->withCount('attempts')
             ->when($request->filled('q'), function ($query) use ($request) {
                 $term = trim((string) $request->string('q'));
@@ -391,13 +396,19 @@ class QuizController extends Controller
 
     public function updateRandomModeSettings(Request $request): RedirectResponse
     {
-        $validated = $request->validate([
+        $assignable = $this->quizAssignableDevices();
+        $rules = [
             'minutes_per_correct' => ['required', 'integer', 'min:1', 'max:60'],
             'retry_cooldown_minutes' => ['nullable', 'integer', 'min:0', 'max:10080'],
             'max_passes_per_day' => ['nullable', 'integer', 'min:1', 'max:500'],
-            'devices' => ['nullable', 'array'],
-            'devices.*' => ['integer'],
-        ]);
+            'device_random_levels' => ['nullable', 'array'],
+        ];
+        foreach ($assignable as $device) {
+            $rules['device_random_levels.'.$device->id] = ['nullable', 'array'];
+            $rules['device_random_levels.'.$device->id.'.*'] = ['string', Rule::in(QuizSchoolLevel::levels())];
+        }
+
+        $validated = $request->validate($rules);
 
         $quiz = $this->getOrCreateRandomModeQuiz(Auth::user());
         $quiz->update([
@@ -406,7 +417,22 @@ class QuizController extends Controller
             'max_passes_per_day' => $validated['max_passes_per_day'] ?? null,
             'is_active' => true,
         ]);
-        $quiz->devices()->sync($this->sanitizedQuizDeviceIds($request));
+
+        $byDevice = $validated['device_random_levels'] ?? [];
+        $allowedIds = $assignable->pluck('id')->all();
+        $sync = [];
+        foreach ($allowedIds as $deviceId) {
+            $raw = $byDevice[$deviceId] ?? $byDevice[(string) $deviceId] ?? [];
+            if (! is_array($raw)) {
+                $raw = [];
+            }
+            $levels = array_values(array_unique(array_intersect(QuizSchoolLevel::levels(), $raw)));
+            if ($levels !== []) {
+                $sync[$deviceId] = ['random_bank_levels' => $levels];
+            }
+        }
+
+        $quiz->devices()->sync($sync);
 
         return redirect()->route('quizzes.index')
             ->with('success', 'Random Quiz Mode settings updated.');
@@ -442,14 +468,7 @@ class QuizController extends Controller
      *
      * What it does:
      * 1. Checks parent owns the quiz (security)
-     * 2. Checks if quiz has been attempted by children
-     * 3. If attempts exist, prevents deletion (preserves history)
-     * 4. If no attempts, deletes quiz from database
-     *
-     * Why prevent deletion if attempts exist?
-     * - Preserves quiz history for parents to review
-     * - Maintains data integrity (attempts reference the quiz)
-     * - Parents can deactivate instead (set is_active = false)
+     * 2. Deletes quiz from database (attempt rows cascade via FK)
      *
      * @param  Quiz  $quiz  The quiz to delete
      * @return RedirectResponse Redirects to quiz list with message
@@ -461,13 +480,9 @@ class QuizController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        // Safety check: Prevent deletion if quiz has attempts
-        // This preserves quiz history and maintains data integrity
-        // ->attempts() gets all QuizAttempt records for this quiz
-        // ->count() counts how many attempts exist
-        if ($quiz->attempts()->count() > 0) {
-            return redirect()->route('quizzes.index')
-                ->with('error', 'Cannot delete quiz with existing attempts. Please deactivate it instead.');
+        $attemptCount = $quiz->attempts()->count();
+        if ($attemptCount > 0) {
+            Log::info("Deleting quiz ID {$quiz->id} with {$attemptCount} attempt(s). User: ".Auth::id());
         }
 
         // Delete quiz from database
@@ -494,7 +509,18 @@ class QuizController extends Controller
      */
     public function import(): View
     {
-        return view('quizzes.import');
+        $user = Auth::user();
+        $state = QuestionBankExportUiState::forUser($user);
+        $updateTargetQuizzes = $user->quizzes()
+            ->where('title', '!=', Quiz::RANDOM_MODE_SETTINGS_TITLE)
+            ->orderBy('subject')
+            ->orderBy('level')
+            ->orderBy('title')
+            ->get(['id', 'title', 'level', 'subject']);
+
+        return view('quizzes.import', array_merge($state, [
+            'updateTargetQuizzes' => $updateTargetQuizzes,
+        ]));
     }
 
     /**
@@ -523,7 +549,8 @@ class QuizController extends Controller
         $result = $this->questionBankExcelService->import(
             $request->file('excel_file'),
             (int) Auth::id(),
-            $request->string('mode')->toString()
+            $request->string('mode')->toString(),
+            $request->integer('quiz_id') ?: null
         );
 
         if (! empty($result['errors'])) {
@@ -555,9 +582,63 @@ class QuizController extends Controller
         return $this->questionBankExcelService->template();
     }
 
-    public function exportQuestionBank()
+    public function exportQuestionBank(Request $request): RedirectResponse|StreamedResponse
     {
-        return $this->questionBankExcelService->exportForUser((int) Auth::id());
+        $validator = Validator::make($request->all(), [
+            'export_level' => ['required', 'string', Rule::in(QuizSchoolLevel::levels())],
+            'quiz_ids' => ['required', 'array', 'min:1'],
+            'quiz_ids.*' => ['integer', Rule::exists('quizzes', 'id')->where('user_id', Auth::id())],
+        ]);
+
+        if ($validator->fails()) {
+            return redirect()->route('quizzes.import')
+                ->withErrors($validator)
+                ->withInput();
+        }
+
+        $validated = $validator->validated();
+
+        $quizzes = Quiz::query()
+            ->where('user_id', Auth::id())
+            ->whereIn('id', $validated['quiz_ids'])
+            ->get();
+
+        foreach ($quizzes as $quiz) {
+            if ($quiz->isRandomModeSettingsQuiz()) {
+                return redirect()->route('quizzes.import')
+                    ->withErrors(['quiz_ids' => 'This export only includes standard quizzes for a school level.'])
+                    ->withInput();
+            }
+            if ($quiz->level !== $validated['export_level']) {
+                return redirect()->route('quizzes.import')
+                    ->withErrors(['quiz_ids' => 'Each selected quiz must use the same school level you chose above.'])
+                    ->withInput();
+            }
+        }
+
+        $subjects = array_values(array_unique(array_intersect(
+            $quizzes->pluck('subject')->filter()->map(fn ($s) => (string) $s)->all(),
+            QuestionBankItem::SUBJECTS
+        )));
+
+        if ($subjects === []) {
+            return redirect()->route('quizzes.import')
+                ->withErrors(['quiz_ids' => 'Selected quizzes need a subject (Math, English, or Science) so we know what to export.'])
+                ->withInput();
+        }
+
+        $representativeQuiz = $quizzes->first();
+
+        try {
+            return $this->questionBankExcelService->exportForQuiz(
+                $representativeQuiz,
+                $subjects,
+                (int) Auth::id()
+            );
+        } catch (\InvalidArgumentException $e) {
+            return redirect()->route('quizzes.import')
+                ->with('error', $e->getMessage());
+        }
     }
 
     protected function getOrCreateRandomModeQuiz(User $user): Quiz
@@ -565,7 +646,7 @@ class QuizController extends Controller
         return Quiz::firstOrCreate(
             [
                 'user_id' => $user->id,
-                'title' => self::RANDOM_MODE_TITLE,
+                'title' => Quiz::RANDOM_MODE_SETTINGS_TITLE,
             ],
             [
                 'description' => 'Global random quiz mode settings for child devices.',

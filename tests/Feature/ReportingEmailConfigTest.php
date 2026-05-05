@@ -11,10 +11,13 @@ use App\Models\Device;
 use App\Models\ReportingPreference;
 use App\Models\ReportingRecipient;
 use App\Models\User;
+use App\Services\NetworkService;
+use App\Services\ReportingDigestService;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\Middleware\ValidateCsrfToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Mail;
+use Mockery;
 use Tests\TestCase;
 
 /**
@@ -284,5 +287,81 @@ class ReportingEmailConfigTest extends TestCase
                 && str_contains($mail->subjectLine, '[Test ')
                 && preg_match('/\[Test \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{6}\]$/', $mail->subjectLine) === 1;
         });
+    }
+
+    public function test_digest_payload_includes_bandwidth_totals_from_browsing_logs(): void
+    {
+        $parent = User::factory()->create(['role' => 'parent']);
+        $device = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Child Laptop',
+            'mac_address' => 'AA:BB:CC:DD:EE:44',
+            'status' => 'active',
+            'role' => 'child',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        $start = CarbonImmutable::now('UTC')->subDay()->startOfDay();
+        $end = $start->addDay();
+
+        BrowsingLog::create([
+            'device_id' => $device->id,
+            'url' => 'https://bandwidth.example',
+            'domain' => 'bandwidth.example',
+            'bytes_sent' => 1048576,
+            'bytes_received' => 2097152,
+            'visited_at' => $start->addHours(8),
+        ]);
+
+        $payload = app(ReportingDigestService::class)->buildDigestPayload(
+            $parent,
+            $start,
+            $end,
+            'UTC'
+        );
+
+        $this->assertSame('browsing_logs', $payload['bandwidth']['source']);
+        $this->assertSame(3145728, $payload['bandwidth']['family_total_bytes']);
+        $this->assertSame('0.025 Gb', $payload['bandwidth']['family_total_formatted']);
+        $this->assertSame('0.025 Gb', $payload['devices'][0]['bandwidth']['bytes_total_formatted']);
+    }
+
+    public function test_digest_payload_uses_live_bandwidth_fallback_when_logs_are_empty(): void
+    {
+        $parent = User::factory()->create(['role' => 'parent']);
+        Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Child Laptop',
+            'mac_address' => 'AA:BB:CC:DD:EE:55',
+            'status' => 'active',
+            'role' => 'child',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        $mock = Mockery::mock(NetworkService::class);
+        $mock->shouldReceive('getTrafficStats')
+            ->once()
+            ->andReturn([[
+                'mac_address' => 'AA:BB:CC:DD:EE:55',
+                'bytes_sent' => 1048576,
+                'bytes_received' => 1048576,
+            ]]);
+        $this->app->instance(NetworkService::class, $mock);
+
+        $start = CarbonImmutable::now('UTC')->subDay()->startOfDay();
+        $end = $start->addDay();
+
+        $payload = app(ReportingDigestService::class)->buildDigestPayload(
+            $parent,
+            $start,
+            $end,
+            'UTC'
+        );
+
+        $this->assertSame('live_traffic_fallback', $payload['bandwidth']['source']);
+        $this->assertSame(2097152, $payload['bandwidth']['family_total_bytes']);
+        $this->assertSame('0.017 Gb', $payload['bandwidth']['family_total_formatted']);
     }
 }

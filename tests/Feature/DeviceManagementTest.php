@@ -3,7 +3,9 @@
 namespace Tests\Feature;
 
 use App\Models\Device;
+use App\Models\Quiz;
 use App\Models\User;
+use App\Models\Video;
 use App\Services\NetworkService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -626,6 +628,49 @@ class DeviceManagementTest extends TestCase
         $response = $this->actingAs($user)->get(route('child_devices.index'));
 
         $response->assertOk();
+    }
+
+    public function test_child_devices_page_lists_assigned_quizzes_and_videos(): void
+    {
+        $user = User::factory()->create();
+        $device = Device::factory()->create(['user_id' => $user->id]);
+        $quiz = Quiz::create([
+            'user_id' => $user->id,
+            'title' => 'Child Portal Math Quiz',
+            'description' => null,
+            'level' => 'Elementary',
+            'subject' => 'Math',
+            'question_count' => 5,
+            'scoring_mode' => 'pass_score',
+            'minutes_per_correct' => 1,
+            'passing_score' => 70,
+            'time_reward_minutes' => 10,
+            'questions' => ['questions' => []],
+            'is_active' => true,
+        ]);
+        $quiz->devices()->sync([$device->id]);
+        $video = Video::create([
+            'user_id' => $user->id,
+            'title' => 'Child Portal Science Clip',
+            'description' => null,
+            'video_path' => 'videos/sample.mp4',
+            'duration_seconds' => 120,
+            'dictionary_words_enabled' => false,
+            'word_count' => 0,
+            'time_reward_minutes' => 10,
+            'is_active' => true,
+        ]);
+        $video->devices()->sync([$device->id]);
+
+        $response = $this->actingAs($user)->get(route('child_devices.index', ['device' => $device->id]));
+
+        $response->assertOk();
+        $response->assertSee('ASSIGNED QUIZ & VIDEO');
+        $response->assertSee('Child Portal Math Quiz');
+        $response->assertSee('Child Portal Science Clip');
+        $response->assertSee('Quizzes');
+        $response->assertSee('Videos');
+        $response->assertDontSee('Edit assignments');
     }
 
     /**

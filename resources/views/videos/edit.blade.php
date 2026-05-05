@@ -26,12 +26,18 @@
 
                         {{-- Video File Upload (FIRST - Optional for edit, but detects duration if new file selected) --}}
                         <div class="mb-6">
-                            <label for="video_file" class="block text-sm font-medium text-gray-700 mb-2">
+                            <span class="block text-sm font-medium text-gray-700 mb-2" id="video_file_field_label">
                                 Replace Video File (Optional)
-                            </label>
-                            <input type="file" name="video_file" id="video_file" accept="video/mp4,video/webm,video/ogg"
-                                class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                                onchange="handleVideoFileSelect(event)">
+                            </span>
+                            <div class="flex flex-col gap-2 rounded-md border border-gray-300 bg-white px-3 py-3 shadow-sm sm:flex-row sm:items-center sm:gap-4">
+                                <label for="video_file" class="inline-flex shrink-0 cursor-pointer items-center justify-center rounded-md border border-gray-400 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-100 focus-within:outline-none focus-within:ring-2 focus-within:ring-yellow-500 focus-within:ring-offset-1">
+                                    Choose file
+                                </label>
+                                <input type="file" name="video_file" id="video_file" accept="video/mp4,video/webm,video/ogg"
+                                    class="sr-only"
+                                    onchange="handleVideoFileSelect(event)">
+                                <span id="video_file_display" class="min-w-0 flex-1 truncate text-sm text-gray-700" title="">Keeping current video (no new file selected)</span>
+                            </div>
                             <p class="mt-1 text-sm text-gray-500">Leave empty to keep current video. Accepted formats: MP4, WebM, OGG. Maximum size: 512MB</p>
                             <p class="mt-1 text-sm text-gray-600">Current video: <strong>{{ basename($video->video_path) }}</strong></p>
                             <div id="video_loading" class="mt-2 text-sm text-blue-600" style="display: none;">
@@ -43,7 +49,14 @@
                             @error('video_file')
                                 <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
                             @enderror
+                            @error('duration_seconds')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                         </div>
+
+                        {{-- Filled from DB or by JS when replacing the file; visually hidden --}}
+                        <input type="number" name="duration_seconds" id="duration_seconds" value="{{ old('duration_seconds', $video->duration_seconds) }}" min="1" required
+                            class="sr-only pointer-events-none" tabindex="-1" aria-hidden="true">
 
                         {{-- Video Metadata: Title, Description (Shown after video is selected) --}}
                         <div class="mb-6" id="metadata_section">
@@ -64,30 +77,14 @@
                             @enderror
                         </div>
 
-                        {{-- Duration and Time Reward (Duration auto-filled from video) --}}
-                        <div class="grid grid-cols-2 gap-4 mb-6" id="duration_section">
-                            <div>
-                                <label for="duration_seconds" class="block text-sm font-medium text-gray-700 mb-2">
-                                    Duration (seconds) * 
-                                    <span class="text-green-600 text-xs" id="auto_detected_badge" style="display: none;">(Auto-detected)</span>
-                                </label>
-                                <input type="number" name="duration_seconds" id="duration_seconds" value="{{ old('duration_seconds', $video->duration_seconds) }}" min="1" required
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500"
-                                    placeholder="Will be auto-filled from video" readonly>
-                                <p class="mt-1 text-sm text-gray-500">Automatically detected from video file</p>
-                                @error('duration_seconds')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-
-                            <div>
-                                <label for="time_reward_minutes" class="block text-sm font-medium text-gray-700 mb-2">Time Reward (minutes) *</label>
-                                <input type="number" name="time_reward_minutes" id="time_reward_minutes" value="{{ old('time_reward_minutes', $video->time_reward_minutes) }}" min="1" required
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
-                                @error('time_reward_minutes')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                        {{-- Time reward (duration is hidden; updated when a new video file is chosen) --}}
+                        <div class="mb-6" id="duration_section">
+                            <label for="time_reward_minutes" class="block text-sm font-medium text-gray-700 mb-2">Time Reward (minutes) *</label>
+                            <input type="number" name="time_reward_minutes" id="time_reward_minutes" value="{{ old('time_reward_minutes', $video->time_reward_minutes) }}" min="1" required
+                                class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
+                            @error('time_reward_minutes')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         {{-- Dictionary Words Settings (Shown after duration is detected) --}}
@@ -182,18 +179,31 @@
         function handleVideoFileSelect(event) {
             const fileInput = event.target;
             const file = fileInput.files[0];
-            
+            const fileDisplay = document.getElementById('video_file_display');
+            const emptyLabel = 'Keeping current video (no new file selected)';
+
+            function setFileDisplay(text, title) {
+                if (!fileDisplay) {
+                    return;
+                }
+                fileDisplay.textContent = text;
+                fileDisplay.setAttribute('title', title || '');
+            }
+
             if (!file) {
-                // No file selected, hide sections
+                setFileDisplay(emptyLabel, '');
                 hideFormSections();
                 return;
             }
+
+            setFileDisplay(file.name, file.name);
             
             // Validate file type
             const validTypes = ['video/mp4', 'video/webm', 'video/ogg'];
             if (!validTypes.includes(file.type)) {
                 alert('Please select a valid video file (MP4, WebM, or OGG)');
                 fileInput.value = '';
+                setFileDisplay(emptyLabel, '');
                 hideFormSections();
                 return;
             }
@@ -216,11 +226,9 @@
                 // Get duration in seconds (rounded to nearest integer)
                 const durationSeconds = Math.round(video.duration);
                 
-                // Fill in duration field
-                const durationInput = document.getElementById('duration_seconds');
-                durationInput.value = durationSeconds;
-                durationInput.removeAttribute('readonly'); // Allow manual editing if needed
-                
+                // Fill hidden duration field
+                document.getElementById('duration_seconds').value = durationSeconds;
+
                 // Format duration for display (e.g., "3:45" or "1:23:45")
                 const hours = Math.floor(durationSeconds / 3600);
                 const minutes = Math.floor((durationSeconds % 3600) / 60);
@@ -236,8 +244,7 @@
                 document.getElementById('video_loading').style.display = 'none';
                 document.getElementById('video_duration_detected').style.display = 'block';
                 document.getElementById('detected_duration_display').textContent = `${durationDisplay} (${durationSeconds} seconds)`;
-                document.getElementById('auto_detected_badge').style.display = 'inline';
-                
+
                 // Show rest of form fields
                 showFormSections();
                 
@@ -250,6 +257,7 @@
                 document.getElementById('video_loading').style.display = 'none';
                 alert('Error loading video. Please try a different file.');
                 fileInput.value = '';
+                setFileDisplay(emptyLabel, '');
                 hideFormSections();
                 URL.revokeObjectURL(url);
             });

@@ -7,19 +7,23 @@ use App\Models\DeviceSession;
 use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\Video;
+use App\Services\BandwidthUsageService;
 use App\Services\UsageChartService;
-use Illuminate\Http\Request;
-use Illuminate\Http\JsonResponse;
-use Illuminate\Support\Facades\Auth;
 use Carbon\Carbon;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
 
 class DashboardController extends Controller
 {
     protected $usageChartService;
 
-    public function __construct(UsageChartService $usageChartService)
+    protected $bandwidthUsageService;
+
+    public function __construct(UsageChartService $usageChartService, BandwidthUsageService $bandwidthUsageService)
     {
         $this->usageChartService = $usageChartService;
+        $this->bandwidthUsageService = $bandwidthUsageService;
     }
 
     /**
@@ -95,7 +99,7 @@ class DashboardController extends Controller
                 'minutes' => $minutes,
                 'total_seconds' => $totalSeconds,
                 'remaining_minutes' => $remainingMinutes,
-                'is_connected' => !empty($device->ip_address),
+                'is_connected' => ! empty($device->ip_address),
                 // Real-time UI (dashboard JS): DB pool + active session start for client-side countdown
                 'db_remaining_minutes' => (int) ($device->remaining_time_minutes ?? 0),
                 'active_session_started_at' => $includeActiveUsage
@@ -105,12 +109,14 @@ class DashboardController extends Controller
             ];
         }
 
-        $timeUsageRenderedAt = now()->toIso8601String();
+        $timeUsageNow = now();
+        $timeUsageRenderedAt = $timeUsageNow->toIso8601String();
+        $timeUsageAnchorMs = (int) ($timeUsageNow->getTimestamp() * 1000);
 
         // Get recent quiz attempts with scores
         $quizAttempts = QuizAttempt::whereHas('device', function ($query) use ($user) {
-                $query->where('user_id', $user->id);
-            })
+            $query->where('user_id', $user->id);
+        })
             ->with(['device', 'quiz'])
             ->orderBy('completed_at', 'desc')
             ->take(10)
@@ -120,7 +126,7 @@ class DashboardController extends Controller
         $quizResults = [];
         foreach ($quizAttempts as $attempt) {
             $quizId = $attempt->quiz_id;
-            if (!isset($quizResults[$quizId])) {
+            if (! isset($quizResults[$quizId])) {
                 $quizResults[$quizId] = [
                     'quiz' => $attempt->quiz,
                     'attempts' => [],
@@ -148,7 +154,7 @@ class DashboardController extends Controller
         $totalQuizzes = Quiz::where('user_id', $user->id)
             ->where('is_active', true)
             ->count();
-        
+
         $totalVideos = Video::where('user_id', $user->id)
             ->where('is_active', true)
             ->count();
@@ -163,6 +169,7 @@ class DashboardController extends Controller
         return view('dashboard.index', [
             'timeUsageData' => $timeUsageData,
             'timeUsageRenderedAt' => $timeUsageRenderedAt,
+            'timeUsageAnchorMs' => $timeUsageAnchorMs,
             'quizResults' => array_values($quizResults),
             'totalQuizzes' => $totalQuizzes,
             'totalVideos' => $totalVideos,
@@ -178,7 +185,7 @@ class DashboardController extends Controller
      * This powers the graph filters (daily/weekly/monthly/yearly) and is also
      * called by the frontend when realtime events are received.
      *
-     * @param Request $request HTTP request (query param: `range`)
+     * @param  Request  $request  HTTP request (query param: `range`)
      * @return JsonResponse JSON payload compatible with the Chart.js builder in the dashboard view
      */
     public function usageChart(Request $request): JsonResponse
@@ -196,6 +203,22 @@ class DashboardController extends Controller
         );
     }
 
+    /**
+     * Return JSON data for the dashboard bandwidth chart.
+     */
+    public function bandwidthChart(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'range' => ['nullable', 'in:daily,weekly,monthly,yearly'],
+        ]);
+
+        $range = $validated['range'] ?? 'yearly';
+
+        return response()->json(
+            $this->bandwidthUsageService->buildChartPayload($request->user(), $range)
+        );
+    }
+
     private function calculateRemainingMinutes(Device $device, ?DeviceSession $activeSession): int
     {
         if ($device->isWhitelisted()) {
@@ -203,18 +226,21 @@ class DashboardController extends Controller
         }
 
         $baseRemaining = (int) ($device->remaining_time_minutes ?? 0);
-        if (!$activeSession) {
+        if (! $activeSession) {
             return max(0, $baseRemaining);
         }
 
-        $sessionDurationMinutes = $activeSession->getDurationMinutes();
-        return max(0, (int) floor($baseRemaining - $sessionDurationMinutes));
+        $poolSeconds = $baseRemaining * 60;
+        $elapsedSeconds = $activeSession->started_at->diffInSeconds(now());
+        $remainingSeconds = max(0, $poolSeconds - $elapsedSeconds);
+
+        return max(0, (int) floor($remainingSeconds / 60));
     }
 
     /**
      * Get monthly usage data for the last 12 months.
      *
-     * @param int $userId
+     * @param  int  $userId
      * @return array
      */
     private function getMonthlyUsage($userId)
@@ -229,8 +255,8 @@ class DashboardController extends Controller
 
             // Sum all session durations for devices belonging to this user in this month
             $totalSeconds = DeviceSession::whereHas('device', function ($query) use ($userId) {
-                    $query->where('user_id', $userId);
-                })
+                $query->where('user_id', $userId);
+            })
                 ->whereBetween('started_at', [$monthStart, $monthEnd])
                 ->whereNotNull('duration_seconds')
                 ->sum('duration_seconds');
@@ -247,4 +273,3 @@ class DashboardController extends Controller
         return $months;
     }
 }
-

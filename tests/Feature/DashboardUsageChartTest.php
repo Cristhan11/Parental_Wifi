@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Models\Device;
 use App\Models\DeviceSession;
 use App\Models\User;
+use App\Services\NetworkService;
 use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Mockery;
 use Tests\TestCase;
 
 class DashboardUsageChartTest extends TestCase
@@ -130,5 +132,77 @@ class DashboardUsageChartTest extends TestCase
         // 30 minutes session => 0.5 hours in that month bucket.
         $this->assertSame(0.5, (float) $data['series'][0]['values'][$idxJune]);
     }
-}
 
+    public function test_dashboard_bandwidth_chart_reads_browsing_log_bytes(): void
+    {
+        $timezone = (string) (config('app.timezone') ?: 'Asia/Manila');
+        $now = Carbon::create(2026, 3, 25, 10, 30, 0, $timezone);
+        Carbon::setTestNow($now);
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'role' => 'child',
+            'status' => 'active',
+        ]);
+
+        \App\Models\BrowsingLog::create([
+            'device_id' => $device->id,
+            'url' => 'https://example.com',
+            'domain' => 'example.com',
+            'bytes_sent' => 1048576,
+            'bytes_received' => 2097152,
+            'visited_at' => $now->copy()->setTime(10, 15, 0),
+        ]);
+
+        $response = $this->actingAs($user)->getJson(route('dashboard.bandwidth-chart', [
+            'range' => 'daily',
+        ]));
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertSame('daily', $data['range']);
+        $this->assertSame('gbit', $data['unit']);
+        $this->assertCount(1, $data['series']);
+
+        $idx10 = array_search('10', $data['labels'], true);
+        $this->assertIsInt($idx10);
+        $this->assertSame(0.0252, (float) $data['series'][0]['values'][$idx10]);
+    }
+
+    public function test_dashboard_bandwidth_chart_uses_live_fallback_when_logs_empty(): void
+    {
+        $timezone = (string) (config('app.timezone') ?: 'Asia/Manila');
+        $now = Carbon::create(2026, 3, 25, 10, 30, 0, $timezone);
+        Carbon::setTestNow($now);
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'role' => 'child',
+            'status' => 'active',
+            'mac_address' => 'AA:BB:CC:DD:EE:FF',
+        ]);
+
+        $mock = Mockery::mock(NetworkService::class);
+        $mock->shouldReceive('getTrafficStats')
+            ->once()
+            ->andReturn([[
+                'mac_address' => 'AA:BB:CC:DD:EE:FF',
+                'bytes_sent' => 1048576,
+                'bytes_received' => 2097152,
+            ]]);
+        $this->app->instance(NetworkService::class, $mock);
+
+        $response = $this->actingAs($user)->getJson(route('dashboard.bandwidth-chart', [
+            'range' => 'daily',
+        ]));
+
+        $response->assertOk();
+        $data = $response->json();
+        $idx10 = array_search('10', $data['labels'], true);
+        $this->assertIsInt($idx10);
+        $this->assertSame(0.0252, (float) $data['series'][0]['values'][$idx10]);
+        $this->assertSame((int) $device->id, (int) $data['series'][0]['device_id']);
+    }
+}

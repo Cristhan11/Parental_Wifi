@@ -46,6 +46,7 @@
                             data-is-whitelisted="{{ $data['is_whitelisted'] ? '1' : '0' }}"
                             data-is-connected="{{ $data['is_connected'] ? '1' : '0' }}"
                             data-remaining-minutes-fallback="{{ $data['remaining_minutes'] }}"
+                            data-usage-anchor-ms="{{ $timeUsageAnchorMs }}"
                         >
                             <div class="flex items-center gap-2 sm:gap-3">
                                 <div class="w-8 h-8 sm:w-10 sm:h-10 rounded-full flex items-center justify-center font-bold text-sm sm:text-base text-black bg-[#FFDE15] flex-shrink-0">
@@ -53,20 +54,24 @@
                                 </div>
                                 <div class="min-w-0">
                                     <p class="font-bold text-black font-montserrat text-xs sm:text-sm truncate">{{ $index + 1 }}. {{ $data['device']->name }}</p>
-                                    @if($data['is_connected'])
-                                        <span class="text-xs font-semibold text-green-600 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is connected">
-                                            <span class="w-2 h-2 bg-green-500 rounded-full"></span> Connected
-                                        </span>
-                                    @else
-                                        <span class="text-xs font-semibold text-gray-400 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is not connected">
-                                            <span class="w-2 h-2 bg-gray-400 rounded-full"></span> Offline
-                                        </span>
-                                    @endif
-                                    @if(!empty($data['active_session_started_at']))
-                                        <p class="text-[10px] text-gray-500 font-montserrat mt-0.5">
-                                            Current session since {{ \Carbon\Carbon::parse($data['active_session_started_at'])->timezone(config('app.timezone'))->format('g:i A') }}
-                                        </p>
-                                    @endif
+                                    <span class="js-device-connection-status block">
+                                        @if($data['is_connected'])
+                                            <span class="text-xs font-semibold text-green-600 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is connected">
+                                                <span class="w-2 h-2 bg-green-500 rounded-full"></span> Connected
+                                            </span>
+                                        @else
+                                            <span class="text-xs font-semibold text-gray-400 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is not connected">
+                                                <span class="w-2 h-2 bg-gray-400 rounded-full"></span> Offline
+                                            </span>
+                                        @endif
+                                    </span>
+                                    <div class="js-device-session-meta">
+                                        @if(!empty($data['active_session_started_at']))
+                                            <p class="text-[10px] text-gray-500 font-montserrat mt-0.5">
+                                                Current session since {{ \Carbon\Carbon::parse($data['active_session_started_at'])->timezone(config('app.timezone'))->format('g:i A') }}
+                                            </p>
+                                        @endif
+                                    </div>
                                 </div>
                             </div>
                             <div class="text-right flex-shrink-0">
@@ -133,11 +138,18 @@
                 </div>
             </article>
 
-            <!-- Column 2: Graphical Representation Card (7 columns) -->
+            <!-- Column 2: Graphical Representation Card (single graph with metric dropdown) -->
             <article class="col-span-12 sm:col-span-7 rounded-xl bg-white border-4 border-[#FFDE15] p-2 sm:p-4 flex flex-col text-black min-w-0 overflow-hidden" style="min-height: 0;">
-                <h2 class="text-sm sm:text-lg font-extrabold flex items-center gap-2 font-montserrat mb-1 flex-shrink-0">
-                    <i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="trending-up"></i> CHILD'S DEVICE USAGE TIME
-                </h2>
+                <div class="mb-1 flex items-center justify-between gap-2 flex-shrink-0">
+                    <h2 id="dashboardGraphTitle" class="text-sm sm:text-lg font-extrabold flex items-center gap-2 font-montserrat">
+                        <i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="trending-up"></i> CHILD'S DEVICE USAGE TIME
+                    </h2>
+                    <select id="dashboardGraphType"
+                        class="rounded-full border-2 border-gray-300 bg-white text-black px-3 py-1 text-[11px] sm:text-xs font-semibold font-montserrat focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                        <option value="usage" selected>Child Usage Time</option>
+                        <option value="bandwidth">Bandwidth Consumption</option>
+                    </select>
+                </div>
                 <!-- Filter controls for the usage chart -->
                 <div class="mb-1.5 flex items-center justify-between gap-3 flex-shrink-0">
                     <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">FILTER</span>
@@ -255,13 +267,12 @@
         }
     </style>
     <script>
-        // Multi-series dashboard usage chart (per device) driven by `/dashboard/usage-chart`.
         (function() {
             'use strict';
 
-            // These globals allow the realtime notification script to request a chart refresh.
             window.usageChartInstance = window.usageChartInstance ?? null;
             window.currentUsageChartRange = window.currentUsageChartRange ?? 'yearly';
+            window.currentDashboardGraphType = window.currentDashboardGraphType ?? 'usage';
             window.__usageChartRefreshImpl = null;
             window.refreshUsageChart = function (reason) {
                 if (typeof window.__usageChartRefreshImpl === 'function') {
@@ -270,7 +281,6 @@
             };
 
             document.addEventListener('DOMContentLoaded', function() {
-                // Initialize Feather Icons
                 if (typeof feather !== 'undefined') {
                     feather.replace();
                 }
@@ -278,7 +288,10 @@
                 const ctx = document.getElementById('usageChart');
                 if (!ctx) return;
 
+                const graphTypeSelect = document.getElementById('dashboardGraphType');
+                const graphTitle = document.getElementById('dashboardGraphTitle');
                 const filterButtons = document.querySelectorAll('[data-usage-chart-range]');
+
                 const setActiveFilter = (range) => {
                     window.currentUsageChartRange = range;
                     filterButtons.forEach((btn) => {
@@ -294,15 +307,29 @@
                     });
                 };
 
-                // Pick initial range from the active button (Yearly by default).
+                const updateGraphTitle = () => {
+                    const isBandwidth = window.currentDashboardGraphType === 'bandwidth';
+                    if (graphTitle) {
+                        graphTitle.innerHTML = isBandwidth
+                            ? '<i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="activity"></i> BANDWIDTH CONSUMPTION'
+                            : '<i class="w-4 h-4 sm:w-5 sm:h-5" data-feather="trending-up"></i> CHILD\\\'S DEVICE USAGE TIME';
+                    }
+                    if (typeof feather !== 'undefined') {
+                        feather.replace();
+                    }
+                };
+
                 const activeBtn = document.querySelector('.js-usage-chart-filter-active[data-usage-chart-range]');
                 if (activeBtn) {
                     setActiveFilter(activeBtn.dataset.usageChartRange);
                 } else {
                     setActiveFilter('yearly');
                 }
+                if (graphTypeSelect) {
+                    window.currentDashboardGraphType = graphTypeSelect.value || 'usage';
+                }
+                updateGraphTitle();
 
-                // Build visually distinct line colors for multiple child devices.
                 const makeBorderColor = (index) => {
                     const hue = (index * 55) % 360;
                     return `hsl(${hue} 70% 35%)`;
@@ -315,20 +342,22 @@
                     }
                 };
 
-                const buildDatasets = (series) => {
+                const buildDatasets = (series, isBandwidth, clampMax = null) => {
                     return series.map((item, idx) => {
                         const borderColor = makeBorderColor(idx);
                         return {
                             label: item.device_name,
-                            data: item.values,
+                            data: Array.isArray(item.values)
+                                ? item.values.map((v) => (clampMax !== null ? Math.min(Number(v), clampMax) : Number(v)))
+                                : [],
                             borderColor,
-                            backgroundColor: 'rgba(255, 222, 21, 0.10)',
+                            backgroundColor: isBandwidth ? 'rgba(34, 197, 94, 0.10)' : 'rgba(255, 222, 21, 0.10)',
                             borderWidth: 2.5,
                             fill: false,
                             tension: 0.35,
                             pointRadius: 4,
                             pointHoverRadius: 7,
-                            pointBackgroundColor: '#FFDE15',
+                            pointBackgroundColor: isBandwidth ? '#22C55E' : '#FFDE15',
                             pointBorderColor: borderColor,
                             pointBorderWidth: 2
                         };
@@ -338,25 +367,24 @@
                 const renderChart = (payload) => {
                     const labels = payload.labels ?? [];
                     const series = payload.series ?? [];
-
+                    const isBandwidth = window.currentDashboardGraphType === 'bandwidth';
                     destroyChartIfNeeded();
 
                     const allValues = series.flatMap((s) => Array.isArray(s.values) ? s.values : []);
                     const maxVal = Math.max(...allValues, 0);
-                    const suggestedMax = maxVal > 0 ? maxVal * 1.2 : 10;
-                    const dailyFixedMax = payload.range === 'daily' ? 60 : null;
-
-                    // The API returns a unit per range:
-                    // - daily => minutes
-                    // - weekly/monthly/yearly => hours
-                    //
-                    // Cap Y-axis to the realistic maximum for a *single bucket* (not the whole range).
-                    //
-                    // - Daily: one bucket = one hour → max 60 minutes
-                    // - Weekly: one bucket = one calendar day → max 24 hours
-                    // - Monthly: one bucket = up to 7 days in that month slice → max 168 hours
-                    // - Yearly: one bucket = one calendar month → max 31×24 hours (longest month)
+                    const bandwidthDefaultMaxByRange = (() => {
+                        if (payload.range === 'daily') return 20;
+                        if (payload.range === 'weekly') return 120;
+                        if (payload.range === 'monthly') return 500;
+                        if (payload.range === 'yearly') return 2000;
+                        return 120;
+                    })();
+                    const suggestedMax = maxVal > 0
+                        ? maxVal * 1.2
+                        : (isBandwidth ? bandwidthDefaultMaxByRange : 10);
+                    const dailyFixedMax = !isBandwidth && payload.range === 'daily' ? 60 : null;
                     const maxByRangeInChartUnit = (() => {
+                        if (isBandwidth) return null;
                         if (payload.range === 'daily') return 60;
                         if (payload.range === 'weekly') return 24;
                         if (payload.range === 'monthly') return 168;
@@ -364,15 +392,17 @@
                         return null;
                     })();
 
+                    const hardCap = isBandwidth
+                        ? bandwidthDefaultMaxByRange
+                        : (dailyFixedMax !== null ? dailyFixedMax : maxByRangeInChartUnit);
+                    const hardCapApplies = hardCap !== null && maxVal > hardCap;
+
                     const showLegend = series.length > 0 && series.length <= 6;
-                    const datasets = buildDatasets(series);
+                    const datasets = buildDatasets(series, isBandwidth, hardCapApplies ? hardCap : null);
 
                     window.usageChartInstance = new Chart(ctx, {
                         type: 'line',
-                        data: {
-                            labels,
-                            datasets
-                        },
+                        data: { labels, datasets },
                         options: {
                             responsive: true,
                             maintainAspectRatio: false,
@@ -381,11 +411,7 @@
                                     display: showLegend,
                                     position: 'bottom',
                                     labels: {
-                                        font: {
-                                            family: 'Montserrat Variable',
-                                            size: 11,
-                                            weight: 'bold'
-                                        },
+                                        font: { family: 'Montserrat Variable', size: 11, weight: 'bold' },
                                         boxWidth: 10
                                     }
                                 },
@@ -394,13 +420,16 @@
                                     backgroundColor: 'rgba(0, 0, 0, 0.85)',
                                     titleColor: '#fff',
                                     bodyColor: '#fff',
-                                    borderColor: '#FFDE15',
+                                    borderColor: isBandwidth ? '#22C55E' : '#FFDE15',
                                     borderWidth: 2,
                                     padding: 12,
                                     cornerRadius: 8,
                                     callbacks: {
                                         label: (context) => {
                                             const label = context.dataset?.label ? context.dataset.label + ': ' : '';
+                                            if (isBandwidth) {
+                                                return label + context.parsed.y + ' Gbit';
+                                            }
                                             const unit = payload.unit === 'hours' ? ' hr' : ' min';
                                             return label + context.parsed.y + unit;
                                         }
@@ -412,95 +441,79 @@
                                     beginAtZero: true,
                                     ...(dailyFixedMax !== null
                                         ? { max: dailyFixedMax }
-                                        : (maxByRangeInChartUnit !== null ? { max: maxByRangeInChartUnit } : { suggestedMax })),
+                                        : (maxByRangeInChartUnit !== null
+                                            ? { max: maxByRangeInChartUnit }
+                                            : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax }))),
                                     title: {
                                         display: true,
-                                        // Simple, parent-friendly label.
-                                        text: payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)',
-                                        font: {
-                                            family: 'Montserrat Variable',
-                                            size: 12,
-                                            weight: 'bold'
-                                        },
+                                        text: isBandwidth
+                                            ? 'Bandwidth (Gbit)'
+                                            : (payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)'),
+                                        font: { family: 'Montserrat Variable', size: 12, weight: 'bold' },
                                         color: '#000000',
                                         padding: { top: 6, bottom: 6 }
                                     },
                                     ticks: {
-                                        font: {
-                                            size: 12,
-                                            weight: 'bold',
-                                            family: 'Montserrat Variable'
-                                        },
+                                        font: { size: 12, weight: 'bold', family: 'Montserrat Variable' },
                                         ...(dailyFixedMax !== null ? { stepSize: 10 } : {}),
+                                        callback: (value) => {
+                                            const v = Number(value);
+                                            if (hardCapApplies && hardCap !== null && v === hardCap) {
+                                                return '>' + hardCap;
+                                            }
+                                            return value;
+                                        },
                                         color: '#000000',
                                         padding: 8
                                     },
-                                    grid: {
-                                        color: 'rgba(0, 0, 0, 0.1)',
-                                        lineWidth: 1.3,
-                                    }
+                                    grid: { color: 'rgba(0, 0, 0, 0.1)', lineWidth: 1.3 }
                                 },
                                 x: {
                                     ticks: {
-                                        font: {
-                                            size: 11,
-                                            weight: 'bold',
-                                            family: 'Montserrat Variable'
-                                        },
+                                        font: { size: 11, weight: 'bold', family: 'Montserrat Variable' },
                                         color: '#000000',
                                         padding: 6
                                     },
-                                    grid: {
-                                        display: false
-                                    }
+                                    grid: { display: false }
                                 }
                             },
-                            interaction: {
-                                intersect: false,
-                                mode: 'index'
-                            },
-                            animation: {
-                                duration: 600,
-                                easing: 'easeInOutQuart'
-                            }
+                            interaction: { intersect: false, mode: 'index' },
+                            animation: { duration: 600, easing: 'easeInOutQuart' }
                         }
                     });
                 };
 
-                const fetchUsageChart = async (range) => {
-                    const url = `/dashboard/usage-chart?range=${encodeURIComponent(range)}`;
+                const fetchChart = async (range) => {
+                    const path = window.currentDashboardGraphType === 'bandwidth'
+                        ? '/dashboard/bandwidth-chart'
+                        : '/dashboard/usage-chart';
+                    const url = `${path}?range=${encodeURIComponent(range)}`;
                     const res = await fetch(url, {
                         method: 'GET',
-                        headers: {
-                            'X-Requested-With': 'XMLHttpRequest'
-                        },
+                        headers: { 'X-Requested-With': 'XMLHttpRequest' },
                         credentials: 'same-origin'
                     });
-
                     if (!res.ok) {
-                        throw new Error(`Usage chart request failed: ${res.status}`);
+                        throw new Error(`Dashboard graph request failed: ${res.status}`);
                     }
-
                     return await res.json();
                 };
 
-                // Refresh chart using whichever filter is currently selected.
                 let refreshInFlight = false;
                 window.__usageChartRefreshImpl = async (reason) => {
                     if (refreshInFlight) return;
                     refreshInFlight = true;
                     try {
                         const range = window.currentUsageChartRange || 'yearly';
-                        const payload = await fetchUsageChart(range);
+                        const payload = await fetchChart(range);
                         renderChart(payload);
                     } catch (e) {
-                        console.error('Failed to refresh usage chart', reason, e);
+                        console.error('Failed to refresh dashboard graph', reason, e);
                     } finally {
                         refreshInFlight = false;
                     }
                 };
 
-                // Wire filter buttons.
                 filterButtons.forEach((btn) => {
                     btn.addEventListener('click', () => {
                         const range = btn.dataset.usageChartRange;
@@ -509,12 +522,16 @@
                     });
                 });
 
-                // Initial load.
+                if (graphTypeSelect) {
+                    graphTypeSelect.addEventListener('change', () => {
+                        window.currentDashboardGraphType = graphTypeSelect.value || 'usage';
+                        updateGraphTitle();
+                        window.__usageChartRefreshImpl('graph-type-change');
+                    });
+                }
+
                 window.__usageChartRefreshImpl('initial-load');
 
-                // Active-session gap:
-                // Even with realtime events, active sessions may advance without a websocket tick every second.
-                // We refresh only for the Daily view and only while the tab is visible.
                 setInterval(() => {
                     if (window.currentUsageChartRange !== 'daily') return;
                     if (document.visibilityState !== 'visible') return;
@@ -522,7 +539,6 @@
                 }, 60000);
             });
 
-            // Cleanup on page unload
             window.addEventListener('beforeunload', function() {
                 if (window.usageChartInstance) {
                     window.usageChartInstance.destroy();
@@ -551,7 +567,7 @@
                 return h + 'h' + String(m).padStart(2, '0') + 'm';
             }
 
-            function formatRemainingLabel(isWhitelisted, hasActive, remainingSec, fallbackMin, isConnected) {
+            function formatRemainingLabel(isWhitelisted, hasActive, remainingSec, fallbackMin) {
                 if (isWhitelisted) {
                     return 'Unlimited';
                 }
@@ -559,17 +575,16 @@
                     if (fallbackMin <= 0) {
                         return 'Expired';
                     }
-                    // Connected but no DeviceSession row yet (e.g. scheduler hasn’t opened a session):
-                    // still tick down from page load so “Time left” isn’t frozen.
-                    if (isConnected) {
-                        if (remainingSec <= 0) {
-                            return 'Expired';
-                        }
-                        const m = Math.floor(remainingSec / 60);
-                        const s = Math.floor(remainingSec % 60);
-                        return m + ':' + String(s).padStart(2, '0') + ' left';
+                    if (remainingSec <= 0) {
+                        return 'Expired';
                     }
-                    return fallbackMin + ' min remaining';
+                    const h = Math.floor(remainingSec / 3600);
+                    const m = Math.floor((remainingSec % 3600) / 60);
+                    const s = Math.floor(remainingSec % 60);
+                    if (h > 0) {
+                        return h + 'h ' + String(m).padStart(2, '0') + 'm ' + String(s).padStart(2, '0') + 's left';
+                    }
+                    return m + ':' + String(s).padStart(2, '0') + ' left';
                 }
                 if (remainingSec <= 0) {
                     return 'Expired';
@@ -583,32 +598,78 @@
                 return m + ':' + String(s).padStart(2, '0') + ' left';
             }
 
+            window.dashboardSetConnectionUi = function (row, isConnected) {
+                const wrap = row.querySelector('.js-device-connection-status');
+                if (!wrap) {
+                    return;
+                }
+                if (isConnected) {
+                    wrap.innerHTML = '<span class="text-xs font-semibold text-green-600 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is connected"><span class="w-2 h-2 bg-green-500 rounded-full"></span> Connected</span>';
+                } else {
+                    wrap.innerHTML = '<span class="text-xs font-semibold text-gray-400 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is not connected"><span class="w-2 h-2 bg-gray-400 rounded-full"></span> Offline</span>';
+                }
+            };
+
+            window.dashboardSetSessionMeta = function (row, iso) {
+                const el = row.querySelector('.js-device-session-meta');
+                if (!el) {
+                    return;
+                }
+                if (!iso) {
+                    el.innerHTML = '';
+                    return;
+                }
+                const d = new Date(iso);
+                if (Number.isNaN(d.getTime())) {
+                    el.innerHTML = '';
+                    return;
+                }
+                const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', hour12: true });
+                el.innerHTML = '<p class="text-[10px] text-gray-500 font-montserrat mt-0.5">Current session since ' + timeStr + '</p>';
+            };
+
             function tickDashboardTimeRows() {
                 const renderedAt = document.querySelector('meta[name="time-usage-rendered-at"]')?.getAttribute('content');
                 const t0 = parseIsoMs(renderedAt);
                 const now = Date.now();
-                const deltaSec = !Number.isNaN(t0) ? Math.max(0, Math.floor((now - t0) / 1000)) : 0;
 
                 document.querySelectorAll('.js-dashboard-time-row').forEach(function (row) {
+                    const rowAnchorRaw = row.dataset.usageAnchorMs;
+                    const rowAnchorMs = (rowAnchorRaw !== undefined && rowAnchorRaw !== '')
+                        ? parseInt(rowAnchorRaw, 10)
+                        : t0;
+                    const anchorDeltaSec = !Number.isNaN(rowAnchorMs)
+                        ? Math.max(0, Math.floor((now - rowAnchorMs) / 1000))
+                        : 0;
+
                     const totalBase = parseInt(row.dataset.totalUsageSeconds || '0', 10) || 0;
                     const activeStart = row.dataset.activeSessionStartedAt || '';
                     const hasActive = activeStart.length > 0;
-                    const usageSec = totalBase + (hasActive ? deltaSec : 0);
-
                     const isWhitelisted = row.dataset.isWhitelisted === '1';
                     const isConnected = row.dataset.isConnected === '1';
                     const dbRemMin = parseInt(row.dataset.dbRemainingMinutes || '0', 10) || 0;
                     const fallbackMin = parseInt(row.dataset.remainingMinutesFallback || '0', 10) || 0;
 
+                    let sessionElapsedSec = 0;
+                    if (hasActive) {
+                        const startMs = parseIsoMs(activeStart);
+                        sessionElapsedSec = !Number.isNaN(startMs) ? Math.max(0, Math.floor((now - startMs) / 1000)) : 0;
+                    }
+
+                    let usageSec = totalBase;
+                    if (hasActive) {
+                        usageSec = totalBase + sessionElapsedSec;
+                    } else if (isConnected && !isWhitelisted && fallbackMin > 0) {
+                        usageSec = totalBase + anchorDeltaSec;
+                    }
+
                     let remainingSec = 0;
                     if (isWhitelisted) {
                         remainingSec = 999999;
                     } else if (hasActive) {
-                        const startMs = parseIsoMs(activeStart);
-                        const elapsedSec = !Number.isNaN(startMs) ? Math.floor((now - startMs) / 1000) : 0;
-                        remainingSec = Math.max(0, dbRemMin * 60 - elapsedSec);
+                        remainingSec = Math.max(0, dbRemMin * 60 - sessionElapsedSec);
                     } else if (isConnected && fallbackMin > 0) {
-                        remainingSec = Math.max(0, fallbackMin * 60 - deltaSec);
+                        remainingSec = Math.max(0, fallbackMin * 60 - anchorDeltaSec);
                     } else {
                         remainingSec = Math.max(0, fallbackMin * 60);
                     }
@@ -619,11 +680,11 @@
                         usageEl.textContent = formatUsageSeconds(usageSec);
                     }
                     if (remEl) {
-                        remEl.textContent = formatRemainingLabel(isWhitelisted, hasActive, remainingSec, fallbackMin, isConnected);
+                        remEl.textContent = formatRemainingLabel(isWhitelisted, hasActive, remainingSec, fallbackMin);
                         const expired = !isWhitelisted && (
                             (hasActive && remainingSec <= 0) ||
                             (!hasActive && fallbackMin <= 0) ||
-                            (!hasActive && isConnected && fallbackMin > 0 && remainingSec <= 0)
+                            (!hasActive && fallbackMin > 0 && remainingSec <= 0)
                         );
                         remEl.className = 'js-time-usage-remaining text-xs font-semibold font-montserrat ' +
                             (isWhitelisted ? 'text-gray-600' : (expired ? 'text-red-600' : 'text-gray-600'));
@@ -727,6 +788,10 @@
                             row.dataset.dbRemainingMinutes = '0';
                             row.dataset.remainingMinutesFallback = '0';
                             row.dataset.activeSessionStartedAt = '';
+                            row.dataset.usageAnchorMs = String(Date.now());
+                            if (typeof window.dashboardSetSessionMeta === 'function') {
+                                window.dashboardSetSessionMeta(row, '');
+                            }
                         }
                         if (typeof window.tickDashboardTimeRows === 'function') {
                             window.tickDashboardTimeRows();
@@ -741,6 +806,20 @@
                         if (row && event.remaining_minutes !== undefined) {
                             row.dataset.dbRemainingMinutes = String(event.remaining_minutes);
                             row.dataset.remainingMinutesFallback = String(event.remaining_minutes);
+                            const ts = event.timestamp ? Date.parse(event.timestamp) : Date.now();
+                            row.dataset.usageAnchorMs = String(Number.isNaN(ts) ? Date.now() : ts);
+                            if (event.active_session_started_at !== undefined) {
+                                row.dataset.activeSessionStartedAt = event.active_session_started_at || '';
+                            }
+                            if (event.is_connected !== undefined) {
+                                row.dataset.isConnected = event.is_connected ? '1' : '0';
+                                if (typeof window.dashboardSetConnectionUi === 'function') {
+                                    window.dashboardSetConnectionUi(row, !!event.is_connected);
+                                }
+                            }
+                            if (typeof window.dashboardSetSessionMeta === 'function') {
+                                window.dashboardSetSessionMeta(row, (event.active_session_started_at !== undefined && event.active_session_started_at) ? event.active_session_started_at : '');
+                            }
                         }
                         if (typeof window.tickDashboardTimeRows === 'function') {
                             window.tickDashboardTimeRows();

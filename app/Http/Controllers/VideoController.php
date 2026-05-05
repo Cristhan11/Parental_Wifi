@@ -24,6 +24,7 @@ use App\Http\Requests\StoreVideoRequest;
 use App\Http\Requests\UpdateVideoRequest;
 use App\Models\Video;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -109,9 +110,9 @@ class VideoController extends Controller
      * - Uses pivot table 'device_video' to link devices and videos
      * 
      * @param StoreVideoRequest $request Validated form data (title, video file, etc.)
-     * @return RedirectResponse Redirects to video list with success message
+     * @return RedirectResponse|JsonResponse Redirect or JSON when XHR (expectsJson)
      */
-    public function store(StoreVideoRequest $request): RedirectResponse
+    public function store(StoreVideoRequest $request): RedirectResponse|JsonResponse
     {
         // Get validated form data (StoreVideoRequest ensures all required fields exist)
         $validated = $request->validated();
@@ -145,10 +146,20 @@ class VideoController extends Controller
         // Assign to selected child devices only (ignore tampered/non-child IDs)
         $video->devices()->sync($this->sanitizedVideoDeviceIds($request));
 
-        // Redirect to video list page with success message
-        // ->with() stores a message in session that displays on next page
+        $successMessage = 'Video created successfully!';
+
+        if ($request->expectsJson()) {
+            $request->session()->flash('success', $successMessage);
+
+            return response()->json([
+                'success' => true,
+                'message' => $successMessage,
+                'redirect_url' => route('videos.index'),
+            ]);
+        }
+
         return redirect()->route('videos.index')
-            ->with('success', 'Video created successfully!');
+            ->with('success', $successMessage);
     }
 
     /**
@@ -277,15 +288,8 @@ class VideoController extends Controller
      * 
      * What it does:
      * 1. Checks parent owns the video (security)
-     * 2. Checks if video has been completed by children
-     * 3. If completions exist, prevents deletion (preserves history)
-     * 4. If no completions, deletes video file from storage
-     * 5. Deletes video record from database
-     * 
-     * Why prevent deletion if completions exist?
-     * - Preserves video completion history for parents to review
-     * - Maintains data integrity (completions reference the video)
-     * - Parents can deactivate instead (set is_active = false)
+     * 2. Deletes video file from storage
+     * 3. Deletes video record from database (completion rows cascade via FK)
      * 
      * File Cleanup:
      * - Deletes video file from storage/app/videos/
@@ -301,25 +305,9 @@ class VideoController extends Controller
             abort(403, 'Unauthorized action.');
         }
 
-        // Check if video has completions
         $completionCount = $video->completions()->count();
-        
-        // If video has completions, check if user wants to force delete
-        // Force delete will remove video AND all its completion history
         if ($completionCount > 0) {
-            // Check if force delete is requested (via query parameter or form field)
-            $forceDelete = $request->input('force', false) || $request->has('force_delete');
-            
-            if (!$forceDelete) {
-                return redirect()->route('videos.index')
-                    ->with('error', "Cannot delete video with {$completionCount} completion(s). Use 'Force Delete' to remove video and all completion history.");
-            }
-            
-            // Log force deletion for audit purposes
-            Log::info("Force deleting video ID {$video->id} with {$completionCount} completions. User: " . Auth::id());
-            
-            // Note: Completions will be automatically deleted due to cascade delete
-            // in the migration (onDelete('cascade'))
+            Log::info("Deleting video ID {$video->id} with {$completionCount} completion(s). User: ".Auth::id());
         }
 
         // Delete video file from storage (using 'public' disk)

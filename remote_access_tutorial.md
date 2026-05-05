@@ -274,6 +274,197 @@ This is optional but good for safety when app should be private.
 4. You can open app from laptop via `http://<PI_TAILSCALE_IP>:<PORT>`
 5. Login/session works after setting proper cookie security for your environment
 
+### G) Exact end-to-end setup we did (chronological, with explanation)
+
+This section explains the exact setup flow we used so remote access works in our system, from infrastructure up to Laravel behavior.
+
+#### Step 0 - Download and install Tailscale on the Raspberry Pi
+
+If Tailscale is not installed yet, install it first before continuing with the rest of this flow.
+
+Install command:
+
+```bash
+curl -fsSL https://tailscale.com/install.sh | sh
+```
+
+Why this matters:
+- The Pi needs the `tailscale` and `tailscaled` binaries so it can join your tailnet.
+- Without this step, remote access over Tailscale cannot work.
+
+#### Step 1 - Put Raspberry Pi online with a stable app path
+
+We used the app directory:
+
+```bash
+cd /var/www/parental_wifi
+```
+
+Why this matters:
+- All deploy/config commands (`artisan`, `.env`, migrations, cache clear) must run from this project root.
+
+#### Step 2 - Enroll the Pi into our Tailscale tailnet
+
+On Raspberry Pi, we signed the device into our tailnet and kept `tailscaled` running.
+
+Enrollment commands we used:
+
+```bash
+sudo tailscale up
+```
+
+What happens after running it:
+- Tailscale prints a login URL in the terminal (for sign in / sign up).
+- Open that URL in a browser, authenticate your account, then approve/add the device.
+- After approval, return to the Pi terminal and wait for `tailscale up` to complete.
+
+Verification commands we used:
+
+```bash
+hostname
+tailscale status
+tailscale ip -4
+sudo systemctl status tailscaled --no-pager
+```
+
+What we confirmed on our deployment:
+- Hostname: `parentalpi`
+- Tailnet account: `parentalwifi@...`
+- Pi Tailscale IPv4: `100.102.52.117`
+- `tailscaled` is `active (running)` and enabled on boot
+
+Why this matters:
+- This gives the Pi a private reachable address (`100.102.52.117`) without opening router ports.
+
+#### Step 3 - Keep web server reachable from tailnet
+
+We serve Laravel behind Nginx and verified listener ports:
+
+```bash
+sudo systemctl status nginx --no-pager
+sudo ss -tlnp | grep -E ':22|:80|:443|:8000|:8080'
+```
+
+What we observed:
+- `0.0.0.0:22` -> SSH reachable remotely
+- `0.0.0.0:80` -> Nginx serves dashboard via HTTP
+- `0.0.0.0:8080` -> additional PHP service
+
+Why this matters:
+- Tailscale provides the network path only.
+- Something on the Pi must listen on reachable interfaces (`0.0.0.0`) to answer incoming requests.
+
+#### Step 4 - Configure Laravel env for remote-host-aware behavior
+
+In `.env`/deployment env, we use remote-access related keys documented in `.env.example`:
+
+```env
+APP_URL=http://100.102.52.117
+# TRUSTED_PROXIES=
+# TRUSTED_PROXY_HEADERS=
+# TRUSTED_LOCAL_CIDRS=192.168.0.0/16,10.0.0.0/8,172.16.0.0/12
+```
+
+And for websocket/reverb server binding:
+
+```env
+REVERB_SERVER_HOST=0.0.0.0
+REVERB_SERVER_PORT=8080
+```
+
+Why this matters:
+- `APP_URL` helps URL generation fallback in CLI/mail contexts.
+- Trusted proxy and CIDR settings control correct client IP handling and remote/local audit classification.
+- Reverb binding on `0.0.0.0` allows remote clients to reach the websocket server when intended.
+
+#### Step 5 - Add host correction middleware so redirects stay on Tailscale host
+
+We enabled this middleware globally on web routes (`bootstrap/app.php`):
+
+```php
+$middleware->web(prepend: [
+    \App\Http\Middleware\ForceRootUrlFromRequest::class,
+]);
+```
+
+Core behavior inside `ForceRootUrlFromRequest`:
+
+```php
+if ($this->isTailscaleIpv4($listen) && ! $this->isTailscaleIpv4($host)) {
+    $host = $listen;
+}
+```
+
+Why this matters:
+- In some proxy/FastCGI paths, Laravel can receive a LAN host header even when request came through Tailscale.
+- This middleware prevents broken redirects by forcing generated URLs to the correct reachable host.
+
+#### Step 6 - Centralize proxy/remote policy in code config
+
+We keep remote access policy in `config/remote_access.php` and read from `.env`:
+
+```php
+'trusted_proxies' => env('TRUSTED_PROXIES') === '*'
+    ? '*'
+    : array_values(array_filter(array_map('trim', explode(',', (string) env('TRUSTED_PROXIES', ''))))),
+```
+
+```php
+'trusted_local_cidrs' => array_values(array_filter(array_map(
+    'trim',
+    explode(',', (string) env(
+        'TRUSTED_LOCAL_CIDRS',
+        '192.168.0.0/16,10.0.0.0/8,172.16.0.0/12'
+    ))
+))),
+```
+
+Also applied during app boot in `AppServiceProvider`:
+
+```php
+if (is_string($proxies) && $proxies === '*') {
+    TrustProxies::at('*');
+} elseif (is_array($proxies) && count($proxies) > 0) {
+    TrustProxies::at($proxies);
+}
+```
+
+Why this matters:
+- Correctly preserves real client IP and forwarded headers behind Nginx/proxy.
+- Keeps audit behavior consistent (tailnet traffic treated as remote by default policy).
+
+#### Step 7 - Validate remote access from external client
+
+From a device with Tailscale enabled, we tested:
+
+```bash
+ssh snasna@100.102.52.117
+```
+
+```text
+http://100.102.52.117/
+```
+
+If both work, the whole chain is functioning:
+`Remote client` -> `Tailscale tunnel` -> `Pi 100.102.52.117` -> `Nginx :80` -> `Laravel app`
+
+#### Step 8 - Operational checks after code updates
+
+After pulling new code, we keep this routine:
+
+```bash
+cd /var/www/parental_wifi
+git pull
+composer install
+php artisan migrate
+php artisan config:clear
+php artisan cache:clear
+sudo systemctl reload nginx
+```
+
+Why this matters:
+- Ensures schema/config/code are aligned so remote login/dashboard does not fail due to stale cache or missing migrations.
+
 ---
 
 ## 10) Troubleshooting quick checklist

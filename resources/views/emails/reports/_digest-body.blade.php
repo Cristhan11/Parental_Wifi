@@ -79,6 +79,11 @@
                                                     &nbsp;&middot;&nbsp;
                                                     {{ $payload['time_usage_and_grants']['total_granted_minutes'] }} min granted
                                                 </p>
+                                                <p style="margin:8px 0 0 0; font-size:12px; color:#64748b;">Totals — bandwidth</p>
+                                                <p style="margin:4px 0 0 0; font-size:14px; color:#334155;">
+                                                    {{ $payload['bandwidth']['family_total_formatted'] ?? '0 Gb' }}
+                                                    <span style="font-size:12px; color:#94a3b8;">({{ $payload['bandwidth']['source'] ?? 'browsing_logs' }})</span>
+                                                </p>
                                             </td>
                                         </tr>
                                     </table>
@@ -154,6 +159,7 @@
                                                 </tr>
                                             </table>
                                             <p style="margin:8px 0 0 0; font-size:12px; color:#64748b;">{{ $device['time_usage_and_grants']['grants_count'] }} time grant(s) in this period</p>
+                                            <p style="margin:6px 0 0 0; font-size:12px; color:#64748b;">Bandwidth: <span style="font-size:13px; font-weight:600; color:#0f172a;">{{ $device['bandwidth']['bytes_total_formatted'] ?? '0 Gb' }}</span></p>
                                         </td>
                                     </tr>
                                     <tr>
@@ -178,6 +184,24 @@
                         </tr>
                     @endforeach
                 @endif
+
+                <tr>
+                    <td style="padding:8px 28px 8px 28px;">
+                        <p style="margin:0 0 10px 0; font-size:11px; font-weight:600; letter-spacing:0.04em; text-transform:uppercase; color:#64748b;">Top bandwidth devices</p>
+                        @if (count($payload['bandwidth']['top_bandwidth_devices'] ?? []) > 0)
+                            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px; color:#334155;">
+                                @foreach (($payload['bandwidth']['top_bandwidth_devices'] ?? []) as $bandwidthRow)
+                                    <tr>
+                                        <td style="padding:6px 0; border-bottom:1px solid #f1f5f9;">{{ $bandwidthRow['device_name'] }}</td>
+                                        <td style="padding:6px 0; border-bottom:1px solid #f1f5f9; text-align:right; color:#64748b;">{{ $bandwidthRow['bytes_total_formatted'] }}</td>
+                                    </tr>
+                                @endforeach
+                            </table>
+                        @else
+                            <p style="margin:0; font-size:13px; color:#94a3b8;">No bandwidth activity in this period.</p>
+                        @endif
+                    </td>
+                </tr>
 
                 <tr>
                     <td style="padding:8px 28px 20px 28px;">

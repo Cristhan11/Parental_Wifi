@@ -24,7 +24,10 @@ class TimeGranted implements ShouldBroadcastNow
         public string $deviceName,
         public int $minutesGranted,
         public int $remainingMinutes,
-        public string $source
+        public string $source,
+        public bool $isConnected = false,
+        public ?string $activeSessionStartedAt = null,
+        public ?string $ipAddress = null,
     ) {}
 
     // Parent-specific private channel.
@@ -50,6 +53,9 @@ class TimeGranted implements ShouldBroadcastNow
             'minutes_granted' => $this->minutesGranted,
             'remaining_minutes' => $this->remainingMinutes,
             'source' => $this->source,
+            'is_connected' => $this->isConnected,
+            'active_session_started_at' => $this->activeSessionStartedAt,
+            'ip_address' => $this->ipAddress,
             'timestamp' => now()->toIso8601String(),
         ];
     }

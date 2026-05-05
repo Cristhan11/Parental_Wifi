@@ -16,6 +16,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\QuizSchoolLevel;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\Rule;
@@ -64,7 +65,7 @@ class UpdateQuizRequest extends FormRequest
         return [
             'title' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string', 'max:1000'],
-            'level' => ['required', 'in:Elementary,High School,Senior High School'],
+            'level' => ['required', 'string', Rule::in(QuizSchoolLevel::levels())],
             'subject' => ['required', 'string', 'max:100'],
             'question_count' => ['nullable', 'integer', 'in:5,10,15'],
             'minutes_per_correct' => ['nullable', 'integer', 'min:1', 'max:60'],

@@ -87,4 +87,55 @@ class ChildDeviceUsageChartTest extends TestCase
 
         $response->assertForbidden();
     }
+
+    public function test_owner_receives_bandwidth_series_for_selected_device(): void
+    {
+        $timezone = (string) (config('app.timezone') ?: 'Asia/Manila');
+        $now = Carbon::create(2026, 3, 25, 10, 30, 0, $timezone);
+        Carbon::setTestNow($now);
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'role' => 'child',
+            'status' => 'active',
+        ]);
+
+        \App\Models\BrowsingLog::create([
+            'device_id' => $device->id,
+            'url' => 'https://child.example',
+            'domain' => 'child.example',
+            'bytes_sent' => 524288,
+            'bytes_received' => 524288,
+            'visited_at' => $now->copy()->setTime(10, 5, 0),
+        ]);
+
+        $response = $this->actingAs($user)->getJson(route('child_devices.bandwidth-chart', [
+            'device' => $device,
+            'range' => 'daily',
+        ]));
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertSame('daily', $data['range']);
+        $this->assertCount(1, $data['series']);
+        $this->assertSame((int) $device->id, (int) $data['series'][0]['device_id']);
+
+        $idx10 = array_search('10', $data['labels'], true);
+        $this->assertIsInt($idx10);
+        $this->assertSame(0.0084, (float) $data['series'][0]['values'][$idx10]);
+    }
+
+    public function test_other_user_cannot_view_bandwidth_chart(): void
+    {
+        $owner = User::factory()->create();
+        $intruder = User::factory()->create();
+        $device = Device::factory()->create(['user_id' => $owner->id]);
+
+        $response = $this->actingAs($intruder)->getJson(route('child_devices.bandwidth-chart', [
+            'device' => $device,
+        ]));
+
+        $response->assertForbidden();
+    }
 }

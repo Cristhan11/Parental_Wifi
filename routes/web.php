@@ -37,19 +37,21 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/usage-chart', [DashboardController::class, 'usageChart'])
         ->name('dashboard.usage-chart');
+    Route::get('/dashboard/bandwidth-chart', [DashboardController::class, 'bandwidthChart'])
+        ->name('dashboard.bandwidth-chart');
 
     Route::prefix('quizzes')->name('quizzes.')->group(function () {
         Route::get('/', [QuizController::class, 'index'])->name('index');
         Route::get('/create', [QuizController::class, 'create'])->name('create');
         Route::post('/', [QuizController::class, 'store'])->name('store');
-        Route::get('/{quiz}/edit', [QuizController::class, 'edit'])->name('edit');
-        Route::put('/{quiz}', [QuizController::class, 'update'])->name('update');
-        Route::delete('/{quiz}', [QuizController::class, 'destroy'])->name('destroy');
         Route::get('/import', [QuizController::class, 'import'])->name('import');
         Route::post('/import', [QuizController::class, 'processImport'])->name('import.process');
         Route::get('/template/download', [QuizController::class, 'downloadTemplate'])->name('template.download');
         Route::get('/question-bank/export', [QuizController::class, 'exportQuestionBank'])->name('question-bank.export');
         Route::post('/random-mode', [QuizController::class, 'updateRandomModeSettings'])->name('random-mode.update');
+        Route::get('/{quiz}/edit', [QuizController::class, 'edit'])->name('edit');
+        Route::put('/{quiz}', [QuizController::class, 'update'])->name('update');
+        Route::delete('/{quiz}', [QuizController::class, 'destroy'])->name('destroy');
     });
 
     Route::prefix('videos')->name('videos.')->group(function () {
@@ -84,6 +86,7 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
         Route::get('/', [DeviceController::class, 'index'])->name('index');
         Route::get('/api/connected', [DeviceController::class, 'getConnectedDevices'])->name('api.connected');
         Route::get('/{device}/usage-chart', [DeviceController::class, 'childDeviceUsageChart'])->name('usage-chart');
+        Route::get('/{device}/bandwidth-chart', [DeviceController::class, 'childDeviceBandwidthChart'])->name('bandwidth-chart');
         Route::get('/{device}', [DeviceController::class, 'index'])->name('show');
     });
 

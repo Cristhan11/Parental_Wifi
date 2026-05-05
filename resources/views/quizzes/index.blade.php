@@ -63,6 +63,16 @@
                 </div>
             @endif
 
+            <x-collapsible-instructions class="mb-4">
+                <p class="mb-2 font-semibold">Instructions</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li><strong>+ New</strong> creates a quiz. Open <strong>Edit</strong> to change questions and which <strong>child</strong> devices can take it.</li>
+                    <li><strong>Question Bank Excel</strong> uploads or downloads the shared bank used for random quizzes.</li>
+                    <li>Set <strong>Search</strong>, <strong>Level</strong>, <strong>Subject</strong>, or <strong>Status</strong> as needed, then tap <strong>Apply Filters</strong>. <strong>Reset</strong> clears those choices.</li>
+                    <li><strong>Random Quiz Settings</strong> (below) sets minutes per correct answer, retry limits, and which school levels each child device pulls from the bank. Tap <strong>Save</strong> when you change that block.</li>
+                </ul>
+            </x-collapsible-instructions>
+
             {{-- Search + Filters for parent-friendly browsing --}}
             <form method="GET" action="{{ route('quizzes.index') }}" class="mb-4 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-5">
@@ -117,101 +127,131 @@
                 </div>
             </form>
 
-            {{-- Random Quiz Mode Settings (single-row table) --}}
-            <div class="mb-4 min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-                <div class="border-b border-gray-200 px-4 py-3 sm:px-6">
-                    <h3 class="text-sm font-semibold text-gray-900">Time Reward Mode (Random Quiz) Settings</h3>
-                    <p class="mt-1 text-xs text-gray-500">Configure one global random-quiz mode for child devices.</p>
-                </div>
-                <div class="p-4 sm:p-6">
+            {{-- Random Quiz Mode: global time settings + per-device bank levels (collapsible, same pattern as /reports Advanced options) --}}
+            @php
+                $openRandomQuizSettings = $errors->has('minutes_per_correct')
+                    || $errors->has('retry_cooldown_minutes')
+                    || $errors->has('max_passes_per_day')
+                    || collect($errors->keys())->contains(fn ($k) => str_starts_with((string) $k, 'device_random_levels'));
+            @endphp
+            <details class="mb-4 min-w-0 bg-white shadow-sm sm:rounded-lg border border-gray-200 p-5" @if($openRandomQuizSettings) open @endif>
+                <summary class="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border border-yellow-300 bg-yellow-50 px-3 py-2 text-sm text-gray-700 hover:bg-yellow-100 select-none [&::-webkit-details-marker]:hidden">
+                    <span class="font-medium">Random Quiz Settings</span>
+                    <span class="text-xs text-gray-500">(time reward, question bank levels per child device)</span>
+                </summary>
+                <div class="mt-5 space-y-5 border-t border-gray-100 pt-5">
+                    <p class="text-sm text-gray-600">Set minutes and limits once, then choose which school levels each child device uses from the question bank. Leave all levels unchecked on a device to turn random mode off for that device.</p>
                     <form method="POST" action="{{ route('quizzes.random-mode.update') }}">
                         @csrf
+                        @php
+                            $levelChoices = \App\Support\QuizSchoolLevel::levels();
+                        @endphp
+                        <div class="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+                            <div>
+                                <label for="minutes_per_correct" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Minutes per correct answer</label>
+                                <input
+                                    type="number"
+                                    id="minutes_per_correct"
+                                    name="minutes_per_correct"
+                                    min="1"
+                                    max="60"
+                                    value="{{ old('minutes_per_correct', $randomModeQuiz->minutes_per_correct ?? 1) }}"
+                                    required
+                                    class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                >
+                            </div>
+                            <div>
+                                <label for="retry_cooldown_minutes" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Retry interval (minutes)</label>
+                                <input
+                                    type="number"
+                                    id="retry_cooldown_minutes"
+                                    name="retry_cooldown_minutes"
+                                    min="0"
+                                    max="10080"
+                                    value="{{ old('retry_cooldown_minutes', $randomModeQuiz->retry_cooldown_minutes) }}"
+                                    placeholder="0 or blank = no wait"
+                                    class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                >
+                            </div>
+                            <div>
+                                <label for="max_passes_per_day" class="mb-1 block text-xs font-semibold uppercase tracking-wide text-gray-500">Max uses per day</label>
+                                <input
+                                    type="number"
+                                    id="max_passes_per_day"
+                                    name="max_passes_per_day"
+                                    min="1"
+                                    max="500"
+                                    value="{{ old('max_passes_per_day', $randomModeQuiz->max_passes_per_day) }}"
+                                    placeholder="Blank = unlimited"
+                                    class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                                >
+                            </div>
+                        </div>
+
                         <div class="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:px-0">
-                            <table class="min-w-[760px] w-full divide-y divide-gray-200">
+                            <table class="min-w-[640px] w-full divide-y divide-gray-200">
                                 <thead class="bg-gray-50">
                                     <tr>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Assigned Devices</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Minutes Per Correct Answer</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Retry Interval (Minutes)</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Max Uses Per Day</th>
-                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Action</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Child device</th>
+                                        <th class="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Question bank levels (this device only)</th>
                                     </tr>
                                 </thead>
                                 <tbody class="divide-y divide-gray-100 bg-white">
-                                    <tr>
-                                        <td class="px-4 py-3 align-top">
-                                            @php
-                                                $selectedRandomDevices = old('devices', $randomModeDeviceIds ?? []);
-                                                $selectedCount = is_array($selectedRandomDevices) ? count($selectedRandomDevices) : 0;
-                                            @endphp
-                                            <details class="w-full rounded border border-gray-300 bg-white">
-                                                <summary class="cursor-pointer select-none px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
-                                                    {{ $selectedCount > 0 ? $selectedCount . ' device(s) selected' : 'Select child devices' }}
-                                                </summary>
-                                                <div class="max-h-44 overflow-y-auto border-t border-gray-200 px-3 py-2">
-                                                    @forelse(($assignableDevices ?? []) as $device)
-                                                        <label class="mb-2 flex items-center gap-2 text-sm text-gray-700">
+                                    @forelse(($assignableDevices ?? []) as $device)
+                                        @php
+                                            $pivotDev = $randomModeQuiz->devices->firstWhere('id', $device->id);
+                                            $pivotLevels = $pivotDev?->pivot?->random_bank_levels;
+                                            if (! is_array($pivotLevels)) {
+                                                $pivotLevels = [];
+                                            }
+                                            $oldRow = old('device_random_levels.'.$device->id);
+                                            $selected = is_array($oldRow) ? $oldRow : $pivotLevels;
+                                            $selected = array_values(array_intersect($levelChoices, $selected));
+                                        @endphp
+                                        <tr>
+                                            <td class="px-4 py-3 align-top text-sm font-medium text-gray-900">
+                                                <div>{{ $device->name }}</div>
+                                                <div class="mt-0.5 text-xs font-normal text-gray-500 font-mono">{{ $device->mac_address }}</div>
+                                                @if($selected === [])
+                                                    <p class="mt-2 text-xs text-amber-800">Random quiz mode is <strong>off</strong> for this device until you choose at least one level.</p>
+                                                @endif
+                                            </td>
+                                            <td class="px-4 py-3 align-top">
+                                                <div class="flex flex-wrap gap-x-4 gap-y-2">
+                                                    @foreach($levelChoices as $lvl)
+                                                        <label class="inline-flex items-center gap-1.5 text-sm text-gray-700">
                                                             <input
                                                                 type="checkbox"
-                                                                name="devices[]"
-                                                                value="{{ $device->id }}"
-                                                                @checked(in_array($device->id, $selectedRandomDevices))
+                                                                name="device_random_levels[{{ $device->id }}][]"
+                                                                value="{{ $lvl }}"
+                                                                @checked(in_array($lvl, $selected, true))
                                                                 class="h-4 w-4 rounded border-gray-300 text-yellow-600 focus:ring-yellow-500"
                                                             >
-                                                            <span>{{ $device->name }} ({{ $device->mac_address }})</span>
+                                                            <span>{{ $lvl }}</span>
                                                         </label>
-                                                    @empty
-                                                        <p class="text-xs text-gray-500">No registered child devices yet.</p>
-                                                    @endforelse
+                                                    @endforeach
                                                 </div>
-                                            </details>
-                                            <p class="mt-1 text-xs text-gray-500">Open the dropdown and check devices to include in random quiz mode.</p>
-                                        </td>
-                                        <td class="px-4 py-3 align-top">
-                                            <input
-                                                type="number"
-                                                name="minutes_per_correct"
-                                                min="1"
-                                                max="60"
-                                                value="{{ old('minutes_per_correct', $randomModeQuiz->minutes_per_correct ?? 1) }}"
-                                                required
-                                                class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                                            >
-                                        </td>
-                                        <td class="px-4 py-3 align-top">
-                                            <input
-                                                type="number"
-                                                name="retry_cooldown_minutes"
-                                                min="0"
-                                                max="10080"
-                                                value="{{ old('retry_cooldown_minutes', $randomModeQuiz->retry_cooldown_minutes) }}"
-                                                placeholder="0 or blank = no wait"
-                                                class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                                            >
-                                        </td>
-                                        <td class="px-4 py-3 align-top">
-                                            <input
-                                                type="number"
-                                                name="max_passes_per_day"
-                                                min="1"
-                                                max="500"
-                                                value="{{ old('max_passes_per_day', $randomModeQuiz->max_passes_per_day) }}"
-                                                placeholder="Blank = unlimited"
-                                                class="w-full rounded border border-gray-300 px-3 py-2 text-sm focus:border-yellow-500 focus:outline-none focus:ring-2 focus:ring-yellow-500"
-                                            >
-                                        </td>
-                                        <td class="px-4 py-3 align-top">
-                                            <button type="submit" class="rounded px-4 py-2 text-sm font-medium text-white hover:opacity-90" style="background-color: #3B82F6;">
-                                                Save
-                                            </button>
-                                        </td>
-                                    </tr>
+                                                @error('device_random_levels.'.$device->id)
+                                                    <p class="mt-1 text-xs text-red-600">{{ $message }}</p>
+                                                @enderror
+                                            </td>
+                                        </tr>
+                                    @empty
+                                        <tr>
+                                            <td colspan="2" class="px-4 py-6 text-center text-sm text-gray-500">No registered child devices yet.</td>
+                                        </tr>
+                                    @endforelse
                                 </tbody>
                             </table>
                         </div>
+                        <div class="mt-4 flex justify-end border-t border-gray-100 pt-4">
+                            <button type="submit" class="rounded-md bg-yellow-400 px-4 py-2 text-sm font-semibold text-black hover:bg-yellow-500">
+                                Save
+                            </button>
+                        </div>
                     </form>
                 </div>
-            </div>
+            </details>
 
             <div class="min-w-0 overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
                 <div class="min-w-0 p-4 sm:p-6">
@@ -242,6 +282,7 @@
                                         <tr>
                                             @php
                                                 $levelBadge = match ($quiz->level) {
+                                                    'Kindergarten' => ['bg' => '#FCE7F3', 'text' => '#9D174D'],
                                                     'Elementary' => ['bg' => '#DBEAFE', 'text' => '#1D4ED8'],
                                                     'High School' => ['bg' => '#EDE9FE', 'text' => '#6D28D9'],
                                                     'Senior High School' => ['bg' => '#FEF3C7', 'text' => '#92400E'],

@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\DB;
  */
 class ReportingDigestService
 {
+    public function __construct(
+        private readonly BandwidthUsageService $bandwidthUsageService
+    ) {}
+
     /**
      * Build the locked digest payload for a parent account.
      *
@@ -103,6 +107,26 @@ class ReportingDigestService
         $totalGrantedMinutes = (int) ($grantsAggregate->total_granted_minutes ?? 0);
 
         $devices = $this->buildPerDevicePayload($parent, $periodStartUtc, $periodEndUtc);
+        $bandwidth = $this->bandwidthUsageService->buildDigestBandwidthSummary(
+            $parent,
+            $periodStartUtc,
+            $periodEndUtc
+        );
+
+        $devices = collect($devices)
+            ->map(function (array $device) use ($bandwidth): array {
+                $matched = collect($bandwidth['per_device'] ?? [])
+                    ->firstWhere('device_id', (int) ($device['id'] ?? 0));
+
+                $device['bandwidth'] = [
+                    'bytes_total' => (int) ($matched['bytes_total'] ?? 0),
+                    'bytes_total_formatted' => (string) ($matched['bytes_total_formatted'] ?? '0 Gb'),
+                ];
+
+                return $device;
+            })
+            ->values()
+            ->all();
 
         return [
             'timezone' => $timezone,
@@ -118,6 +142,7 @@ class ReportingDigestService
                 'grants_count' => $grantsCount,
                 'total_granted_minutes' => $totalGrantedMinutes,
             ],
+            'bandwidth' => $bandwidth,
             'active_devices_count' => $activeDeviceIds->count(),
             'registered_devices_count' => $parent->devices()->count(),
             'devices' => $devices,
@@ -208,4 +233,3 @@ class ReportingDigestService
         return $rows;
     }
 }
-
