@@ -30,6 +30,15 @@ Route::post('/device-request', [DeviceController::class, 'submitRegistrationRequ
 Route::middleware(['auth', 'verified', 'audit.sensitive'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
+    Route::post('/profile/email-change/send-code', [ProfileController::class, 'sendProfileEmailChangeCode'])
+        ->middleware('throttle:6,1')
+        ->name('profile.email-change.send-code');
+    Route::post('/profile/email-change/verify-code', [ProfileController::class, 'verifyProfileEmailChangeCode'])
+        ->middleware('throttle:12,1')
+        ->name('profile.email-change.verify-code');
+    Route::post('/profile/tailscale/auth-link', [ProfileController::class, 'tailscaleAuthLink'])
+        ->middleware('throttle:tailscale-auth-link')
+        ->name('profile.tailscale.auth-link');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
@@ -46,6 +55,8 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
         Route::post('/', [QuizController::class, 'store'])->name('store');
         Route::get('/import', [QuizController::class, 'import'])->name('import');
         Route::post('/import', [QuizController::class, 'processImport'])->name('import.process');
+        Route::get('/import/pending/{token}', [QuizController::class, 'importPending'])->name('import.pending');
+        Route::post('/import/pending/{token}', [QuizController::class, 'processImportPending'])->name('import.pending.process');
         Route::get('/template/download', [QuizController::class, 'downloadTemplate'])->name('template.download');
         Route::get('/question-bank/export', [QuizController::class, 'exportQuestionBank'])->name('question-bank.export');
         Route::post('/random-mode', [QuizController::class, 'updateRandomModeSettings'])->name('random-mode.update');

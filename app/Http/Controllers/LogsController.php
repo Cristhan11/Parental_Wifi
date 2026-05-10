@@ -875,6 +875,7 @@ class LogsController extends Controller
                     SecurityAuditEvent::EVENT_LOGIN_FAILURE => 'failed',
                     SecurityAuditEvent::EVENT_LOCKOUT => 'warning',
                     SecurityAuditEvent::EVENT_LOGIN_SUCCESS => 'success',
+                    SecurityAuditEvent::EVENT_PASSWORD_CHANGED => 'success',
                     SecurityAuditEvent::EVENT_LOGOUT => 'info',
                     default => 'info',
                 };
@@ -886,6 +887,7 @@ class LogsController extends Controller
                     SecurityAuditEvent::EVENT_LOGOUT => 'Logout',
                     SecurityAuditEvent::EVENT_LOCKOUT => 'Login temporarily locked (too many attempts)',
                     SecurityAuditEvent::EVENT_SENSITIVE_ACTION => 'Sensitive action: '.($e->route_name ?? 'unknown'),
+                    SecurityAuditEvent::EVENT_PASSWORD_CHANGED => 'Password changed',
                     default => $e->event,
                 };
                 $summary .= ' · IP '.$e->ip_address.' · '.$source;

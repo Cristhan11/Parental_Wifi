@@ -95,6 +95,23 @@ class SecurityAuditLoggingTest extends TestCase
         ]);
     }
 
+    public function test_profile_password_change_writes_password_changed_audit(): void
+    {
+        $user = User::factory()->create();
+
+        $this->actingAs($user)->put('/password', [
+            'current_password' => 'password',
+            'password' => 'NewPassword-99!',
+            'password_confirmation' => 'NewPassword-99!',
+        ])->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('security_audit_events', [
+            'event' => SecurityAuditEvent::EVENT_PASSWORD_CHANGED,
+            'user_id' => $user->id,
+            'route_name' => 'password.update',
+        ]);
+    }
+
     public function test_login_marks_remote_when_ip_not_in_trusted_local_cidrs(): void
     {
         config()->set('remote_access.trusted_local_cidrs', ['192.168.1.0/24']);

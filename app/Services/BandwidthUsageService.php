@@ -13,7 +13,8 @@ class BandwidthUsageService
 {
     private const BITS_PER_BYTE = 8;
 
-    private const GIGABIT = 1000000000; // decimal gigabit (Gb)
+    /** SI gigabit = 10^9 bits (same unit as dashboard bandwidth chart). */
+    private const GIGABIT = 1000000000;
 
     public function __construct(
         private readonly NetworkService $networkService
@@ -196,13 +197,13 @@ class BandwidthUsageService
     {
         $gigabits = ($bytes * self::BITS_PER_BYTE) / self::GIGABIT;
         if ($gigabits <= 0) {
-            return '0 Gb';
+            return '0 Gbit';
         }
 
         $formatted = number_format($gigabits, 3, '.', '');
         $formatted = rtrim(rtrim($formatted, '0'), '.');
 
-        return $formatted.' Gb';
+        return $formatted.' Gbit';
     }
 
     /**

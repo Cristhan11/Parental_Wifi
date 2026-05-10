@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\SecurityAuditEvent;
+use App\Models\User;
 use App\Support\RequestSource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -52,6 +53,21 @@ class SecurityAuditLogger
             $user->getAuthIdentifier(),
             null,
             $request->route()?->getName(),
+            $metadata,
+        );
+    }
+
+    /**
+     * @param  array<string, mixed>|null  $metadata
+     */
+    public function recordPasswordChanged(Request $request, User $subjectUser, ?string $routeName = null, ?array $metadata = null): ?SecurityAuditEvent
+    {
+        return $this->record(
+            SecurityAuditEvent::EVENT_PASSWORD_CHANGED,
+            $request,
+            $subjectUser->getKey(),
+            null,
+            $routeName ?? $request->route()?->getName(),
             $metadata,
         );
     }

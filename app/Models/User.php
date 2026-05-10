@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Mail\PasswordResetCodeMail;
 use App\Mail\VerifyEmailCodeMail;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -51,6 +52,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'approved_at' => 'datetime',
             'rejected_at' => 'datetime',
             'email_verification_code_expires_at' => 'datetime',
+            'password_reset_code_expires_at' => 'datetime',
             'requires_email_setup' => 'boolean',
             'force_password_change' => 'boolean',
         ];
@@ -73,6 +75,44 @@ class User extends Authenticatable implements MustVerifyEmail
         ])->save();
 
         Mail::to($this->email)->send(new VerifyEmailCodeMail($this, $code));
+    }
+
+    /**
+     * Whether this account may receive a numeric forgot-password code by email.
+     */
+    public function canReceiveForgotPasswordResetCode(): bool
+    {
+        if ($this->rejected_at !== null) {
+            return false;
+        }
+
+        if ($this->role === self::ROLE_ADMIN && ! $this->hasVerifiedEmail()) {
+            return false;
+        }
+
+        return $this->hasAdminCapability() || $this->isEligibleForSelfServicePasswordResetRequest();
+    }
+
+    public function sendPasswordResetCodeNotification(): void
+    {
+        $code = (string) random_int(100000, 999999);
+
+        $this->forceFill([
+            'password_reset_code_hash' => Hash::make($code),
+            'password_reset_code_expires_at' => now()->addMinutes(60),
+        ])->save();
+
+        Mail::to($this->email)->send(new PasswordResetCodeMail($this, $code));
+    }
+
+    /**
+     * Never send Laravel's default signed URL notification; use the same numeric code email as self-service forgot password.
+     */
+    public function sendPasswordResetNotification($token): void
+    {
+        unset($token);
+
+        $this->sendPasswordResetCodeNotification();
     }
 
     public function devices(): HasMany
@@ -205,7 +245,7 @@ class User extends Authenticatable implements MustVerifyEmail
     }
 
     /**
-     * Parent / household-operator accounts may use /forgot-password to queue an admin-led reset (no email link).
+     * Parent or household-operator role (forgot-password and related flows).
      */
     public function isEligibleForSelfServicePasswordResetRequest(): bool
     {

@@ -31,6 +31,7 @@ class BuiltInQuizSeeder extends Seeder
         foreach ($levels as $level) {
             foreach ($subjects as $subject) {
                 $availableItems = QuestionBankItem::query()
+                    ->whereNull('quiz_id')
                     ->where('level', $level)
                     ->where('subject', $subject)
                     ->where('status', 'Active')
@@ -43,6 +44,7 @@ class BuiltInQuizSeeder extends Seeder
                 $questionCount = min(10, $availableItems);
                 $title = "{$level} {$subject} Starter Quiz";
                 $questions = QuestionBankItem::query()
+                    ->whereNull('quiz_id')
                     ->where('level', $level)
                     ->where('subject', $subject)
                     ->where('status', 'Active')

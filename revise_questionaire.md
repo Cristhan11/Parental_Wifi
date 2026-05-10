@@ -1,323 +1,235 @@
-# Revised Questionnaire and Security Evidence Guide
+# Concise Chapter 4 Questionnaire (Strictly Reference-Based)
 
-This document provides a revised, consultation-ready questionnaire package for validating:
+This instrument is concise and limited to your study scope/objectives only.
 
-1. Security objective attainment from `docs/Chapter1_4.md` (basic protection against unauthorized access), and
-2. Child portal age suitability (recommended supported age range).
+Use response scale:
 
-It is designed for inclusion in Chapter 4 evidence gathering and adviser consultation.
+- 5 = Strongly Agree
+- 4 = Agree
+- 3 = Neutral
+- 2 = Disagree
+- 1 = Strongly Disagree
+- N/A = Not Applicable
 
----
+## Informed consent
 
-## A. Questionnaire Title
+I confirm that my participation is voluntary. I acknowledge the following:
 
-**User Evaluation Questionnaire for Security Measures and Child Portal Age Suitability**  
-Child-Centric Wi-Fi Monitoring and Control System with Learning Access Management
+- My responses will be used exclusively for this thesis and related academic assessment, and for no other purpose.
+- I consent to the use of all information gathered through this instrument—including numeric ratings, written answers, and session or observer notes where applicable—for analysis, interpretation, and inclusion in the thesis document, oral defense, supervisory review, grading, and other outputs required or customary for completion of this academic program.
+- I grant permission for that material to be retained, reproduced, and cited in thesis chapters, appendices, presentation materials, and institutional thesis archives or repositories, for scholarly and degree-related purposes, without separate approval for each routine academic reuse.
 
----
+Name / signature (optional): _________________________________  
 
-## B. Purpose of the Questionnaire
+Date: _________________________________
 
-This questionnaire aims to:
+## Reference Codes (used per question)
 
-1. Measure whether the system demonstrates practical security measures from the user perspective.
-2. Produce evidence that core security controls are visible and effective during normal use.
-3. Determine the most suitable child age range for independent child portal use.
-4. Identify usability and safety improvements for younger children.
-
----
-
-## C. Respondent Information Sheet
-
-Fill out before answering the survey.
-
-- Date: ____________________
-- Role:
-  - [ ] Parent/Guardian
-  - [ ] Child User
-  - [ ] Parent Observer (co-observing child)
-- Device Used:
-  - [ ] Android phone
-  - [ ] iPhone
-  - [ ] Tablet/iPad
-  - [ ] Laptop/Desktop
-- For child respondents:
-  - Child age (exact): ______
-  - Age bracket:
-    - [ ] 8-10
-    - [ ] 11-13
-    - [ ] 14-17
-- Test session code (if used): ____________________
+- **[R1]** Cloudflare website security checklist
+- **[R2]** Arphost website security best practices
+- **[R3]** HackerOne 9-point website security checklist
+- **[R4]** Dev.to essential security measures
+- **[R5]** Bitcatcha secure website standard
+- **[R6]** Cybersecurity Assessment Questionnaire (Scribd)
+- **[R7]** Vendict security questionnaire items
+- **[R8]** Copla cybersecurity risk questionnaire guide
+- **[R9]** NCBI developmental age bracket reference 1
+- **[R10]** NCBI developmental age bracket reference 2
+- **[R11]** OWASP CSRF Prevention Cheat Sheet
+- **[R12]** OWASP Session Management Cheat Sheet
+- **[R13]** Philippines National Privacy Commission (NPC) Circular 16-01
+- **[R14]** Philippines DICT National Cybersecurity Plan 2023-2028
+- **[R15]** Aufait UX — UI/UX design principles for child-friendly interfaces
+- **[R16]** Gapsy Studio — UX design for kids (age-segmented practices)
 
 ---
 
-## D. Consent Statement
+## A. Child Portal Age-Bracket Questionnaire (Ages 7-11)
 
-I voluntarily participated in this test session. I understand that:
+### A.1 Screening
 
-- My responses will be used only for academic/project evaluation.
-- No sensitive personal credentials should be entered in open text fields.
-- Results may be summarized in grouped form (no public exposure of private identity).
+- Exact age: ______
+- Bracket: [ ] 7-8  [ ] 9-11  [ ] 12+ (comparison only)
+- Observer present: [ ] Yes [ ] No
 
-Name/Signature (optional): ____________________  
-Date: ____________________
+Primary analysis group: **7-11 years old**. [R9][R10]
+
+### A.1.1 Bracket Justification (Defensible Source Basis)
+
+- **7-8 bracket (early school-age):** grouped separately because this is the early part of the concrete-operational/school-age period, where children begin logical operations but still need simpler, concrete instructions and guided flow. Basis:  
+  - R10 states the concrete operational stage is **7-11**.  
+  - R9 states **6-12** as early school years and notes limits in abstract thinking.  
+  Sources: [R9](https://www.ncbi.nlm.nih.gov/books/NBK537095/), [R10](https://www.ncbi.nlm.nih.gov/books/NBK448206/)
+
+- **9-11 bracket (later school-age):** grouped separately because this is the later part of the same concrete-operational period, where children typically show stronger logical handling of rules, conservation, and task sequencing compared with younger peers. Basis:  
+  - R10 describes continuing concrete-operational development up to about age 11 and increasing logical manipulation skills.  
+  - R9 describes school-age development where reasoning and rule-based understanding become more established before abstract/formal operations.  
+  Sources: [R9](https://www.ncbi.nlm.nih.gov/books/NBK537095/), [R10](https://www.ncbi.nlm.nih.gov/books/NBK448206/)
+
+- **12+ (comparison only):** included only as an external comparator because R9 and R10 place ages 12+ in/near formal operations with greater abstract reasoning, which is outside your primary user target.  
+  Sources: [R9](https://www.ncbi.nlm.nih.gov/books/NBK537095/), [R10](https://www.ncbi.nlm.nih.gov/books/NBK448206/)
+
+### A.2 Questions (Child + Parent Observer)
+
+*Source basis for this subsection: child-friendly UI/UX guidance (simplicity, navigation, feedback, clear guidance with visuals, touch targets).*
+
+1. (Source-selected from R15 — Simplicity and Clarity)  
+   "Children benefit from interfaces that are straightforward and easy to navigate... uncluttered with minimal text, using large, tappable areas for interaction."  
+   The portal screen feels simple and easy to scan; the child can see what to do next without overload. [R15]  
+Score: ___
+2. (Source-selected from R15 — Intuitive Navigation)  
+   "Design navigation paths that children can easily follow. Use familiar icons and imagery... and avoid complex menus or hidden functions."  
+   The child can move through the portal flow (e.g., time shown → choose activity → continue) without getting lost in menus or unclear steps. [R15]  
+Score: ___
+3. (Source-selected from R15 — Visual and Auditory Feedback)  
+   "Children respond well to immediate feedback. Use visual cues like color changes and animations, as well as auditory feedback... to guide and encourage them."  
+   After taps or choices, the portal gives clear feedback (visual and/or sound) so the child knows the action worked. [R15]  
+Score: ___
+4. (Source-selected from R15 — Clear Instructions and Guidance; R16 — emerging readers)  
+   "Provide clear, age-appropriate instructions... Use visual aids like arrows, icons, and animations to guide them through tasks." [R15] For early elementary users, text can be used "but sparingly and strategically," labels work best when "paired with clear, recognizable icons," and navigation should not "rely on reading alone." [R16]  
+   The child understands what the portal is asking them to do (which activity, how to proceed) from icons, layout, and short on-screen cues—not from long blocks of text. [R15][R16]  
+Score: ___
+5. (Source-selected from R16 — touch targets and motor fit; R15 — large tappable areas)  
+   "Interactive elements should start at a minimum of 60×80 points for young users... spacing between elements is equally critical" (younger children); older children in the range can use progressively smaller but still forgiving targets.  
+   Buttons and tap areas on the portal are big enough and spaced well enough for this child to use without constant wrong taps. [R16][R15]  
+Score: ___
+
+Observer note: Assistance needed? [ ] Yes [ ] No; completion time: ____ min.
 
 ---
 
-## E. Instructions for Respondents
+## B. IT Specialist Security Questionnaire
 
-1. Complete the assigned test flow first (parent dashboard flow and/or child portal flow).
-2. Answer each item based on actual experience during the session.
-3. Use the scale below for rating items:
+1. User authentication controls are implemented for internal and external access. [R7]  
+Source basis: "What authentication methods do you use for internal and external access?"  
+Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
+Score: ___
+2. Firewall rules follow a default-deny approach and allow only necessary traffic. [R8]  
+Source basis: "Are firewalls configured with a default deny rule set, only allowing necessary traffic?"  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
+Score: ___
+3. MAC whitelisting/device allowlist controls are applied to handle unauthorized devices. [R7]  
+Source basis: "How are unauthorized devices or shadow IT identified and handled?"  
+Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
+Score: ___
+4. CSRF protection is implemented for state-changing requests using server-side tokens. [R11]  
+Source basis: "CSRF tokens should be generated on the server-side and ... once per user session or each request."  
+Source: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html  
+Score: ___
+5. Session management is secured by renewing/regenerating session IDs after privilege changes. [R12]  
+Source basis: "The session ID must be renewed or regenerated ... after any privilege level change."  
+Source: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet  
+Score: ___
+6. Security logs are reviewed regularly to detect suspicious or unauthorized activities. [R8]  
+Source basis: "Are network traffic logs reviewed regularly for suspicious or unauthorized activities?"  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
+Score: ___
 
-- 5 - Strongly Agree
-- 4 - Agree
-- 3 - Neutral
-- 2 - Disagree
-- 1 - Strongly Disagree
-
-4. If an item is not applicable to your role, mark **N/A**.
+Philippine policy alignment references for Chapter 4 discussion (optional):
+- [R13] National Privacy Commission (NPC) Circular 16-01 (security of personal data): https://privacy.gov.ph/npc-circular-16-01-security-of-personal-data-in-government-agencies/
+- [R14] DICT National Cybersecurity Plan 2023-2028: https://cms-cdn.e.gov.ph/DICT/pdf/NCSP-2023-2028-FINAL-DICT.pdf
 
 ---
 
-## F. Section 1: Security Measures Evaluation (Parent-Focused)
+## C. Parent Dashboard Survey (Scope/Objectives-Focused)
 
-Rate each statement from 1 to 5.
-
-1. I can sign in securely, and I can only access my own account data.  
+1. I can monitor visited websites of assigned child devices, and I can manually flag and block selected websites. [R8][R7]  
+Source basis: "Are network traffic logs reviewed regularly for suspicious or unauthorized activities?" (R8), "How do you handle firewall rule reviews and lifecycle management?" (R7)  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/ ; https://vendict.com/blog/50-essential-security-questionnaire-questions  
+Scope: 1, 7 | Objective: 1, 3, 5  
 Score: ___
-
-2. The system clearly separates parent/admin pages from child portal pages.  
+2. The system redirects the child device to quiz/video activity and only continues internet after required completion/passing. [R7]  
+Source basis: "What controls are in place to enforce least privilege and need-to-know principles?"  
+Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
+Scope: 2, 7 | Objective: 2, 3, 5  
 Score: ___
-
-3. Device access control (for enrolled or recognized devices) works as expected.  
+3. I can set and enforce internet schedule and duration limits for each assigned child device. [R7]  
+Source basis: "How are network changes reviewed and authorized?"  
+Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
+Scope: 3, 7 | Objective: 3, 5  
 Score: ___
-
-4. Website blocking and policy enforcement remain consistent during use.  
+4. I receive real-time notifications for time limit reached, flagged-site visit, blocked-site attempt, and new-device connection. [R8]  
+Source basis: "Are real-time alerts configured for critical events or threshold breaches?"  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
+Scope: 4 | Objective: 1, 3  
 Score: ___
-
-5. Session behavior appears secure (no unexpected account switching or unauthorized exposure).  
+5. I can monitor the total time each child device spends online. [R8]  
+Source basis: "Are key security metrics ... tracked and reported to management?"  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
+Scope: 5 | Objective: 1, 3, 5  
 Score: ___
-
-6. Form submissions behave safely and predictably (no suspicious redirects or unsafe prompts).  
+6. The dashboard provides clear daily, weekly, and monthly reports (usage, visited sites, flagged/blocked attempts, and bandwidth). [R8]  
+Source basis: "Does the organization have defined KPIs or KRIs ... for cybersecurity?"  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
+Scope: 6, 7 | Objective: 1, 3, 5  
 Score: ___
-
-7. Activity logs and access-attempt records are sufficient for monitoring unusual behavior.  
+7. I can manage connected devices using block and whitelist controls. [R7]  
+Source basis: "How are unauthorized devices or shadow IT identified and handled?"  
+Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
+Scope: 8, 7 | Objective: 3, 4, 5  
 Score: ___
-
-8. Overall, the system provides adequate protection against unauthorized access.  
+8. Parent/admin dashboard access is secure through authentication and secure session handling. [R7][R12]  
+Source basis: "What authentication methods do you use for internal and external access?" (R7), "The session ID must be renewed or regenerated..." (R12)  
+Source: https://vendict.com/blog/50-essential-security-questionnaire-questions ; https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet  
+Scope: 9 | Objective: 4, 7  
 Score: ___
-
-Optional comments for security evaluation:  
-__________________________________________________________________  
-__________________________________________________________________
+9. Network protection controls (firewall rules and MAC/device allowlist behavior) prevent unauthorized access attempts. [R8][R7]  
+Source basis: "Are firewalls configured with a default deny rule set...?" (R8), "How are unauthorized devices or shadow IT identified and handled?" (R7)  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/ ; https://vendict.com/blog/50-essential-security-questionnaire-questions  
+Scope: 9, 8 | Objective: 4, 7  
+Score: ___
+10. The system logs and monitors security-relevant activity for review and incident response. [R8]  
+Source basis: "Are network traffic logs reviewed regularly for suspicious or unauthorized activities?"  
+Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
+Scope: 9 | Objective: 7  
+Score: ___
+11. The system works reliably at home using our local setup and PLDT modem connection for internet control and child portal access. [R14]  
+Source basis: national cybersecurity planning emphasizes layered, network-level controls.  
+Source: https://cms-cdn.e.gov.ph/DICT/pdf/NCSP-2023-2028-FINAL-DICT.pdf  
+Scope: 7 | Objective: 1, 6  
+Score: ___
 
 ---
 
-## G. Section 2: Child Portal Age Suitability (Child + Parent Observer)
+## D. Objective/Scope Mapping (for Chapter 4)
 
-Rate each statement from 1 to 5 (or N/A if not applicable).
-
-1. The child portal instructions are easy to understand for the child.  
-Score: ___
-
-2. The portal language and wording are age-appropriate.  
-Score: ___
-
-3. The child can complete quiz/video tasks with minimal assistance.  
-Score: ___
-
-4. Feedback messages (pass/fail/retry/time granted) are clear to the child.  
-Score: ___
-
-5. The child understands what to do next after time expiration.  
-Score: ___
-
-6. The portal process feels fair and not confusing for the child user.  
-Score: ___
-
-7. Overall, this portal is suitable for the child's current age.  
-Score: ___
-
-Observed support needed:
-
-- Did the child need adult assistance?
-  - [ ] Yes
-  - [ ] No
-- If yes, what kind of help? (reading, navigation, understanding, technical help)  
-  ________________________________________________________________
-- Approximate completion time for one full portal cycle: ______ minutes
-
-Optional comments for age suitability:  
-__________________________________________________________________  
-__________________________________________________________________
+- Scope 1, 7: C1, C2
+- Scope 2: C8, C9, A2(1-5)
+- Scope 3: C3
+- Scope 4: C4
+- Scope 5: C5
+- Scope 6: C6
+- Scope 8: C7
+- Scope 9: B1-B6, C10
 
 ---
 
-## H. Section 3: Open-Ended Improvement Feedback
+## E. Quick Analysis Rules
 
-1. Which security-related feature gave you the most confidence in the system, and why?  
-__________________________________________________________________  
-__________________________________________________________________
-
-2. Which part of the child portal is hardest for younger users?  
-__________________________________________________________________  
-__________________________________________________________________
-
-3. What changes do you recommend before wider deployment?  
-__________________________________________________________________  
-__________________________________________________________________
+- Compute mean per section (A, B, C).
+- Decision rule:
+  - Mean >= 4.00 = achieved/acceptable
+  - Mean 3.50-3.99 = partially achieved, improve
+  - Mean < 3.50 = not achieved, needs revision
+- For age bracket, report 7-8 and 9-11 separately plus assistance rate.
 
 ---
 
-## I. Scoring and Interpretation Guide (For Researchers)
+## F. Full References
 
-### I.1 Security Objective Attainment Rule
-
-Compute the mean per security item and the overall security mean.
-
-- **Feature-level threshold:** Mean >= 4.00 = Achieved
-- **Overall security objective achieved:** All core security items meet threshold, and overall security mean >= 4.00
-
-Suggested core mapping to Objective 1.5 #9:
-
-- Authentication and account isolation -> Items F1, F2
-- Firewall/policy enforcement -> Item F4
-- MAC/device control -> Item F3
-- Session management -> Item F5
-- Log monitoring -> Item F7
-
-### I.2 Age Suitability Decision Rule
-
-Group results by age bracket:
-
-- 8-10
-- 11-13
-- 14-17
-
-For each bracket, compute:
-
-1. Mean of age-suitability scores (Section G)
-2. Percentage completing with **no assistance**
-3. Average completion time
-
-Suggested interpretation:
-
-- **Recommended for independent use:** mean >= 4.00 and no-assistance rate >= 80%
-- **Recommended with guidance:** mean >= 3.50 but no-assistance rate < 80%
-- **Needs redesign for that bracket:** mean < 3.50
-
----
-
-## J. Supporting Security Controls (System Evidence Notes)
-
-Use this section to support questionnaire findings during consultation and Chapter 4 reporting.
-
-1. **Authentication and account boundaries**
-   - Parent/admin routes require authenticated sessions.
-   - Account-scoped dashboard views reduce cross-account data exposure.
-
-2. **Laravel CSRF protection**
-   - State-changing form submissions include CSRF token validation.
-   - This helps prevent forged requests from unauthorized third-party pages.
-
-3. **Input validation and safe form handling**
-   - Server-side validation checks enforce expected formats and required fields.
-   - Validation errors are returned in a controlled way to prevent unsafe processing.
-
-4. **Password protection**
-   - Passwords are handled using framework hashing mechanisms (not stored as plain text).
-
-5. **Session management**
-   - Session-backed authentication protects parent dashboard access.
-   - Session isolation supports role and account boundaries during active use.
-
-6. **Command execution safeguards (allowlisted scripts)**
-   - Privileged network actions are executed only through allowlisted/whitelisted scripts.
-   - Arguments are sanitized and execution is logged to reduce command injection risk.
-   - This is aligned with controlled use of elevated commands only for approved operations.
-
-7. **MAC-based device control**
-   - Device enrollment and policy application use MAC identity in operational flow.
-   - Supports supervised-device control for child access management.
-
-8. **Firewall and policy enforcement**
-   - Network policies (allow/deny/redirect) are applied at network control layer.
-   - Helps enforce schedule expiry, policy states, and restricted access conditions.
-
-9. **DNS-based blocking and monitoring support**
-   - Domain-level controls and DNS query monitoring contribute to blocking and visibility.
-
-10. **Log monitoring and reporting**
-   - Browsing and access-attempt logs provide traceability for supervision.
-   - Periodic reports support parent review and incident awareness.
-
----
-
-## K. Ready-to-Use Summary Table Template (For Chapter 4)
-
-- **User authentication**
-  - Evidence source: Login + account-scoped dashboard behavior
-  - Related questionnaire items: F1, F2
-  - Mean score: ____
-  - Status: Achieved / Needs Improvement
-
-- **Firewall/policy enforcement**
-  - Evidence source: Blocking and schedule enforcement behavior
-  - Related questionnaire items: F4
-  - Mean score: ____
-  - Status: Achieved / Needs Improvement
-
-- **MAC/device control**
-  - Evidence source: Device enrollment and control behavior
-  - Related questionnaire items: F3
-  - Mean score: ____
-  - Status: Achieved / Needs Improvement
-
-- **Session management**
-  - Evidence source: Secure session behavior during use
-  - Related questionnaire items: F5
-  - Mean score: ____
-  - Status: Achieved / Needs Improvement
-
-- **Log monitoring**
-  - Evidence source: Logs/access attempts/report readability
-  - Related questionnaire items: F7
-  - Mean score: ____
-  - Status: Achieved / Needs Improvement
-
-### Mean Score Computation Guide
-
-Use the following formulas when filling the mean score fields above.
-
-1. **Per-item mean score**  
-   For each security requirement, compute:
-   `Mean score = (sum of all respondent ratings for that item) / (number of valid respondents for that item)`
-
-2. **Handling N/A responses**  
-   Exclude N/A answers from both numerator and denominator.  
-   Use only valid numeric ratings (1 to 5).
-
-3. **Overall security mean (optional summary line)**  
-   After computing each item mean, compute:
-   `Overall security mean = (mean_auth + mean_firewall + mean_mac + mean_session + mean_logs) / 5`
-
-4. **Status decision rule (recommended)**  
-   - If mean score >= 4.00 -> **Achieved**
-   - If mean score < 4.00 -> **Needs Improvement**
-
-5. **Quick example (per item)**  
-   If User authentication has ratings `5, 4, 4, 5, 3` from 5 valid respondents:  
-   `Mean = (5 + 4 + 4 + 5 + 3) / 5 = 21 / 5 = 4.20` -> **Achieved**
-
----
-
-## L. Notes for Adviser Consultation
-
-During consultation, present:
-
-1. The questionnaire instrument (Sections A-H),
-2. The scoring rules (Section I), and
-3. The security-controls evidence notes (Section J).
-
-This makes the chapter claim defensible because each objective is tied to measurable user-facing evidence plus concrete technical controls.
+- [R1] https://www.cloudflare.com/learning/security/glossary/website-security-checklist/
+- [R2] https://arphost.com/website-security-best-practices/
+- [R3] https://www.hackerone.com/knowledge-center/ultimate-9-point-website-security-checklist
+- [R4] https://dev.to/adityabhuyan/essential-security-measures-for-safeguarding-your-system-and-protecting-user-data-49c5
+- [R5] https://www.bitcatcha.com/secure-website/standard/
+- [R6] https://www.scribd.com/document/836479530/Cybersecurity-Assessment-Questionnaire-V1
+- [R7] https://vendict.com/blog/50-essential-security-questionnaire-questions
+- [R8] https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/
+- [R9] https://www.ncbi.nlm.nih.gov/books/NBK537095/
+- [R10] https://www.ncbi.nlm.nih.gov/books/NBK448206/
+- [R11] https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+- [R12] https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet
+- [R13] https://privacy.gov.ph/npc-circular-16-01-security-of-personal-data-in-government-agencies/
+- [R14] https://cms-cdn.e.gov.ph/DICT/pdf/NCSP-2023-2028-FINAL-DICT.pdf
+- [R15] https://www.aufaitux.com/blog/ui-ux-designing-for-children/
+- [R16] https://gapsystudio.com/blog/ux-design-for-kids/

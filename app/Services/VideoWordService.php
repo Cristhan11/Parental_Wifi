@@ -2,18 +2,18 @@
 
 /**
  * VideoWordService - Dictionary Word Management for Videos
- * 
+ *
  * This service handles all dictionary word-related operations for video playback.
  * It provides methods for selecting random words, generating random timestamps,
  * and validating words entered by children.
- * 
+ *
  * How it works:
  * - When a child starts watching a video, random words are selected from the dictionary
  * - Random timestamps are generated throughout the video duration
  * - Words are displayed at those timestamps during playback
  * - At video end, child enters the words they saw
  * - This service validates the entered words against the displayed words
- * 
+ *
  * Why a separate service? Separates business logic from controllers, making code
  * more organized, testable, and reusable.
  */
@@ -27,22 +27,22 @@ class VideoWordService
 {
     /**
      * Select random dictionary words for a video.
-     * 
+     *
      * This method randomly selects words from the dictionary word pool.
      * Words are selected from all available words (built-in and custom).
-     * 
+     *
      * How it works:
      * 1. Gets all available dictionary words from database
      * 2. Randomly shuffles them
      * 3. Takes the first N words (where N = wordCount)
      * 4. Returns collection of selected words
-     * 
+     *
      * Why random? Ensures children see different words each time they watch,
      * preventing memorization and encouraging active learning.
-     * 
-     * @param int $wordCount Number of words to select (e.g., 5 words for a 10-minute video)
+     *
+     * @param  int  $wordCount  Number of words to select (e.g., 5 words for a 10-minute video)
      * @return Collection Collection of DictionaryWord models
-     * 
+     *
      * Usage Example:
      * ```php
      * $service = new VideoWordService();
@@ -62,18 +62,40 @@ class VideoWordService
     }
 
     /**
+     * Random dictionary words for the post-video chip game, excluding words already shown.
+     *
+     * @param  array<int>  $excludeDictionaryWordIds  IDs of words already used in this session
+     * @return Collection<int, DictionaryWord>
+     */
+    public function selectDistractorWords(int $count, array $excludeDictionaryWordIds): Collection
+    {
+        if ($count <= 0) {
+            return collect();
+        }
+
+        $exclude = array_values(array_unique(array_filter(array_map('intval', $excludeDictionaryWordIds))));
+
+        $query = DictionaryWord::query();
+        if ($exclude !== []) {
+            $query->whereNotIn('id', $exclude);
+        }
+
+        return $query->inRandomOrder()->take($count)->get();
+    }
+
+    /**
      * Generate random timestamps for word display throughout video duration.
-     * 
+     *
      * This method generates random timestamps (in seconds) when words should
      * appear during video playback. Timestamps are distributed throughout the
      * video duration to ensure active watching.
-     * 
+     *
      * How it works:
      * 1. Calculates time intervals (divides video duration by word count)
      * 2. For each word, generates a random timestamp within its interval
      * 3. Ensures timestamps are spread throughout the video
      * 4. Returns array of timestamps in ascending order
-     * 
+     *
      * Example:
      * - Video duration: 600 seconds (10 minutes)
      * - Word count: 5 words
@@ -82,14 +104,14 @@ class VideoWordService
      * - Word 2: Random between 120-240 seconds (e.g., 180 seconds)
      * - Word 3: Random between 240-360 seconds (e.g., 290 seconds)
      * - etc.
-     * 
+     *
      * Why distributed intervals? Prevents all words from appearing at the start
      * or end, ensuring children watch the entire video.
-     * 
-     * @param int $durationSeconds Total video duration in seconds
-     * @param int $wordCount Number of words to display
+     *
+     * @param  int  $durationSeconds  Total video duration in seconds
+     * @param  int  $wordCount  Number of words to display
      * @return array Array of timestamps in seconds (e.g., [45, 180, 290, 420, 550])
-     * 
+     *
      * Usage Example:
      * ```php
      * $service = new VideoWordService();
@@ -142,32 +164,32 @@ class VideoWordService
 
     /**
      * Validate words entered by child against words that were displayed.
-     * 
+     *
      * This method compares the words the child entered with the words that
      * were actually displayed during video playback. Validation is case-insensitive
      * and trims whitespace to be forgiving of minor input differences.
-     * 
+     *
      * How it works:
      * 1. Normalizes displayed words (lowercase, trimmed)
      * 2. Normalizes entered words (lowercase, trimmed)
-     * 3. Compares arrays to find matches
+     * 3. Compares position-by-position (same order as words appeared in the video)
      * 4. Returns validation result with counts
-     * 
+     *
      * Normalization:
      * - Converts to lowercase: "Adventure" = "adventure" = "ADVENTURE"
      * - Trims whitespace: " adventure " = "adventure"
      * - This makes validation forgiving of minor input differences
-     * 
+     *
      * Validation Result:
      * - words_shown_count: Total number of words displayed
      * - words_entered_count: Total number of words child entered
      * - words_correct: Number of words child got correct
      * - passed_validation: true if ALL words are correct, false otherwise
-     * 
-     * @param array $wordsShown Array of word strings that were displayed (e.g., ["adventure", "curious"])
-     * @param array $wordsEntered Array of word strings child entered (e.g., ["adventure", "curious", "discover"])
+     *
+     * @param  array  $wordsShown  Array of word strings that were displayed (e.g., ["adventure", "curious"])
+     * @param  array  $wordsEntered  Array of word strings in the order the child selected them
      * @return array Validation result with counts and pass/fail status
-     * 
+     *
      * Usage Example:
      * ```php
      * $service = new VideoWordService();
@@ -175,12 +197,7 @@ class VideoWordService
      *     ["adventure", "curious", "discover"],
      *     ["adventure", "curious", "discover"]
      * );
-     * // Returns: [
-     * //   'words_shown_count' => 3,
-     * //   'words_entered_count' => 3,
-     * //   'words_correct' => 3,
-     * //   'passed_validation' => true
-     * // ]
+     * // Order must match playback order; same length required to pass.
      * ```
      */
     public function validateWords(array $wordsShown, array $wordsEntered): array
@@ -199,21 +216,20 @@ class VideoWordService
             return strtolower(trim($word));
         }, $wordsEntered);
 
-        // Count how many words child got correct
-        // array_intersect() finds common elements between two arrays
-        // count() counts how many matches there are
-        // Example: ["adventure", "curious"] vs ["adventure", "curious", "discover"] = 2 matches
-        $wordsCorrect = count(array_intersect($normalizedShown, $normalizedEntered));
-
-        // Calculate counts
         $wordsShownCount = count($normalizedShown);
         $wordsEnteredCount = count($normalizedEntered);
 
-        // Child passes validation ONLY if ALL words are correct
-        // Partial credit is not allowed - child must remember all words
-        // Example: 3 words shown, 3 correct = passed
-        // Example: 3 words shown, 2 correct = failed
-        $passedValidation = ($wordsCorrect === $wordsShownCount) && ($wordsShownCount > 0);
+        $wordsCorrect = 0;
+        $length = min($wordsShownCount, $wordsEnteredCount);
+        for ($i = 0; $i < $length; $i++) {
+            if ($normalizedShown[$i] === $normalizedEntered[$i]) {
+                $wordsCorrect++;
+            }
+        }
+
+        $sameLength = $wordsEnteredCount === $wordsShownCount;
+        $allPositionsMatch = $sameLength && $wordsCorrect === $wordsShownCount;
+        $passedValidation = $allPositionsMatch && ($wordsShownCount > 0);
 
         // Return validation result
         return [
@@ -226,14 +242,14 @@ class VideoWordService
 
     /**
      * Get the correct words that were displayed (for showing in error messages).
-     * 
+     *
      * This method returns the words that were actually displayed, formatted
      * for display to the child when validation fails. Used in error messages
      * to show what the correct words were.
-     * 
-     * @param array $wordsShown Array of word strings that were displayed
+     *
+     * @param  array  $wordsShown  Array of word strings that were displayed
      * @return string Comma-separated string of words (e.g., "adventure, curious, discover")
-     * 
+     *
      * Usage Example:
      * ```php
      * $service = new VideoWordService();
@@ -248,4 +264,3 @@ class VideoWordService
         return implode(', ', $wordsShown);
     }
 }
-

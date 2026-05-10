@@ -51,13 +51,18 @@ return [
     | Dashboard link in reporting emails
     |--------------------------------------------------------------------------
     |
-    | "Open dashboard" in digest and immediate alert messages must reach the
-    | app where parents sign in (often a Tailscale IP on the Pi). route() alone
-    | uses APP_URL, which may be wrong for mail readers. Override per deploy
-    | with REPORTING_DASHBOARD_URL (full URL, including scheme and path).
+    | Raw env value (for config caching). Final `email_dashboard_url` is set in
+    | AppServiceProvider: legacy remote_access_settings row, then this value, then
+    | rtrim(APP_URL,'/').'/dashboard'.
     |
     */
 
-    'email_dashboard_url' => env('REPORTING_DASHBOARD_URL', 'http://100.102.52.117/dashboard'),
+    'env_reporting_dashboard_url' => env('REPORTING_DASHBOARD_URL'),
+
+    /*
+    | Resolved value — populated in RemoteAccessSetting::applyReportingDashboardUrlToConfig().
+    */
+
+    'email_dashboard_url' => null,
 
 ];

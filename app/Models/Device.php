@@ -340,7 +340,8 @@ class Device extends Model
         if ($hours > 0) {
             // sprintf formats string: %d = number, %s = string
             // Ternary operator: condition ? value_if_true : value_if_false
-            return sprintf('%d hour%s %d minute%s',
+            return sprintf(
+                '%d hour%s %d minute%s',
                 $hours,
                 $hours > 1 ? 's' : '',      // Add 's' if plural
                 $minutes,

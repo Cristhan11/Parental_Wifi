@@ -4,6 +4,12 @@
         <p class="mt-2 text-sm" style="color: #00000080;">
             We sent a <strong>6-digit code</strong> to your inbox. Enter it below to confirm your address. Codes expire after 60 minutes.
         </p>
+        @auth
+            <p class="mt-2 text-sm text-black">
+                {{ __('Confirming') }} <strong class="break-all">{{ Auth::user()->email }}</strong>. {{ __('After you verify, use this same email when signing in to Tailscale on each device.') }}
+                {{ __('The app cannot switch Tailscale for you—complete sign-in inside the Tailscale app on the Raspberry Pi when you change email.') }}
+            </p>
+        @endauth
     </div>
 
     @if (session('status') === 'verification-code-sent')

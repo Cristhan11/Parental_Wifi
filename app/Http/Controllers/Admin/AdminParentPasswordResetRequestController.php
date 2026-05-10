@@ -5,11 +5,16 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AdminActionLog;
 use App\Models\ParentPasswordResetRequest;
+use App\Services\SecurityAuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\View\View;
 
 class AdminParentPasswordResetRequestController extends Controller
 {
+    public function __construct(
+        private readonly SecurityAuditLogger $auditLogger,
+    ) {}
+
     public function index(): View
     {
         $requests = ParentPasswordResetRequest::query()
@@ -31,6 +36,11 @@ class AdminParentPasswordResetRequestController extends Controller
         abort_unless($user->isEligibleForSelfServicePasswordResetRequest(), 404);
 
         AdminParentAccountController::setUserPasswordToDefault($user);
+
+        $this->auditLogger->recordPasswordChanged(request(), $user->fresh(), 'admin.password-reset-requests.fulfill', [
+            'via' => 'admin_default_password',
+            'actor_user_id' => auth()->id(),
+        ]);
 
         $parent_password_reset_request->forceFill([
             'processed_at' => now(),

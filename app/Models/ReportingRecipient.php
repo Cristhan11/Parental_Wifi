@@ -15,10 +15,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
  * - `is_enabled` lets someone temporarily pause one address without deleting the row.
  *
  * Table: `reporting_recipients` — unique (`user_id`, `email`) so the same address cannot be added twice per parent.
+ *
+ * Household operator / sign-in email ({@see User::$email}, verified) is the identity for Tailscale and this app.
+ * Rows here are only where report copies are delivered; they never replace the verified account email for sign-in.
  */
 class ReportingRecipient extends Model
 {
     use HasFactory;
+
+    /** Auto-synced when parent completes email verification ({@see \App\Http\Controllers\Auth\VerifyEmailCodeController}). */
+    public const LABEL_OWNER_VERIFIED_EMAIL = 'Owner verified email';
 
     /** Columns allowed for mass assignment from controllers / forms. */
     protected $fillable = [

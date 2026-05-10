@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Auth;
 
+use App\Models\ReportingRecipient;
 use App\Models\User;
 use Illuminate\Auth\Events\Verified;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -41,6 +42,13 @@ class EmailVerificationTest extends TestCase
         $this->assertTrue($user->fresh()->hasVerifiedEmail());
         $this->assertNull($user->fresh()->email_verification_code_hash);
         $response->assertRedirect(route('dashboard', absolute: false).'?verified=1');
+        $user = $user->fresh();
+        $this->assertDatabaseHas('reporting_recipients', [
+            'user_id' => $user->id,
+            'email' => $user->email,
+            'label' => ReportingRecipient::LABEL_OWNER_VERIFIED_EMAIL,
+            'is_enabled' => 1,
+        ]);
     }
 
     public function test_email_is_not_verified_with_invalid_code(): void

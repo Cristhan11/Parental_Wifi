@@ -33,11 +33,11 @@
                 <a href="{{ route('quizzes.import') }}"
                    class="inline-flex w-full shrink-0 items-center justify-center gap-1.5 rounded px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base"
                    style="background-color: #10B981;"
-                   aria-label="Import/export question bank">
+                   aria-label="Import or export quiz (Excel)">
                     <svg class="h-5 w-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"></path>
                     </svg>
-                    <span>Question Bank Excel</span>
+                    <span>Import / export quiz</span>
                 </a>
                 <a href="{{ route('quizzes.create') }}"
                    class="inline-flex w-full shrink-0 items-center justify-center gap-1 rounded px-3 py-2 text-sm font-medium whitespace-nowrap text-white hover:opacity-90 sm:w-auto sm:px-4 sm:text-base"
@@ -67,7 +67,7 @@
                 <p class="mb-2 font-semibold">Instructions</p>
                 <ul class="list-inside list-disc space-y-1">
                     <li><strong>+ New</strong> creates a quiz. Open <strong>Edit</strong> to change questions and which <strong>child</strong> devices can take it.</li>
-                    <li><strong>Question Bank Excel</strong> uploads or downloads the shared bank used for random quizzes.</li>
+                    <li><strong>Import / export quiz</strong> opens the Excel import page (template, import, and optional export).</li>
                     <li>Set <strong>Search</strong>, <strong>Level</strong>, <strong>Subject</strong>, or <strong>Status</strong> as needed, then tap <strong>Apply Filters</strong>. <strong>Reset</strong> clears those choices.</li>
                     <li><strong>Random Quiz Settings</strong> (below) sets minutes per correct answer, retry limits, and which school levels each child device pulls from the bank. Tap <strong>Save</strong> when you change that block.</li>
                 </ul>

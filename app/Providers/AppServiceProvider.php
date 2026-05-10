@@ -7,6 +7,7 @@ use App\Listeners\RecordSecurityAuditOnLockout;
 use App\Listeners\RecordSecurityAuditOnLogin;
 use App\Listeners\RecordSecurityAuditOnLogout;
 use App\Models\Device;
+use App\Models\RemoteAccessSetting;
 use App\Models\ReportingRecipient;
 use App\Observers\DeviceObserver;
 use App\Observers\ReportingRecipientObserver;
@@ -17,8 +18,10 @@ use Illuminate\Auth\Events\Lockout;
 use Illuminate\Auth\Events\Login;
 use Illuminate\Auth\Events\Logout;
 use Illuminate\Auth\Events\Registered;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -53,6 +56,15 @@ class AppServiceProvider extends ServiceProvider
             TrustProxies::withHeaders($proxyHeaders);
         }
 
+        RateLimiter::for('tailscale-auth-link', function ($request) {
+            $userPart = $request->user()?->getAuthIdentifier() ?? 'guest';
+            $ipPart = $request->ip() ?? '0.0.0.0';
+
+            return Limit::perMinutes(10, 3)->by($userPart.'|'.$ipPart);
+        });
+
+        RemoteAccessSetting::applyReportingDashboardUrlToConfig();
+
         Event::listen(Login::class, RecordSecurityAuditOnLogin::class);
         Event::listen(Failed::class, RecordSecurityAuditOnFailedLogin::class);
         Event::listen(Logout::class, RecordSecurityAuditOnLogout::class);
@@ -62,6 +74,7 @@ class AppServiceProvider extends ServiceProvider
         Device::observe(DeviceObserver::class);
 
         Event::listen(Registered::class, function (Registered $event): void {
+            /** @var \App\Models\User|null $user */
             $user = $event->user;
             if (! $user || ! $user->getKey()) {
                 return;

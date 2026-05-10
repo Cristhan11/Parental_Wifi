@@ -52,6 +52,11 @@ class ImportQuizRequest extends FormRequest
                 Rule::requiredIf(fn () => $this->input('mode') === 'update_existing'),
                 Rule::exists('quizzes', 'id')->where(fn ($q) => $q->where('user_id', $this->user()?->id)),
             ],
+            'confirm_replace_quiz_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('quizzes', 'id')->where(fn ($q) => $q->where('user_id', $this->user()?->id)),
+            ],
         ];
     }
 

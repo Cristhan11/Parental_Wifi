@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Video - {{ $video->title }}</title>
+    @include('portal.partials.head-favicon')
     <link rel="stylesheet" href="/css/portal-captive.css">
     <style>
         /* Overlay must never steal taps from the video (dictionary cards are non-interactive). */
@@ -58,6 +59,20 @@
         <div class="portal-main">
             <div class="portal-card">
                 <h2 class="portal-video-title">{{ $video->title }}</h2>
+                @if(!empty($wordRetryMode))
+                    <div class="portal-banner portal-banner--info portal-spacer-bottom" role="status">
+                        <strong>Try the words again.</strong>
+                        You already watched the video — pick the words in order. This is try
+                        <strong>{{ (int) $wordGuessFailedCount + 1 }}</strong> of
+                        <strong>{{ (int) $videoWordGuessMaxFailures }}</strong>.
+                    </div>
+                @endif
+                @if(session('portal_video_word_retries_left'))
+                    <div class="portal-banner portal-banner--info portal-spacer-bottom" role="status">
+                        Not quite right. You have <strong>{{ (int) session('portal_video_word_retries_left') }}</strong>
+                        more {{ (int) session('portal_video_word_retries_left') === 1 ? 'try' : 'tries' }} before you need to watch the video again.
+                    </div>
+                @endif
                 @if($video->description)
                     <p class="portal-video-desc">{{ $video->description }}</p>
                 @endif
@@ -101,7 +116,7 @@
                     @if($video->dictionary_words_enabled)
                         <p style="margin:0;">
                             <strong>Watch carefully!</strong> {{ $video->word_count }} dictionary words will appear during the video.
-                            You must remember and enter them at the end.
+                            When the video ends, tap the colorful words <strong>in the order they appeared</strong>.
                         </p>
                         <p class="portal-video-fs-hint">
                             For fullscreen, use the yellow <strong>Fullscreen</strong> on the video (not the player’s own fullscreen button) so word pop-ups stay visible.
@@ -109,44 +124,67 @@
                     @endif
                 </div>
             </div>
+        </div>
+    </div>
 
-            <div id="wordSubmissionForm" class="portal-card" style="display: none;">
-                <h3 class="portal-video-title">Enter the Words You Saw</h3>
-                <p class="portal-video-desc">
-                    Please enter all the dictionary words that appeared during the video, separated by commas.
+    @if($video->dictionary_words_enabled)
+        <div id="portalWordGameModal" class="portal-word-game-modal hidden" aria-hidden="true">
+            <div class="portal-word-game-modal__backdrop" aria-hidden="true"></div>
+            <div class="portal-word-game-modal__panel" role="dialog" aria-modal="true" aria-labelledby="portalWordGameTitle">
+                @php
+                    $portalWordMaxWrong = (int) ($videoWordGuessMaxFailures ?? 3);
+                    $portalWordFailed = (int) ($completion->word_guess_failed_count ?? 0);
+                    $portalWordTriesLeft = max(0, $portalWordMaxWrong - $portalWordFailed);
+                    $portalWordTriesAria = $portalWordTriesLeft === 1
+                        ? '1 wrong try left before you must watch the video again.'
+                        : $portalWordTriesLeft.' wrong tries left before you must watch the video again.';
+                @endphp
+                <div class="portal-word-game-modal__head">
+                    <h3 id="portalWordGameTitle" class="portal-word-game-modal__title">Pick the words in order!</h3>
+                    @if($portalWordTriesLeft > 0)
+                        <div class="portal-word-game-modal__tries-badge" role="status" aria-label="{{ $portalWordTriesAria }}">
+                            <span class="portal-word-game-modal__tries-k">Tries</span>
+                            <span class="portal-word-game-modal__tries-v">{{ $portalWordTriesLeft }}</span>
+                        </div>
+                    @endif
+                </div>
+                <p class="portal-word-game-modal__lead">
+                    Tap <strong>{{ $video->word_count }}</strong> words in order.
                 </p>
 
                 <form id="wordsForm" action="{{ route('portal.video.submit', ['mac' => $device->mac_address]) }}" method="POST">
                     @csrf
                     <input type="hidden" name="mac" value="{{ $device->mac_address }}">
+                    <div id="wordsHiddenInputs" class="portal-word-game-modal__hidden-inputs"></div>
 
-                    <div style="margin-bottom: 1.25rem;">
-                        <label for="words" class="portal-label">Words (comma-separated) *</label>
-                        <textarea
-                            name="words"
-                            id="words"
-                            rows="4"
-                            required
-                            class="portal-textarea"
-                            placeholder="e.g., adventure, curious, discover"></textarea>
-                        <p class="portal-hint">Enter the words exactly as they appeared (case doesn't matter)</p>
+                    <p class="portal-word-game-modal__section-label">Your picks</p>
+                    <div id="portalWordGamePicks" class="portal-word-game__picks" aria-live="polite"></div>
+                    <div class="portal-word-game-modal__toolbar">
+                        <button type="button" id="portalWordGameUndo" class="portal-btn portal-btn--outline portal-word-game-modal__tool-btn" disabled>Undo last</button>
+                        <button type="button" id="portalWordGameClear" class="portal-btn portal-btn--outline portal-word-game-modal__tool-btn" disabled>Clear all</button>
                     </div>
 
-                    <div class="portal-actions" style="justify-content: flex-end;">
-                        <button type="submit" class="portal-btn portal-btn--success">Submit Words</button>
+                    <p class="portal-word-game-modal__section-label">Tap a word</p>
+                    <div id="portalWordGameBank" class="portal-word-game__bank"></div>
+
+                    <div class="portal-word-game-modal__actions">
+                        <button type="submit" id="portalWordGameSubmit" class="portal-btn portal-btn--success portal-word-game-modal__submit" disabled>Submit</button>
                     </div>
                 </form>
             </div>
         </div>
-    </div>
+    @endif
 
     <script>
         const videoPlayer = document.getElementById('videoPlayer');
         const videoStage = document.getElementById('portalVideoStage');
         const portalFsBtn = document.getElementById('portalVideoFsBtn');
         const wordOverlayContainer = document.getElementById('wordOverlayContainer');
-        const wordSubmissionForm = document.getElementById('wordSubmissionForm');
+        const wordGameModal = document.getElementById('portalWordGameModal');
         const wordsData = @json($wordsData);
+        const distractorWords = @json($distractorWords);
+        const wordsInOrder = wordsData.map(function (w) { return w.word; });
+        const expectedWordCount = wordsInOrder.length;
         const shownWords = [];
         /** How long each dictionary word overlay stays visible (8s + 3s). */
         const dictionaryWordDisplayMs = 11000;
@@ -158,6 +196,157 @@
                 || document.webkitFullscreenElement
                 || document.mozFullScreenElement
                 || document.msFullscreenElement;
+        }
+
+        function portalExitAllFullscreen() {
+            try {
+                if (videoPlayer && typeof videoPlayer.webkitExitFullscreen === 'function') {
+                    videoPlayer.webkitExitFullscreen();
+                }
+            } catch (e) {
+                console.warn('video webkitExitFullscreen:', e);
+            }
+            const exit = document.exitFullscreen
+                || document.webkitExitFullscreen
+                || document.webkitCancelFullScreen
+                || document.mozCancelFullScreen
+                || document.msExitFullscreen;
+            if (exit && portalFullscreenElement()) {
+                try {
+                    const p = exit.call(document);
+                    if (p && typeof p.catch === 'function') {
+                        p.catch(function () {});
+                    }
+                } catch (e) {
+                    console.warn('document exitFullscreen:', e);
+                }
+            }
+        }
+
+        function portalOpenWordGameModal() {
+            if (!wordGameModal) {
+                return;
+            }
+            wordGameModal.classList.remove('hidden');
+            wordGameModal.setAttribute('aria-hidden', 'false');
+            document.body.classList.add('portal-word-game-open');
+        }
+
+        function portalShuffle(arr) {
+            const a = arr.slice();
+            for (let i = a.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                const t = a[i];
+                a[i] = a[j];
+                a[j] = t;
+            }
+            return a;
+        }
+
+        const portalWordGameChipClasses = [
+            'portal-word-game-chip--0',
+            'portal-word-game-chip--1',
+            'portal-word-game-chip--2',
+            'portal-word-game-chip--3',
+            'portal-word-game-chip--4',
+            'portal-word-game-chip--5',
+            'portal-word-game-chip--6',
+            'portal-word-game-chip--7',
+        ];
+
+        let portalWordGameSelected = [];
+        let portalWordGameSelectedButtons = [];
+
+        function portalWordGameSyncUi() {
+            const picksEl = document.getElementById('portalWordGamePicks');
+            const hiddenWrap = document.getElementById('wordsHiddenInputs');
+            const undoBtn = document.getElementById('portalWordGameUndo');
+            const clearBtn = document.getElementById('portalWordGameClear');
+            const submitBtn = document.getElementById('portalWordGameSubmit');
+            if (!picksEl || !hiddenWrap) {
+                return;
+            }
+            picksEl.innerHTML = '';
+            hiddenWrap.innerHTML = '';
+            portalWordGameSelected.forEach(function (word, idx) {
+                const pill = document.createElement('span');
+                pill.className = 'portal-word-game__pick-pill';
+                pill.textContent = (idx + 1) + '. ' + word;
+                picksEl.appendChild(pill);
+                const inp = document.createElement('input');
+                inp.type = 'hidden';
+                inp.name = 'words[]';
+                inp.value = word;
+                hiddenWrap.appendChild(inp);
+            });
+            const n = portalWordGameSelected.length;
+            const canEdit = n > 0;
+            if (undoBtn) {
+                undoBtn.disabled = !canEdit;
+            }
+            if (clearBtn) {
+                clearBtn.disabled = !canEdit;
+            }
+            if (submitBtn) {
+                submitBtn.disabled = (expectedWordCount <= 0) || (n !== expectedWordCount);
+            }
+        }
+
+        function portalInitWordGameIfNeeded() {
+            if (!dictionaryWordsEnabled || !wordGameModal || expectedWordCount <= 0) {
+                return;
+            }
+            const bank = document.getElementById('portalWordGameBank');
+            if (!bank || bank.dataset.initialized === '1') {
+                return;
+            }
+            bank.dataset.initialized = '1';
+            const pool = portalShuffle(wordsInOrder.concat(distractorWords));
+            pool.forEach(function (word, i) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'portal-word-game-chip ' + portalWordGameChipClasses[i % portalWordGameChipClasses.length];
+                btn.textContent = word;
+                btn.dataset.word = word;
+                btn.addEventListener('click', function () {
+                    if (btn.disabled || portalWordGameSelected.length >= expectedWordCount) {
+                        return;
+                    }
+                    portalWordGameSelected.push(word);
+                    portalWordGameSelectedButtons.push(btn);
+                    btn.disabled = true;
+                    portalWordGameSyncUi();
+                });
+                bank.appendChild(btn);
+            });
+            const undoBtn = document.getElementById('portalWordGameUndo');
+            const clearBtn = document.getElementById('portalWordGameClear');
+            if (undoBtn) {
+                undoBtn.addEventListener('click', function () {
+                    if (portalWordGameSelected.length === 0) {
+                        return;
+                    }
+                    portalWordGameSelected.pop();
+                    const b = portalWordGameSelectedButtons.pop();
+                    if (b) {
+                        b.disabled = false;
+                    }
+                    portalWordGameSyncUi();
+                });
+            }
+            if (clearBtn) {
+                clearBtn.addEventListener('click', function () {
+                    portalWordGameSelected = [];
+                    while (portalWordGameSelectedButtons.length) {
+                        const b = portalWordGameSelectedButtons.pop();
+                        if (b) {
+                            b.disabled = false;
+                        }
+                    }
+                    portalWordGameSyncUi();
+                });
+            }
+            portalWordGameSyncUi();
         }
 
         function portalToggleStageFullscreen() {
@@ -367,8 +556,12 @@
         }
 
         function handleVideoEnded() {
-            wordSubmissionForm.style.display = 'block';
-            wordSubmissionForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            if (!dictionaryWordsEnabled || !wordGameModal || expectedWordCount <= 0) {
+                return;
+            }
+            portalExitAllFullscreen();
+            portalInitWordGameIfNeeded();
+            portalOpenWordGameModal();
         }
 
         (function preventPortalVideoSkip() {
@@ -423,6 +616,16 @@
         }
 
         syncPlayPauseLabel();
+        portalInitWordGameIfNeeded();
+
+        const openWordGameOnLoad = @json(!empty($openWordGameOnLoad));
+        if (openWordGameOnLoad) {
+            document.addEventListener('DOMContentLoaded', function () {
+                if (dictionaryWordsEnabled && expectedWordCount > 0 && wordGameModal) {
+                    portalOpenWordGameModal();
+                }
+            });
+        }
     </script>
 </body>
 </html>

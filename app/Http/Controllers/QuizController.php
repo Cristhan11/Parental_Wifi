@@ -31,7 +31,9 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -274,37 +276,24 @@ class QuizController extends Controller
         $existingQuestions = $quiz->questions['questions'] ?? [];
         if (empty($existingQuestions) && $quiz->level && $quiz->subject) {
             $questionCount = max(1, (int) ($quiz->question_count ?? 10));
-            $generatedQuestions = QuestionBankItem::query()
-                ->where('level', $quiz->level)
-                ->where('subject', $quiz->subject)
-                ->where('status', 'Active')
+            $generatedQuestions = QuestionBankItem::queryForFixedQuiz($quiz)
                 ->inRandomOrder()
                 ->limit($questionCount)
                 ->get()
                 ->values()
                 ->map(function (QuestionBankItem $item, int $index): array {
-                    $options = [
-                        (string) $item->option_a,
-                        (string) $item->option_b,
-                        (string) $item->option_c,
-                        (string) $item->option_d,
-                    ];
+                    $payload = $item->toPortalQuestionPayload($index);
+                    if ($payload['type'] === 'multiple_choice') {
+                        $correctMap = ['A' => 0, 'B' => 1, 'C' => 2, 'D' => 3];
+                        $letter = strtoupper((string) $item->correct_option);
+                        if (in_array($letter, ['A', 'B', 'C', 'D'], true)) {
+                            $idx = $correctMap[$letter];
+                            $opts = $payload['options'];
+                            $payload['correct_answer'] = $opts[$idx] ?? $opts[0];
+                        }
+                    }
 
-                    $correctMap = [
-                        'A' => 0,
-                        'B' => 1,
-                        'C' => 2,
-                        'D' => 3,
-                    ];
-                    $correctIndex = $correctMap[strtoupper((string) $item->correct_option)] ?? 0;
-
-                    return [
-                        'id' => $index + 1,
-                        'question' => (string) $item->question_text,
-                        'type' => 'multiple_choice',
-                        'options' => $options,
-                        'correct_answer' => $options[$correctIndex] ?? $options[0],
-                    ];
+                    return $payload;
                 })
                 ->all();
 
@@ -546,11 +535,13 @@ class QuizController extends Controller
      */
     public function processImport(ImportQuizRequest $request): RedirectResponse
     {
+        $userId = (int) Auth::id();
         $result = $this->questionBankExcelService->import(
             $request->file('excel_file'),
-            (int) Auth::id(),
+            $userId,
             $request->string('mode')->toString(),
-            $request->integer('quiz_id') ?: null
+            $request->integer('quiz_id') ?: null,
+            $request->integer('confirm_replace_quiz_id') ?: null
         );
 
         if (! empty($result['errors'])) {
@@ -558,8 +549,99 @@ class QuizController extends Controller
                 ->with('error', implode(' ', array_slice($result['errors'], 0, 5)));
         }
 
+        if (! empty($result['pending_duplicate'])) {
+            $pd = $result['pending_duplicate'];
+            $relativePath = 'quiz-import-pending/'.$userId.'/'.$pd['token'].'.xlsx';
+            Storage::disk('local')->put($relativePath, $request->file('excel_file')->getContent());
+            Cache::put($this->importPendingCacheKey($userId, $pd['token']), [
+                'path' => $relativePath,
+                'mode' => $request->string('mode')->toString(),
+                'quiz_id' => $request->integer('quiz_id') ?: null,
+                'duplicate_quiz_id' => $pd['quiz_id'],
+                'duplicate_title' => $pd['title'],
+            ], now()->addMinutes(20));
+
+            return redirect()
+                ->route('quizzes.import.pending', ['token' => $pd['token']]);
+        }
+
         return redirect()->route('quizzes.index')
-            ->with('success', "Question bank import complete. Added: {$result['created']}, Updated: {$result['updated']}.");
+            ->with('success', "Quiz import complete. Added: {$result['created']}, Updated: {$result['updated']}.");
+    }
+
+    public function importPending(string $token): RedirectResponse|View
+    {
+        $userId = (int) Auth::id();
+        $payload = Cache::get($this->importPendingCacheKey($userId, $token));
+        if (! is_array($payload)) {
+            return redirect()->route('quizzes.import')
+                ->with('error', 'That import confirmation link has expired. Please upload your file again.');
+        }
+
+        return view('quizzes.import-confirm', [
+            'token' => $token,
+            'duplicateQuizId' => (int) ($payload['duplicate_quiz_id'] ?? 0),
+            'duplicateTitle' => (string) ($payload['duplicate_title'] ?? ''),
+        ]);
+    }
+
+    public function processImportPending(\Illuminate\Http\Request $request, string $token): RedirectResponse
+    {
+        $request->validate([
+            'choice' => ['required', 'in:replace,cancel'],
+        ]);
+
+        $userId = (int) Auth::id();
+        $cacheKey = $this->importPendingCacheKey($userId, $token);
+        $payload = Cache::pull($cacheKey);
+        if (! is_array($payload)) {
+            return redirect()->route('quizzes.import')
+                ->with('error', 'That import confirmation link has expired. Please upload your file again.');
+        }
+
+        if ($request->string('choice')->toString() === 'cancel') {
+            Storage::disk('local')->delete($payload['path']);
+
+            return redirect()->route('quizzes.import')
+                ->with('error', 'Import canceled. Change the Quiz title in your spreadsheet (the Quiz title row) and try again, or choose Replace next time.');
+        }
+
+        $fullPath = Storage::disk('local')->path($payload['path']);
+        if (! is_file($fullPath)) {
+            return redirect()->route('quizzes.import')
+                ->with('error', 'The uploaded file is no longer available. Please upload again.');
+        }
+
+        $uploaded = new \Illuminate\Http\UploadedFile(
+            $fullPath,
+            'import.xlsx',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            null,
+            true
+        );
+
+        $result = $this->questionBankExcelService->import(
+            $uploaded,
+            $userId,
+            (string) ($payload['mode'] ?? 'add_new'),
+            isset($payload['quiz_id']) ? (int) $payload['quiz_id'] : null,
+            (int) ($payload['duplicate_quiz_id'] ?? 0) ?: null
+        );
+
+        Storage::disk('local')->delete($payload['path']);
+
+        if (! empty($result['errors'])) {
+            return redirect()->route('quizzes.import')
+                ->with('error', implode(' ', array_slice($result['errors'], 0, 5)));
+        }
+
+        return redirect()->route('quizzes.index')
+            ->with('success', "Quiz import complete. Added: {$result['created']}, Updated: {$result['updated']}.");
+    }
+
+    protected function importPendingCacheKey(int $userId, string $token): string
+    {
+        return 'quiz_import_pending:'.$userId.':'.$token;
     }
 
     /**
@@ -616,23 +698,16 @@ class QuizController extends Controller
             }
         }
 
-        $subjects = array_values(array_unique(array_intersect(
-            $quizzes->pluck('subject')->filter()->map(fn ($s) => (string) $s)->all(),
-            QuestionBankItem::SUBJECTS
-        )));
-
+        $subjects = array_values(array_unique($quizzes->pluck('subject')->filter()->map(fn ($s) => (string) $s)->all()));
         if ($subjects === []) {
             return redirect()->route('quizzes.import')
-                ->withErrors(['quiz_ids' => 'Selected quizzes need a subject (Math, English, or Science) so we know what to export.'])
+                ->withErrors(['quiz_ids' => 'Selected quizzes need a subject so we know what to export.'])
                 ->withInput();
         }
 
-        $representativeQuiz = $quizzes->first();
-
         try {
-            return $this->questionBankExcelService->exportForQuiz(
-                $representativeQuiz,
-                $subjects,
+            return $this->questionBankExcelService->exportForQuizzes(
+                $quizzes,
                 (int) Auth::id()
             );
         } catch (\InvalidArgumentException $e) {

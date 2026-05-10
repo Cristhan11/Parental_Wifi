@@ -3,20 +3,21 @@
 namespace Tests\Feature;
 
 use App\Http\Controllers\Admin\AdminParentAccountController;
+use App\Mail\PasswordResetCodeMail;
 use App\Models\ParentPasswordResetRequest;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Notification;
+use Illuminate\Support\Facades\Mail;
 use Tests\TestCase;
 
 class AdminParentPasswordResetRequestQueueTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_forgot_password_submission_queues_request_for_parent_account(): void
+    public function test_forgot_password_sends_code_mail_for_parent_account(): void
     {
-        Notification::fake();
+        Mail::fake();
 
         $parent = User::factory()->create([
             'role' => User::ROLE_PARENT,
@@ -24,29 +25,49 @@ class AdminParentPasswordResetRequestQueueTest extends TestCase
         ]);
 
         $this->post('/forgot-password', ['email' => $parent->email])
-            ->assertSessionHas('status');
+            ->assertSessionHas('status')
+            ->assertRedirect(route('password.forgot.verify'));
 
-        Notification::assertNothingSent();
+        Mail::assertSent(PasswordResetCodeMail::class, function (PasswordResetCodeMail $mail) use ($parent) {
+            return $mail->user->is($parent);
+        });
 
-        $this->assertDatabaseHas('parent_password_reset_requests', [
-            'user_id' => $parent->id,
-            'processed_at' => null,
-        ]);
+        $this->assertDatabaseCount('parent_password_reset_requests', 0);
+        $this->assertNotNull($parent->fresh()->password_reset_code_hash);
     }
 
-    public function test_forgot_password_does_not_queue_for_unknown_or_admin_email(): void
+    public function test_forgot_password_sends_no_mail_for_unknown_email_and_unverified_system_admin(): void
     {
-        User::factory()->admin()->create(['email' => 'admin@example.com']);
+        Mail::fake();
 
-        $this->post('/forgot-password', ['email' => 'nobody@example.com'])
-            ->assertSessionHas('status');
+        User::factory()->admin()->unverified()->create(['email' => 'admin@example.com']);
 
-        $this->assertDatabaseCount('parent_password_reset_requests', 0);
+        $this->from(route('password.request'))
+            ->post('/forgot-password', ['email' => 'nobody@example.com'])
+            ->assertSessionHas('status')
+            ->assertRedirect(route('password.request'));
 
-        $this->post('/forgot-password', ['email' => 'admin@example.com'])
-            ->assertSessionHas('status');
+        Mail::assertNothingSent();
 
-        $this->assertDatabaseCount('parent_password_reset_requests', 0);
+        $this->from(route('password.request'))
+            ->post('/forgot-password', ['email' => 'admin@example.com'])
+            ->assertSessionHas('status')
+            ->assertRedirect(route('password.request'));
+
+        Mail::assertNothingSent();
+    }
+
+    public function test_forgot_password_sends_code_for_verified_system_admin(): void
+    {
+        Mail::fake();
+
+        User::factory()->admin()->create(['email' => 'owner@example.com', 'email_verified_at' => now()]);
+
+        $this->post('/forgot-password', ['email' => 'owner@example.com'])
+            ->assertSessionHas('status')
+            ->assertRedirect(route('password.forgot.verify'));
+
+        Mail::assertSent(PasswordResetCodeMail::class);
     }
 
     public function test_admin_can_fulfill_pending_request_with_default_password(): void

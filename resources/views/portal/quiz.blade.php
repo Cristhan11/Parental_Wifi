@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Quiz - {{ $quiz->title }}</title>
+    @include('portal.partials.head-favicon')
     <link rel="stylesheet" href="/css/portal-captive.css">
 </head>
 <body class="portal">

@@ -50,9 +50,9 @@ class VerifyEmailCodeController extends Controller
             event(new Verified($user));
         }
 
-        ReportingRecipient::firstOrCreate(
+        ReportingRecipient::updateOrCreate(
             ['user_id' => $user->id, 'email' => $user->email],
-            ['label' => 'Owner verified email', 'is_enabled' => true]
+            ['label' => ReportingRecipient::LABEL_OWNER_VERIFIED_EMAIL, 'is_enabled' => true]
         );
 
         $user->forceFill([

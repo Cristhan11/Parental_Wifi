@@ -9,25 +9,25 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * Video Completion Model
- * 
+ *
  * Tracks when a child completes watching a video, including
  * dictionary word validation results. This model represents a single
  * viewing session where a child watches a video and attempts to
  * remember the dictionary words that appeared.
- * 
+ *
  * Key Concepts:
  * - One video can have many completions (different children, different attempts)
  * - One completion belongs to one device (which child watched)
  * - One completion belongs to one video (which video was watched)
  * - One completion has many word displays (which words appeared)
- * 
+ *
  * Lifecycle:
  * 1. Completion record created when child starts watching video
  * 2. Word displays created as words are shown during playback
  * 3. Completion updated when child submits words
  * 4. Validation result stored (passed/failed)
  * 5. Time granted if validation passed
- * 
+ *
  * Retry Logic:
  * - If child fails, they can retry the video
  * - New completion record created with incremented attempt_number
@@ -52,6 +52,7 @@ class VideoCompletion extends Model
         'words_entered',
         'words_correct',
         'passed_validation',
+        'word_guess_failed_count',
         'attempt_number',
     ];
 
@@ -70,9 +71,9 @@ class VideoCompletion extends Model
 
     /**
      * Get the device that completed this video.
-     * 
+     *
      * Relationship: belongsTo - One completion belongs to one device
-     * 
+     *
      * Usage Example:
      * $completion = VideoCompletion::find(1);
      * $device = $completion->device; // Gets the Device that watched the video
@@ -84,9 +85,9 @@ class VideoCompletion extends Model
 
     /**
      * Get the video that was completed.
-     * 
+     *
      * Relationship: belongsTo - One completion belongs to one video
-     * 
+     *
      * Usage Example:
      * $completion = VideoCompletion::find(1);
      * $video = $completion->video; // Gets the Video that was watched
@@ -99,9 +100,9 @@ class VideoCompletion extends Model
 
     /**
      * Get all dictionary words that were displayed during this video viewing.
-     * 
+     *
      * Relationship: hasMany - One completion has many word displays
-     * 
+     *
      * Usage Example:
      * $completion = VideoCompletion::find(1);
      * $words = $completion->wordDisplays; // All words shown during this viewing
@@ -116,16 +117,16 @@ class VideoCompletion extends Model
 
     /**
      * Get the words that were shown as an array.
-     * 
+     *
      * Returns an array of word strings in the order they were displayed
      *
      * @return array Array of word strings (e.g., ["adventure", "curious", "discover"])
-     * 
+     *
      * Usage Example:
      * $completion = VideoCompletion::find(1);
      * $wordsShown = $completion->getWordsShown();
      * // Returns: ["adventure", "curious", "discover"]
-     * 
+     *
      * // Compare with words entered by child
      * $wordsEntered = $completion->getWordsEnteredArray();
      * $correct = array_intersect($wordsShown, $wordsEntered);
@@ -144,17 +145,17 @@ class VideoCompletion extends Model
 
     /**
      * Get the words entered by the child as an array.
-     * 
+     *
      * Converts words_entered (stored as JSON or comma-separated string) to array
      *
      * @return array Array of word strings entered by child
-     * 
+     *
      * Usage Example:
      * $completion = VideoCompletion::find(1);
      * $completion->words_entered = '["adventure", "curious", "discover"]'; // JSON format
      * $words = $completion->getWordsEnteredArray();
      * // Returns: ["adventure", "curious", "discover"]
-     * 
+     *
      * // Or comma-separated format
      * $completion->words_entered = "adventure, curious, discover";
      * $words = $completion->getWordsEnteredArray();

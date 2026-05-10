@@ -1,0 +1,27 @@
+[Unit]
+Description=Parental WiFi Pi Tailscale Auth Agent
+After=network.target
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/parental_wifi
+Environment=PI_AGENT_HOST=127.0.0.1
+Environment=PI_AGENT_PORT=9098
+Environment=PI_AGENT_TAILSCALE_BIN=/usr/bin/tailscale
+Environment=PI_AGENT_COMMAND_TIMEOUT_SECONDS=8
+# Set this in a secure drop-in file, not directly in the unit:
+# Environment=PI_AGENT_TOKEN=replace-with-strong-random-token
+ExecStart=/usr/bin/python3 /var/www/parental_wifi/scripts/pi_tailscale_auth_agent.py
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/run /tmp
+
+[Install]
+WantedBy=multi-user.target
+

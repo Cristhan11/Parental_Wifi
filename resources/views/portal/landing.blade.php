@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Portal - Parental WiFi</title>
+    @include('portal.partials.head-favicon')
     <link rel="stylesheet" href="/css/portal-captive.css">
 </head>
 <body class="portal portal--landing">
@@ -18,6 +19,9 @@
 
             @if($portalShowEarnHeader)
                 <header class="portal-hero portal-hero--compact">
+                    <div class="portal-brand-mark" aria-hidden="true">
+                        <img src="{{ asset('PARENTAL_WIFI_LOGO.png') }}" alt="" width="56" height="56" decoding="async">
+                    </div>
                     <h1 class="portal-title">Earn time</h1>
                     <p class="portal-subtitle">
                         @if(!empty($device))

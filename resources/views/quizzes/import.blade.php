@@ -7,8 +7,8 @@
                 </svg>
             </a>
             <div>
-                <h2 class="text-lg font-semibold sm:text-xl">Import question bank</h2>
-                <p class="text-xs text-gray-800/80 sm:text-sm">Upload an Excel file to add or update quiz questions</p>
+                <h2 class="text-lg font-semibold sm:text-xl">Import / export quiz</h2>
+                <p class="text-xs text-gray-800/80 sm:text-sm">Upload an Excel file to create or update quizzes, or use Export Quiz Questions below</p>
             </div>
         </div>
     </x-slot>
@@ -35,8 +35,9 @@
                 <p class="mb-2 font-semibold">Instructions</p>
                 <ul class="list-inside list-disc space-y-1">
                     <li>Upload one <strong>.xlsx</strong> file, then tap <strong>Import</strong>.</li>
-                    <li><strong>Add new</strong> imports rows and can auto-create a quiz from row 4 (School level + Subject).</li>
+                    <li><strong>Add new</strong> imports rows and can auto-create a quiz from the sheet (Quiz title row, then School level and Subject).</li>
                     <li><strong>Update existing</strong> lets you type a subject/quiz name, pick a quiz, then replace its bank with your sheet rows.</li>
+                    <li>In the spreadsheet, a blank <strong>Question text</strong> cell ends the list for that sheet—rows below it are not imported.</li>
                     <li>Use <strong>Download template</strong> for the correct format.</li>
                 </ul>
             </x-collapsible-instructions>
@@ -159,16 +160,15 @@
                 </form>
             </div>
 
-            {{-- Same interaction pattern as Reporting → Advanced options: click summary to show/hide --}}
+            {{-- Collapsible export section (same details/summary pattern as Reporting) --}}
             <details class="bg-white shadow-sm sm:rounded-lg border border-gray-200 p-5" @if(old('_import_section') === 'question_bank_export') open @endif>
                 <summary class="inline-flex cursor-pointer list-none items-center gap-2 rounded-md border border-gray-300 px-3 py-2 text-sm text-gray-500 hover:bg-gray-50 select-none [&::-webkit-details-marker]:hidden">
-                    <span class="font-medium text-gray-700">Advanced options</span>
-                    <span class="text-xs text-gray-400">(export question bank to Excel)</span>
+                    <span class="font-medium text-gray-700">Export Quiz Questions</span>
                 </summary>
                 <div class="mt-5 space-y-4 border-t border-gray-100 pt-5">
-                    <h3 class="text-base font-semibold text-gray-900">Question bank export</h3>
+                    <h3 class="text-base font-semibold text-gray-900">Export to Excel</h3>
                     <p class="text-xs leading-relaxed text-gray-500">
-                        Optional: export your question bank for backup or offline editing. Uses the same columns as the import template above.
+                        Optional: download your quiz questions for backup or offline editing. Same layout and columns as <strong>Download template for quiz</strong> above (including Question Type).
                     </p>
                     <x-question-bank-export-form
                         :exportQuizzesPayload="$exportQuizzesPayload"

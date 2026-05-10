@@ -81,6 +81,9 @@
 
             <div class="bg-white shadow-sm sm:rounded-lg border border-gray-200 p-5">
                 <h3 class="text-lg font-semibold text-gray-900 mb-2">Recipients</h3>
+                <p class="mb-3 text-xs text-gray-600 rounded-md bg-gray-50 border border-gray-100 px-3 py-2">
+                    {{ __('These addresses only receive report copies—they do not change your verified dashboard login or which email Tailscale uses. Your Tailscale/sign-in identity is always your verified Profile email.') }}
+                </p>
                 <p class="mb-4 text-xs text-gray-500">
                     Add or edit addresses here, then tap <strong class="font-semibold text-gray-700">Save recipients</strong>. For a full walkthrough, tap <strong class="font-semibold text-gray-700">Show instructions</strong> above.
                 </p>

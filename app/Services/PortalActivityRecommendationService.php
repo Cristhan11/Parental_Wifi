@@ -87,10 +87,7 @@ class PortalActivityRecommendationService
 
         $levels = $quiz->effectiveRandomBankLevelsForDevice($device);
 
-        return QuestionBankItem::query()
-            ->where('status', 'Active')
-            ->whereIn('level', $levels)
-            ->exists();
+        return QuestionBankItem::queryForRandomBankMix($quiz, $levels)->exists();
     }
 
     public function randomModeQuiz(Device $device): ?Quiz

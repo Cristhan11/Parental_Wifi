@@ -60,7 +60,7 @@
         <div class="flex flex-wrap items-center gap-3 pt-1">
             <button type="submit"
                 class="rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-1">
-                Export question bank (.xlsx)
+                Export quiz questions (.xlsx)
             </button>
             <span class="text-xs text-gray-500">Legacy <code class="rounded bg-gray-100 px-1 font-mono text-gray-800">Questions</code> imports still supported.</span>
         </div>

@@ -965,6 +965,19 @@ body.portal {
     margin-bottom: 0.75rem;
 }
 
+.portal-brand-mark {
+    display: flex;
+    justify-content: center;
+    margin-bottom: 0.5rem;
+}
+
+.portal-brand-mark img {
+    width: clamp(3rem, 14vw, 3.5rem);
+    height: auto;
+    border-radius: 12px;
+    box-shadow: 0 4px 18px rgba(0, 0, 0, 0.35);
+}
+
 .portal-meta-strip {
     display: flex;
     justify-content: center;
@@ -1480,4 +1493,251 @@ body.portal.portal--landing .portal-title {
 
 body.portal.portal--landing .portal-subtitle {
     color: var(--portal-ink-muted);
+}
+
+/* —— Portal video: post-video word tap game —— */
+body.portal-word-game-open {
+    overflow: hidden;
+}
+
+.portal-word-game-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0.75rem;
+    padding-top: max(0.75rem, env(safe-area-inset-top));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
+    box-sizing: border-box;
+    pointer-events: none;
+}
+
+.portal-word-game-modal:not(.hidden) {
+    pointer-events: auto;
+}
+
+.portal-word-game-modal__backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.72);
+    backdrop-filter: blur(4px);
+}
+
+.portal-word-game-modal__panel {
+    position: relative;
+    z-index: 1;
+    width: 100%;
+    max-width: 26rem;
+    max-height: min(92vh, 640px);
+    overflow: auto;
+    margin-top: 0.25rem;
+    padding: 1.15rem 1.2rem 1.35rem;
+    border-radius: 22px;
+    background: linear-gradient(165deg, #fffbeb 0%, #fef3c7 40%, #fff 100%);
+    border: 5px solid #facc15;
+    box-shadow:
+        0 0 0 3px #0f172a,
+        0 18px 40px rgba(0, 0, 0, 0.35);
+    -webkit-overflow-scrolling: touch;
+}
+
+.portal-word-game-modal__panel form {
+    position: relative;
+}
+
+.portal-word-game-modal__head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.65rem;
+    margin-bottom: 0.4rem;
+}
+
+.portal-word-game-modal__title {
+    margin: 0;
+    flex: 1;
+    min-width: 0;
+    font-size: clamp(1.2rem, 4vw, 1.5rem);
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    color: #0f172a;
+    line-height: 1.2;
+}
+
+.portal-word-game-modal__tries-badge {
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.28rem;
+    margin-top: 0.1rem;
+    padding: 0.2rem 0.5rem 0.2rem 0.45rem;
+    border-radius: 999px;
+    font-weight: 800;
+    color: #0f172a;
+    background: rgba(255, 255, 255, 0.92);
+    border: 2px solid #94a3b8;
+    box-shadow: 0 1px 0 rgba(15, 23, 42, 0.08);
+}
+
+.portal-word-game-modal__tries-k {
+    font-size: 0.62rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+}
+
+.portal-word-game-modal__tries-v {
+    min-width: 1.25rem;
+    padding: 0.12rem 0.38rem;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 900;
+    line-height: 1;
+    text-align: center;
+    color: #fff;
+    background: #b45309;
+}
+
+.portal-word-game-modal__lead {
+    margin: 0 0 0.95rem;
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: #475569;
+    line-height: 1.35;
+}
+
+.portal-word-game-modal__section-label {
+    margin: 0 0 0.4rem;
+    font-size: 0.72rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: #64748b;
+}
+
+.portal-word-game__picks {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.45rem;
+    min-height: 2.75rem;
+    padding: 0.55rem 0.6rem;
+    margin-bottom: 0.65rem;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 3px dashed #cbd5e1;
+}
+
+.portal-word-game__pick-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.4rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.92rem;
+    font-weight: 800;
+    color: #0f172a;
+    background: #e0f2fe;
+    border: 3px solid #0284c7;
+}
+
+.portal-word-game-modal__toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1rem;
+}
+
+.portal-word-game-modal__tool-btn {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 0.92rem;
+    box-shadow: none;
+}
+
+.portal-word-game__bank {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.55rem;
+    margin-bottom: 1.1rem;
+}
+
+.portal-word-game-modal__hidden-inputs {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border: 0;
+}
+
+.portal-word-game-modal__actions {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.portal-word-game-modal__submit {
+    min-width: 10rem;
+    font-size: 1.05rem;
+}
+
+.portal-word-game-chip {
+    min-height: var(--touch-min);
+    padding: 0.55rem 1rem;
+    border-radius: 999px;
+    font-size: 1.02rem;
+    font-weight: 800;
+    border: 4px solid rgba(15, 23, 42, 0.92);
+    cursor: pointer;
+    box-shadow: 0 4px 0 rgba(15, 23, 42, 0.25);
+    transition: transform 0.08s ease, filter 0.12s ease;
+    color: #0f172a;
+}
+
+.portal-word-game-chip:active:not(:disabled) {
+    transform: scale(0.96) translateY(2px);
+    box-shadow: 0 2px 0 rgba(15, 23, 42, 0.2);
+}
+
+.portal-word-game-chip:disabled {
+    cursor: not-allowed;
+    opacity: 0.38;
+    transform: none;
+    box-shadow: none;
+}
+
+.portal-word-game-chip--0 {
+    background: #fda4af;
+}
+
+.portal-word-game-chip--1 {
+    background: #fcd34d;
+}
+
+.portal-word-game-chip--2 {
+    background: #86efac;
+}
+
+.portal-word-game-chip--3 {
+    background: #93c5fd;
+}
+
+.portal-word-game-chip--4 {
+    background: #d8b4fe;
+}
+
+.portal-word-game-chip--5 {
+    background: #fdba74;
+}
+
+.portal-word-game-chip--6 {
+    background: #67e8f9;
+}
+
+.portal-word-game-chip--7 {
+    background: #fbcfe8;
 }

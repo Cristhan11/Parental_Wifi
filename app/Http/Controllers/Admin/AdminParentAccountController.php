@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\AdminParentAccountUpdateRequest;
 use App\Models\AdminActionLog;
 use App\Models\User;
+use App\Services\SecurityAuditLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -16,6 +17,10 @@ class AdminParentAccountController extends Controller
      * Plaintext password applied when an admin resets a parent account from /admin/parents.
      */
     public const DEFAULT_PARENT_RESET_PASSWORD = '12345678';
+
+    public function __construct(
+        private readonly SecurityAuditLogger $auditLogger,
+    ) {}
 
     public function pending(): View
     {
@@ -215,6 +220,11 @@ class AdminParentAccountController extends Controller
         $this->assertManageableApprovedParent($user);
 
         self::setUserPasswordToDefault($user);
+
+        $this->auditLogger->recordPasswordChanged(request(), $user->fresh(), 'admin.parents.reset-password-default', [
+            'via' => 'admin_default_password',
+            'actor_user_id' => auth()->id(),
+        ]);
 
         AdminActionLog::create([
             'actor_id' => auth()->id(),

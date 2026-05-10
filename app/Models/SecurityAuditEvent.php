@@ -17,6 +17,10 @@ class SecurityAuditEvent extends Model
 
     public const EVENT_SENSITIVE_ACTION = 'sensitive_action';
 
+    public const EVENT_TAILSCALE_AUTH_LINK_REQUEST = 'tailscale_auth_link_request';
+
+    public const EVENT_PASSWORD_CHANGED = 'password_changed';
+
     protected $fillable = [
         'event',
         'user_id',

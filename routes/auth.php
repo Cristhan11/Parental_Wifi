@@ -4,6 +4,8 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
+use App\Http\Controllers\Auth\ForgotPasswordCompleteController;
+use App\Http\Controllers\Auth\ForgotPasswordVerifyCodeController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\OwnerOnboardingController;
 use App\Http\Controllers\Auth\PasswordController;
@@ -51,9 +53,24 @@ Route::middleware('guest')->group(function () {
     Route::get('forgot-password', [PasswordResetLinkController::class, 'create'])
         ->name('password.request');
 
-    // POST /forgot-password - Queues admin-led default password reset (no email link)
+    // POST /forgot-password - Sends confirmation number by email for eligible accounts
     Route::post('forgot-password', [PasswordResetLinkController::class, 'store'])
+        ->middleware('throttle:6,1')
         ->name('password.email');
+
+    Route::get('forgot-password/verify', [ForgotPasswordVerifyCodeController::class, 'create'])
+        ->name('password.forgot.verify');
+
+    Route::post('forgot-password/verify', [ForgotPasswordVerifyCodeController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('password.forgot.verify.store');
+
+    Route::get('forgot-password/new', [ForgotPasswordCompleteController::class, 'create'])
+        ->name('password.forgot.new');
+
+    Route::post('forgot-password/new', [ForgotPasswordCompleteController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('password.forgot.new.store');
 
     // GET /reset-password/{token} - Shows password reset form (token from email)
     Route::get('reset-password/{token}', [NewPasswordController::class, 'create'])

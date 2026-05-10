@@ -3,11 +3,10 @@
 namespace App\Http\Controllers\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Models\ParentPasswordResetRequest;
 use App\Models\User;
+use App\Support\Auth\ForgotPasswordSession;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Password;
 use Illuminate\View\View;
 
 class PasswordResetLinkController extends Controller
@@ -15,13 +14,15 @@ class PasswordResetLinkController extends Controller
     /**
      * Display the password reset link request view.
      */
-    public function create(): View
+    public function create(Request $request): View
     {
+        ForgotPasswordSession::forgetPendingEmail($request);
+
         return view('auth.forgot-password');
     }
 
     /**
-     * Queue an admin-led default password reset for eligible parent accounts (no email link).
+     * Email a confirmation number for eligible accounts (same response whether or not the email exists).
      *
      * @throws \Illuminate\Validation\ValidationException
      */
@@ -31,26 +32,27 @@ class PasswordResetLinkController extends Controller
             'email' => ['required', 'email'],
         ]);
 
+        ForgotPasswordSession::forget($request);
+
         $user = User::query()->where('email', $validated['email'])->first();
 
-        if ($user && $user->hasAdminCapability() && $user->hasVerifiedEmail()) {
-            Password::sendResetLink(['email' => $validated['email']]);
-        } elseif ($user?->isEligibleForSelfServicePasswordResetRequest()) {
-            $alreadyPending = ParentPasswordResetRequest::query()
-                ->where('user_id', $user->id)
-                ->pending()
-                ->exists();
+        if ($user && $user->canReceiveForgotPasswordResetCode()) {
+            $user->sendPasswordResetCodeNotification();
+            ForgotPasswordSession::putPendingEmail($request, $user->email);
 
-            if (! $alreadyPending) {
-                ParentPasswordResetRequest::create([
-                    'user_id' => $user->id,
-                ]);
-            }
+            return redirect()
+                ->route('password.forgot.verify')
+                ->with(
+                    'status',
+                    'We sent a confirmation number to your email. Enter it below to continue.'
+                );
         }
+
+        ForgotPasswordSession::forgetPendingEmail($request);
 
         return back()->with(
             'status',
-            'If that email is registered for a parent account, Parent Owners have been notified. After they reset your password, sign in with the credentials they give you and change your password under profile settings.'
+            'If that email is registered for an account that can reset online, we sent a message with a confirmation number. Check your inbox, then enter the number on the next step to set a new password.'
         );
     }
 }

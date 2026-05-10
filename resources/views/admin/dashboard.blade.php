@@ -4,6 +4,12 @@
     </x-slot>
 
     <div class="py-8 px-4 sm:px-6 lg:px-8 max-w-4xl mx-auto">
+        @if (request()->boolean('verified'))
+            <div class="mb-4 rounded-md bg-blue-50 border border-blue-200 px-4 py-3 text-sm text-blue-900">
+                {{ __('Email verified.') }}
+                {{ __('Sign in to the Tailscale app on your Raspberry Pi and other devices with this same address (:email) when you connect remotely—or sign in again if you just changed email.', ['email' => Auth::user()->email]) }}
+            </div>
+        @endif
         <p class="text-gray-600 mb-8">System overview and parent account management.</p>
 
         <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-10">

@@ -62,4 +62,12 @@ class UserFactory extends Factory
             'approved_at' => null,
         ]);
     }
+
+    public function parentAdmin(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'role' => 'parent_admin',
+            'approved_at' => now(),
+        ]);
+    }
 }

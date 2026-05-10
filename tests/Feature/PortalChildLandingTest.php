@@ -7,6 +7,7 @@ use App\Models\QuestionBankItem;
 use App\Models\Quiz;
 use App\Models\User;
 use App\Models\Video;
+use App\Support\QuizSchoolLevel;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Tests\TestCase;
@@ -296,6 +297,68 @@ class PortalChildLandingTest extends TestCase
         $this->get(route('portal.landing', ['mac' => $device->mac_address, 'flow' => 'quiz']))
             ->assertOk()
             ->assertSee('High School Math', false);
+    }
+
+    public function test_random_quiz_button_shows_when_question_bank_is_quiz_scoped(): void
+    {
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'role' => 'child',
+        ]);
+
+        $kindergartenQuiz = Quiz::create([
+            'user_id' => $user->id,
+            'title' => 'K Math Pack',
+            'description' => null,
+            'level' => QuizSchoolLevel::KINDERGARTEN,
+            'subject' => 'Math',
+            'question_count' => 5,
+            'scoring_mode' => 'pass_score',
+            'minutes_per_correct' => 1,
+            'passing_score' => 70,
+            'time_reward_minutes' => 10,
+            'questions' => ['questions' => []],
+            'is_active' => true,
+        ]);
+        $kindergartenQuiz->devices()->sync([$device->id]);
+
+        QuestionBankItem::create([
+            'user_id' => $user->id,
+            'quiz_id' => $kindergartenQuiz->id,
+            'level' => QuizSchoolLevel::KINDERGARTEN,
+            'subject' => 'Math',
+            'question_text' => 'What is 1+1?',
+            'option_a' => '1',
+            'option_b' => '2',
+            'option_c' => '3',
+            'option_d' => '4',
+            'correct_option' => 'B',
+            'status' => 'Active',
+        ]);
+
+        $randomQuiz = Quiz::create([
+            'user_id' => $user->id,
+            'title' => Quiz::RANDOM_MODE_SETTINGS_TITLE,
+            'description' => null,
+            'level' => null,
+            'subject' => null,
+            'question_count' => 5,
+            'scoring_mode' => 'time_reward',
+            'minutes_per_correct' => 1,
+            'passing_score' => 0,
+            'time_reward_minutes' => 1,
+            'questions' => ['questions' => []],
+            'is_active' => true,
+        ]);
+        $randomQuiz->devices()->sync([
+            $device->id => ['random_bank_levels' => [QuizSchoolLevel::KINDERGARTEN]],
+        ]);
+
+        $this->get(route('portal.landing', ['mac' => $device->mac_address, 'flow' => 'quiz']))
+            ->assertOk()
+            ->assertSee('Random quiz', false)
+            ->assertSee('PARENTAL_WIFI_LOGO.png', false);
     }
 
     public function test_two_taps_to_video_start(): void

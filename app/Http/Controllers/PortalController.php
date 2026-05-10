@@ -22,6 +22,11 @@ use Symfony\Component\HttpFoundation\BinaryFileResponse;
 
 class PortalController extends Controller
 {
+    /**
+     * Wrong word submissions allowed before the child must re-watch the video.
+     */
+    private const VIDEO_WORD_GUESS_MAX_FAILURES = 3;
+
     protected TimeGrantingService $timeGrantingService;
 
     protected VideoWordService $videoWordService;
@@ -533,41 +538,20 @@ class PortalController extends Controller
         // We extract the inner array: [{id: 1, question: "...", ...}]
         $questions = $quiz->questions['questions'] ?? [];
         if ($quiz->level && $quiz->subject) {
-            $questions = QuestionBankItem::query()
-                ->where('level', $quiz->level)
-                ->where('subject', $quiz->subject)
-                ->where('status', 'Active')
+            $questions = QuestionBankItem::queryForFixedQuiz($quiz)
                 ->inRandomOrder()
-                ->limit((int) $quiz->question_count)
+                ->limit(max(1, (int) $quiz->question_count))
                 ->get()
-                ->map(function (QuestionBankItem $item, int $index): array {
-                    return [
-                        'id' => $index + 1,
-                        'question' => $item->question_text,
-                        'type' => 'multiple_choice',
-                        'options' => [$item->option_a, $item->option_b, $item->option_c, $item->option_d],
-                        'correct_answer' => $item->correct_option,
-                    ];
-                })
+                ->map(fn (QuestionBankItem $item, int $index): array => $item->toPortalQuestionPayload($index))
                 ->values()
                 ->all();
         } elseif ($quiz->scoring_mode === 'time_reward') {
             $levels = $quiz->effectiveRandomBankLevelsForDevice($device);
-            $questions = QuestionBankItem::query()
-                ->where('status', 'Active')
-                ->whereIn('level', $levels)
+            $questions = QuestionBankItem::queryForRandomBankMix($quiz, $levels)
                 ->inRandomOrder()
                 ->limit((int) ($quiz->question_count ?: 10))
                 ->get()
-                ->map(function (QuestionBankItem $item, int $index): array {
-                    return [
-                        'id' => $index + 1,
-                        'question' => $item->question_text,
-                        'type' => 'multiple_choice',
-                        'options' => [$item->option_a, $item->option_b, $item->option_c, $item->option_d],
-                        'correct_answer' => $item->correct_option,
-                    ];
-                })
+                ->map(fn (QuestionBankItem $item, int $index): array => $item->toPortalQuestionPayload($index))
                 ->values()
                 ->all();
         }
@@ -929,6 +913,56 @@ class PortalController extends Controller
                 ->with('error', 'You do not have access to this video.');
         }
 
+        if ($request->boolean('word_retry')
+            && $video->dictionary_words_enabled
+            && $video->word_count > 0) {
+            $sessionCompletionId = session('video_completion_id');
+            if ($sessionCompletionId) {
+                $existingCompletion = VideoCompletion::query()
+                    ->whereKey($sessionCompletionId)
+                    ->where('device_id', $device->id)
+                    ->where('video_id', $video->id)
+                    ->where('passed_validation', false)
+                    ->where('words_shown_count', '>', 0)
+                    ->where('word_guess_failed_count', '>', 0)
+                    ->where('word_guess_failed_count', '<', self::VIDEO_WORD_GUESS_MAX_FAILURES)
+                    ->first();
+
+                if ($existingCompletion) {
+                    $wordsData = [];
+                    $shownDictionaryWordIds = [];
+                    foreach ($existingCompletion->wordDisplays()->orderBy('displayed_at_timestamp')->get() as $wd) {
+                        $shownDictionaryWordIds[] = $wd->dictionary_word_id;
+                        $wordsData[] = [
+                            'word' => $wd->word_text,
+                            'definition' => optional($wd->dictionaryWord)->definition ?? '',
+                            'timestamp' => $wd->displayed_at_timestamp,
+                        ];
+                    }
+
+                    $distractorWords = $this->videoWordService
+                        ->selectDistractorWords(5, $shownDictionaryWordIds)
+                        ->pluck('word')
+                        ->values()
+                        ->all();
+
+                    session(['video_completion_id' => $existingCompletion->id]);
+
+                    return view('portal.video', [
+                        'video' => $video,
+                        'device' => $device,
+                        'completion' => $existingCompletion,
+                        'wordsData' => $wordsData,
+                        'distractorWords' => $distractorWords,
+                        'openWordGameOnLoad' => true,
+                        'wordRetryMode' => true,
+                        'wordGuessFailedCount' => (int) $existingCompletion->word_guess_failed_count,
+                        'videoWordGuessMaxFailures' => self::VIDEO_WORD_GUESS_MAX_FAILURES,
+                    ]);
+                }
+            }
+        }
+
         // Get or create video completion record
         // This tracks the viewing session and stores validation results
         // If child is retrying (previous attempt failed), get the latest attempt
@@ -954,10 +988,12 @@ class PortalController extends Controller
             'words_entered' => null,                // Will be set when child submits words
             'words_correct' => 0,                   // Will be set after validation
             'passed_validation' => false,           // Will be set after validation
+            'word_guess_failed_count' => 0,
         ]);
 
         // Handle dictionary words if enabled
         $wordsData = [];
+        $distractorWords = [];
         if ($video->dictionary_words_enabled && $video->word_count > 0) {
             // Select random words from dictionary pool
             // VideoWordService handles the random selection logic
@@ -970,9 +1006,13 @@ class PortalController extends Controller
                 $video->word_count
             );
 
+            $shownDictionaryWordIds = [];
+
             // Store word displays in database
             // This creates records in VideoWordDisplay table for validation
             foreach ($words as $index => $word) {
+                $shownDictionaryWordIds[] = $word->id;
+
                 VideoWordDisplay::create([
                     'video_completion_id' => $completion->id,
                     'dictionary_word_id' => $word->id,
@@ -987,6 +1027,12 @@ class PortalController extends Controller
                     'timestamp' => $timestamps[$index] ?? 0,
                 ];
             }
+
+            $distractorWords = $this->videoWordService
+                ->selectDistractorWords(5, $shownDictionaryWordIds)
+                ->pluck('word')
+                ->values()
+                ->all();
 
             // Update completion with word count
             $completion->update([
@@ -1005,6 +1051,11 @@ class PortalController extends Controller
             'device' => $device,
             'completion' => $completion,
             'wordsData' => $wordsData,  // Array of words with timestamps for JavaScript
+            'distractorWords' => $distractorWords,
+            'openWordGameOnLoad' => false,
+            'wordRetryMode' => false,
+            'wordGuessFailedCount' => 0,
+            'videoWordGuessMaxFailures' => self::VIDEO_WORD_GUESS_MAX_FAILURES,
         ]);
     }
 
@@ -1019,7 +1070,7 @@ class PortalController extends Controller
      * 1. Gets device and video completion from session
      * 2. Retrieves child's entered words from form
      * 3. Gets words that were actually displayed during video
-     * 4. Validates entered words against displayed words (case-insensitive, trimmed)
+     * 4. Validates entered words against displayed words (case-insensitive, trimmed, order must match playback)
      * 5. Updates completion record with validation results
      * 6. Grants time if validation passed (via TimeGrantingService)
      * 7. Redirects to results page
@@ -1101,24 +1152,19 @@ class PortalController extends Controller
         // This compares entered words with displayed words
         $validationResult = $this->videoWordService->validateWords($wordsShown, $wordsEntered);
 
-        // Update completion record with validation results
-        $completion->update([
-            'completed_at' => now(),  // Mark video as completed
-            'words_entered' => json_encode($wordsEntered),  // Store entered words as JSON
-            'words_correct' => $validationResult['words_correct'],  // Number of correct words
-            'passed_validation' => $validationResult['passed_validation'],  // Pass/fail status
-        ]);
+        $wordsEnteredJson = json_encode(array_values($wordsEntered));
 
-        // Refresh completion from database to ensure all updated fields are current
-        // This is important because TimeGrantingService checks passed_validation and completed_at
-        $completion->refresh();
-
-        // If child passed validation, grant additional internet time
         if ($validationResult['passed_validation']) {
+            $completion->update([
+                'completed_at' => now(),
+                'words_entered' => $wordsEnteredJson,
+                'words_correct' => $validationResult['words_correct'],
+                'passed_validation' => true,
+            ]);
+
+            $completion->refresh();
+
             try {
-                // TimeGrantingService adds time to device
-                // Example: If time_reward_minutes is 15, device gets 15 more minutes
-                // Pass fresh completion to ensure all fields are up-to-date
                 $this->timeGrantingService->grantTimeFromVideo($device, $completion, ['client_ip' => $request->ip() ?: '']);
 
                 Log::info('Time granted successfully after video completion', [
@@ -1127,8 +1173,6 @@ class PortalController extends Controller
                     'time_granted' => $video->time_reward_minutes,
                 ]);
             } catch (\Exception $e) {
-                // Log error but don't fail the request
-                // Child still sees result, but time grant might have failed
                 Log::error('Failed to grant time after video', [
                     'device_id' => $device->id,
                     'video_completion_id' => $completion->id,
@@ -1136,14 +1180,36 @@ class PortalController extends Controller
                     'trace' => $e->getTraceAsString(),
                 ]);
             }
+
+            session()->forget('video_completion_id');
+
+            return redirect()->route('portal.video.result', $completion);
         }
 
-        // Clear completion ID from session (no longer needed)
+        $failedCount = (int) $completion->word_guess_failed_count + 1;
+        $completion->update([
+            'completed_at' => $failedCount >= self::VIDEO_WORD_GUESS_MAX_FAILURES ? now() : null,
+            'words_entered' => $wordsEnteredJson,
+            'words_correct' => $validationResult['words_correct'],
+            'passed_validation' => false,
+            'word_guess_failed_count' => $failedCount,
+        ]);
+
+        $completion->refresh();
+
+        if ($failedCount < self::VIDEO_WORD_GUESS_MAX_FAILURES) {
+            $triesLeft = self::VIDEO_WORD_GUESS_MAX_FAILURES - $failedCount;
+            session(['video_completion_id' => $completion->id]);
+
+            return redirect()->route('portal.video.show', [
+                'video' => $video->id,
+                'mac' => $device->mac_address,
+                'word_retry' => 1,
+            ])->with('portal_video_word_retries_left', $triesLeft);
+        }
+
         session()->forget('video_completion_id');
 
-        // Redirect to results page
-        // Child will see pass/fail status and time granted (if passed)
-        // Route model binding will automatically resolve VideoCompletion from ID
         return redirect()->route('portal.video.result', $completion);
     }
 

@@ -9,7 +9,7 @@
         @endif
 
         <p class="text-gray-600 text-sm mb-6">
-            Parents who used <strong>Forgot password</strong> are listed here. Apply the default password when you have confirmed their identity out of band.
+            Legacy or manually queued password reset requests. Most parents now reset with the confirmation email from <strong>Forgot password</strong> on the login page. Apply the default password only when you have confirmed their identity out of band.
         </p>
 
         <div class="bg-white shadow border border-gray-200 rounded-lg overflow-x-auto">
