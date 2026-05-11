@@ -25,7 +25,6 @@ class PortalVideoWordGuessRetriesTest extends TestCase
             DictionaryWord::create([
                 'word' => $w,
                 'definition' => 'def '.$w,
-                'difficulty_level' => 'easy',
                 'is_built_in' => false,
                 'user_id' => null,
             ]);

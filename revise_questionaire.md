@@ -25,22 +25,14 @@ Date: _________________________________
 
 ## Reference Codes (used per question)
 
-- **[R1]** Cloudflare website security checklist
-- **[R2]** Arphost website security best practices
-- **[R3]** HackerOne 9-point website security checklist
-- **[R4]** Dev.to essential security measures
-- **[R5]** Bitcatcha secure website standard
-- **[R6]** Cybersecurity Assessment Questionnaire (Scribd)
 - **[R7]** Vendict security questionnaire items
 - **[R8]** Copla cybersecurity risk questionnaire guide
 - **[R9]** NCBI developmental age bracket reference 1
 - **[R10]** NCBI developmental age bracket reference 2
 - **[R11]** OWASP CSRF Prevention Cheat Sheet
 - **[R12]** OWASP Session Management Cheat Sheet
-- **[R13]** Philippines National Privacy Commission (NPC) Circular 16-01
 - **[R14]** Philippines DICT National Cybersecurity Plan 2023-2028
-- **[R15]** Aufait UX — UI/UX design principles for child-friendly interfaces
-- **[R16]** Gapsy Studio — UX design for kids (age-segmented practices)
+- **[R16]** Meloncon et al., Tech Commun (2010) — educational Web sites for children ages 7-9; design guidelines and usability study (PMC4664536; Appendix / anchor #S12)
 
 ---
 
@@ -69,32 +61,51 @@ Primary analysis group: **7-11 years old**. [R9][R10]
 - **12+ (comparison only):** included only as an external comparator because R9 and R10 place ages 12+ in/near formal operations with greater abstract reasoning, which is outside your primary user target.  
   Sources: [R9](https://www.ncbi.nlm.nih.gov/books/NBK537095/), [R10](https://www.ncbi.nlm.nih.gov/books/NBK448206/)
 
-### A.2 Questions (Child + Parent Observer)
 
-*Source basis for this subsection: child-friendly UI/UX guidance (simplicity, navigation, feedback, clear guidance with visuals, touch targets).*
+### A.2 Questions (Child ages 7-9; child answers without parent present)
 
-1. (Source-selected from R15 — Simplicity and Clarity)  
-   "Children benefit from interfaces that are straightforward and easy to navigate... uncluttered with minimal text, using large, tappable areas for interaction."  
-   The portal screen feels simple and easy to scan; the child can see what to do next without overload. [R15]  
-Score: ___
-2. (Source-selected from R15 — Intuitive Navigation)  
-   "Design navigation paths that children can easily follow. Use familiar icons and imagery... and avoid complex menus or hidden functions."  
-   The child can move through the portal flow (e.g., time shown → choose activity → continue) without getting lost in menus or unclear steps. [R15]  
-Score: ___
-3. (Source-selected from R15 — Visual and Auditory Feedback)  
-   "Children respond well to immediate feedback. Use visual cues like color changes and animations, as well as auditory feedback... to guide and encourage them."  
-   After taps or choices, the portal gives clear feedback (visual and/or sound) so the child knows the action worked. [R15]  
-Score: ___
-4. (Source-selected from R15 — Clear Instructions and Guidance; R16 — emerging readers)  
-   "Provide clear, age-appropriate instructions... Use visual aids like arrows, icons, and animations to guide them through tasks." [R15] For early elementary users, text can be used "but sparingly and strategically," labels work best when "paired with clear, recognizable icons," and navigation should not "rely on reading alone." [R16]  
-   The child understands what the portal is asking them to do (which activity, how to proceed) from icons, layout, and short on-screen cues—not from long blocks of text. [R15][R16]  
-Score: ___
-5. (Source-selected from R16 — touch targets and motor fit; R15 — large tappable areas)  
-   "Interactive elements should start at a minimum of 60×80 points for young users... spacing between elements is equally critical" (younger children); older children in the range can use progressively smaller but still forgiving targets.  
-   Buttons and tap areas on the portal are big enough and spaced well enough for this child to use without constant wrong taps. [R16][R15]  
-Score: ___
+Administration basis [R16]: Follow the same general idea as the formal usability sessions in Meloncon et al.: parents wait in a separate room while the child answers; a neutral researcher or teacher reads the opening script once, then reads each item aloud only if needed while the child marks Yes or No alone.  
+Source: https://pmc.ncbi.nlm.nih.gov/articles/PMC4664536/ [R16]
 
-Observer note: Assistance needed? [ ] Yes [ ] No; completion time: ____ min.
+Opening script (read once, before item 1): At your house, Wi-Fi internet can go through a start screen on your phone, tablet, or computer. That start screen can show how much internet time is still left for you. It can let you pick a small quiz game or a short video so you can finish a learning step and then earn more time to keep browsing. Your mom or dad can use a different screen at home, not this start screen, to pick when the internet is allowed, to stop some websites, to put a mark on websites they want to watch more closely, and to look at what websites were visited on child devices. The next sentences are only about what you notice on the start screen, except for the last one about where parents change rules.
+
+Source basis for numbered items: Meloncon et al. — appendix quick-reference guidelines for educational Web sites for children (empirically grounded in usability tests with children ages 7 to 9 in the same paper). Linked anchor for the guideline list: https://pmc.ncbi.nlm.nih.gov/articles/PMC4664536/#S12 [R16]
+
+Wording basis for ages 7-9 [R9][R10]: First-person yes or no lines with concrete words, suited to early school years. Sources: [R9](https://www.ncbi.nlm.nih.gov/books/NBK537095/), [R10](https://www.ncbi.nlm.nih.gov/books/NBK448206/)
+
+Child instructions: I will read each line. You answer by yourself. Circle Yes or No for how you feel. Your parent is not in the room for this part.
+
+Coding note (optional for analysis): Yes = 5, No = 1 when you need numbers for Section E means.
+
+1. (Source-selected from R16 — Appendix: incorporate games that support learning goals; integrated activities as discussed in Meloncon et al.; item form [R9][R10])  
+   "Incorporate games that play a role in the site's learning objectives." Harbeck and Sherman define integrated activities as those that involve and relate to content areas (1999, p. 43, as cited in Meloncon et al.). The authors also summarize Gelderblom and Kotzé (2009, p. 55) that designers should "not separate the instructional part from the fun part of the product."  
+   After I finish the quiz or video on the portal, I can tell I earned more time to keep using the internet. [R16][R9][R10]  
+   [ ] Yes [ ] No
+
+2. (Source-selected from R16 — Appendix: provide clear directions and goals; multiple navigational cues as discussed in Meloncon et al.; item form [R9][R10])  
+   "Provide clear directions and goals." The Multiple cues subsection explains that children in this age range "need prompts or cues to stimulate them" (Rose et al., 2009, pp. 6–7, as cited in Meloncon et al.).  
+   On the Portal, I can see how much internet time I have left. [R16][R9][R10]  
+   [ ] Yes [ ] No
+
+3. (Source-selected from R16 — Appendix: limit navigational topics; hierarchical navigation with limited initial choices in Meloncon et al.; item form [R9][R10])  
+   "Limit navigational topics." The authors recommend limiting initial choices because "children at this age have difficulty processing a large number of choices (Piaget, 1970), we recommend no more than five initial choices for children in this age range."  
+   On the start screen, I can tell which part is for the quiz and which part is for the video without feeling lost. [R16][R9][R10]  
+   [ ] Yes [ ] No
+
+4. (Source-selected from R16 — Appendix: make clickable hotspots obvious; usability observation on rollover feedback in Meloncon et al.; item form [R9][R10])  
+   "Take care to make clickable hotspots obvious through rollover effects (e.g., blinking, changing color)." During testing, "One child said, 'I like how it [the images in the kite] gets bigger.'"  
+   When I tap pictures or buttons on the portal, I notice right away that the screen saw my tap, like it lights up, changes, or moves a little. [R16][R9][R10]  
+   [ ] Yes [ ] No
+
+5. (Source-selected from R16 — Appendix: provide multiple options for navigation; Multiple cues subsection in Meloncon et al.; item form [R9][R10])  
+   Appendix guideline: provide multiple options for navigation (for example breadcrumbs, a clearly shown back control, or the browser back control). In the same article the authors report that children used the browser Back button repeatedly and recommend an emphasis on multiple ways to get back home.  
+   If I tap the wrong thing on the portal, I can still get back to where I was or to the main choices without getting stuck. [R16][R9][R10]  
+   [ ] Yes [ ] No
+
+Researcher note (after session, not shown to child during items): 
+Parent was out of room for A.2 [ ] Yes [ ] No; 
+child needed help reading words [ ] Yes [ ] No; 
+time for A.2 only: ____ min.
 
 ---
 
@@ -126,7 +137,7 @@ Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-a
 Score: ___
 
 Philippine policy alignment references for Chapter 4 discussion (optional):
-- [R13] National Privacy Commission (NPC) Circular 16-01 (security of personal data): https://privacy.gov.ph/npc-circular-16-01-security-of-personal-data-in-government-agencies/
+- National Privacy Commission (NPC) Circular 16-01 (security of personal data): https://privacy.gov.ph/npc-circular-16-01-security-of-personal-data-in-government-agencies/
 - [R14] DICT National Cybersecurity Plan 2023-2028: https://cms-cdn.e.gov.ph/DICT/pdf/NCSP-2023-2028-FINAL-DICT.pdf
 
 ---
@@ -217,19 +228,11 @@ Score: ___
 
 ## F. Full References
 
-- [R1] https://www.cloudflare.com/learning/security/glossary/website-security-checklist/
-- [R2] https://arphost.com/website-security-best-practices/
-- [R3] https://www.hackerone.com/knowledge-center/ultimate-9-point-website-security-checklist
-- [R4] https://dev.to/adityabhuyan/essential-security-measures-for-safeguarding-your-system-and-protecting-user-data-49c5
-- [R5] https://www.bitcatcha.com/secure-website/standard/
-- [R6] https://www.scribd.com/document/836479530/Cybersecurity-Assessment-Questionnaire-V1
 - [R7] https://vendict.com/blog/50-essential-security-questionnaire-questions
 - [R8] https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/
 - [R9] https://www.ncbi.nlm.nih.gov/books/NBK537095/
 - [R10] https://www.ncbi.nlm.nih.gov/books/NBK448206/
 - [R11] https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
 - [R12] https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet
-- [R13] https://privacy.gov.ph/npc-circular-16-01-security-of-personal-data-in-government-agencies/
 - [R14] https://cms-cdn.e.gov.ph/DICT/pdf/NCSP-2023-2028-FINAL-DICT.pdf
-- [R15] https://www.aufaitux.com/blog/ui-ux-designing-for-children/
-- [R16] https://gapsystudio.com/blog/ux-design-for-kids/
+- [R16] Meloncon, L., Haynes, E. N., Varelmann, M. & Groh, L. Building a Playground: General Guidelines for Creating Educational Web Sites for Children. *Technical Communication* 57(4), 398–416 (2010). https://pmc.ncbi.nlm.nih.gov/articles/PMC4664536/ (Appendix guideline list: https://pmc.ncbi.nlm.nih.gov/articles/PMC4664536/#S12)

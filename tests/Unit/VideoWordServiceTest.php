@@ -70,12 +70,12 @@ class VideoWordServiceTest extends TestCase
 
     public function test_select_distractor_words_excludes_ids_and_respects_limit(): void
     {
-        $w1 = DictionaryWord::create(['word' => 'alpha', 'definition' => 'a', 'difficulty_level' => 'easy', 'is_built_in' => false, 'user_id' => null]);
-        $w2 = DictionaryWord::create(['word' => 'beta', 'definition' => 'b', 'difficulty_level' => 'easy', 'is_built_in' => false, 'user_id' => null]);
-        $w3 = DictionaryWord::create(['word' => 'gamma', 'definition' => 'c', 'difficulty_level' => 'easy', 'is_built_in' => false, 'user_id' => null]);
-        $w4 = DictionaryWord::create(['word' => 'delta', 'definition' => 'd', 'difficulty_level' => 'easy', 'is_built_in' => false, 'user_id' => null]);
-        $w5 = DictionaryWord::create(['word' => 'epsilon', 'definition' => 'e', 'difficulty_level' => 'easy', 'is_built_in' => false, 'user_id' => null]);
-        $w6 = DictionaryWord::create(['word' => 'zeta', 'definition' => 'z', 'difficulty_level' => 'easy', 'is_built_in' => false, 'user_id' => null]);
+        $w1 = DictionaryWord::create(['word' => 'alpha', 'definition' => 'a', 'is_built_in' => false, 'user_id' => null]);
+        $w2 = DictionaryWord::create(['word' => 'beta', 'definition' => 'b', 'is_built_in' => false, 'user_id' => null]);
+        $w3 = DictionaryWord::create(['word' => 'gamma', 'definition' => 'c', 'is_built_in' => false, 'user_id' => null]);
+        $w4 = DictionaryWord::create(['word' => 'delta', 'definition' => 'd', 'is_built_in' => false, 'user_id' => null]);
+        $w5 = DictionaryWord::create(['word' => 'epsilon', 'definition' => 'e', 'is_built_in' => false, 'user_id' => null]);
+        $w6 = DictionaryWord::create(['word' => 'zeta', 'definition' => 'z', 'is_built_in' => false, 'user_id' => null]);
 
         $service = new VideoWordService;
         $distractors = $service->selectDistractorWords(5, [$w1->id, $w2->id]);

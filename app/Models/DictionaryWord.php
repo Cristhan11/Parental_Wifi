@@ -25,7 +25,6 @@ class DictionaryWord extends Model
     protected $fillable = [
         'word',
         'definition',
-        'difficulty_level',
         'is_built_in',
         'user_id',
     ];

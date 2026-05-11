@@ -209,7 +209,7 @@ class PortalChildLandingTest extends TestCase
             ->assertSee('Fallback Quiz', false);
     }
 
-    public function test_quiz_more_lists_other_quizzes_without_surprise_mix_chip(): void
+    public function test_quiz_more_lists_custom_subject_heading_without_surprise_mix_chip(): void
     {
         $user = User::factory()->create();
         $device = Device::factory()->create([
@@ -267,7 +267,7 @@ class PortalChildLandingTest extends TestCase
         $this->get(route('portal.landing', ['mac' => $device->mac_address, 'flow' => 'quiz_more']))
             ->assertOk()
             ->assertDontSee('Surprise mix', false)
-            ->assertSee('Other', false)
+            ->assertSee('Filipino', false)
             ->assertSee('Filipino Custom', false);
     }
 

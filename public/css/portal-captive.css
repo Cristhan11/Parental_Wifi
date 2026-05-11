@@ -1208,10 +1208,57 @@ body.portal {
     margin-bottom: 0.4rem;
 }
 
+.portal-flow-nav--split {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.65rem;
+    flex-wrap: nowrap;
+}
+
+.portal-flow-nav--split .portal-back-link {
+    flex-shrink: 0;
+    min-width: 0;
+}
+
+.portal-link-more--nav {
+    display: inline-flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin: 0;
+    margin-left: auto;
+    text-align: right;
+    text-decoration: underline;
+    text-underline-offset: 3px;
+    flex-shrink: 0;
+    max-width: 55%;
+    font-size: 0.85rem;
+    line-height: 1.25;
+    padding: 0.35rem 0.45rem;
+    border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+        box-shadow 0.2s ease,
+        filter 0.2s ease,
+        color 0.15s ease;
+}
+
 .portal-back-link {
     font-weight: 700;
     color: var(--portal-accent-dark);
     text-decoration: none;
+}
+
+body.portal.portal--landing .portal-flow-nav .portal-back-link {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.45rem;
+    border-radius: 10px;
+    -webkit-tap-highlight-color: transparent;
+    transition:
+        box-shadow 0.2s ease,
+        filter 0.2s ease,
+        color 0.15s ease;
 }
 
 .portal-reco {
@@ -1308,13 +1355,18 @@ body.portal {
     color: #042f2e;
     background: linear-gradient(180deg, var(--portal-accent), var(--portal-accent-dark));
     box-shadow: 0 6px 0 rgba(15, 118, 110, 0.35);
+    -webkit-tap-highlight-color: transparent;
+    transition:
+        box-shadow 0.2s ease,
+        filter 0.2s ease,
+        transform 0.12s ease;
 }
 
 .portal-reco--quiz-tight .portal-btn-start {
     min-height: 46px;
     min-width: 10rem;
     padding: 0.5rem 1.15rem;
-    margin-bottom: 0.35rem;
+    margin-bottom: 0;
     font-size: 1.05rem;
     box-shadow: 0 4px 0 rgba(15, 118, 110, 0.3);
 }
@@ -1373,7 +1425,7 @@ body.portal {
 
 .portal-section-title--left {
     text-align: left;
-    margin-bottom: 0.75rem;
+    margin-bottom: 0.5rem;
 }
 
 .portal-other-random-row {
@@ -1381,7 +1433,7 @@ body.portal {
     flex-wrap: wrap;
     align-items: flex-start;
     gap: 0.75rem;
-    margin-bottom: 1.25rem;
+    margin-bottom: 0.65rem;
 }
 
 .portal-chip-stack {
@@ -1435,10 +1487,32 @@ body.portal {
     color: var(--portal-deep);
 }
 
+/* Child portal — quiz/video browse: category labels, not buttons */
+body.portal.portal--landing .portal-browse-block {
+    margin-bottom: 0.55rem;
+}
+
+body.portal.portal--landing .portal-browse-block:last-child {
+    margin-bottom: 0;
+}
+
+body.portal.portal--landing .portal-browse-block__heading {
+    margin: 0 0 0.35rem;
+    padding: 0;
+    font-size: 0.78rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--portal-ink-muted);
+    border: none;
+    background: none;
+}
+
 .portal-mini-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
     gap: 0.6rem;
+    width: 100%;
 }
 
 .portal-tile--compact {
@@ -1493,6 +1567,75 @@ body.portal.portal--landing .portal-title {
 
 body.portal.portal--landing .portal-subtitle {
     color: var(--portal-ink-muted);
+}
+
+@keyframes portal-landing-tap-glow {
+    0% {
+        box-shadow: 0 0 0 0 rgba(94, 234, 212, 0);
+        filter: brightness(1);
+    }
+    40% {
+        box-shadow:
+            0 0 0 3px rgba(94, 234, 212, 0.5),
+            0 0 26px rgba(94, 234, 212, 0.55),
+            0 0 44px rgba(45, 212, 191, 0.35);
+        filter: brightness(1.12);
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(94, 234, 212, 0);
+        filter: brightness(1);
+    }
+}
+
+body.portal.portal--landing .portal-tap-pulse {
+    position: relative;
+    z-index: 1;
+    animation: portal-landing-tap-glow 0.38s ease-out;
+}
+
+body.portal.portal--landing .portal-flow-nav .portal-back-link:active,
+body.portal.portal--landing .portal-link-more--nav:active {
+    filter: brightness(1.18);
+    box-shadow: 0 0 22px rgba(94, 234, 212, 0.55);
+    color: #ccfbf1;
+}
+
+body.portal.portal--landing .portal-btn-start:active,
+body.portal.portal--landing .portal-btn-random:active {
+    transform: scale(0.97) translateY(1px);
+    filter: brightness(1.1);
+    box-shadow:
+        0 2px 0 rgba(15, 118, 110, 0.28),
+        0 0 32px rgba(94, 234, 212, 0.65);
+}
+
+body.portal.portal--landing .portal-type-card:active {
+    box-shadow:
+        0 0 0 2px rgba(94, 234, 212, 0.55),
+        0 0 36px rgba(94, 234, 212, 0.42),
+        0 8px 24px rgba(0, 0, 0, 0.35);
+}
+
+body.portal.portal--landing .portal-btn-primary:active {
+    transform: scale(0.98);
+    filter: brightness(1.08);
+    box-shadow:
+        var(--portal-shadow),
+        0 0 28px rgba(34, 197, 94, 0.55);
+}
+
+body.portal.portal--landing .portal-tile--compact:active {
+    border-color: rgba(94, 234, 212, 0.65);
+    box-shadow:
+        var(--portal-shadow),
+        0 0 22px rgba(94, 234, 212, 0.45);
+    transform: scale(0.98);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    body.portal.portal--landing .portal-tap-pulse {
+        animation: none;
+    }
 }
 
 /* —— Portal video: post-video word tap game —— */

@@ -132,8 +132,11 @@
                         <p class="portal-captive-hint">Opened from Wi‑Fi sign‑in? You’re in the right place.</p>
                     </section>
                 @elseif(($flow ?? '') === 'quiz')
-                    <div class="portal-flow-nav portal-flow-nav--tight">
+                    <div class="portal-flow-nav portal-flow-nav--tight portal-flow-nav--split">
                         <a href="{{ route('portal.landing', $portalBase) }}" class="portal-back-link">← Back</a>
+                        @if($recommendedQuiz)
+                            <a class="portal-link-more portal-link-more--nav" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'quiz_more'])) }}">More quizzes</a>
+                        @endif
                     </div>
                     @if($recommendedQuiz)
                         <section class="portal-reco portal-reco--quiz-tight" aria-labelledby="reco-quiz-title">
@@ -152,7 +155,6 @@
                                         @endif
                                     </p>
                                     <a class="portal-btn-start" href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $recommendedQuiz->id])) }}">Start</a>
-                                    <a class="portal-link-more" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'quiz_more'])) }}">More quizzes</a>
                                 </div>
                                 @if($randomMixEligible && $randomModeQuiz)
                                     <div class="portal-reco-random-card">
@@ -169,8 +171,11 @@
                         </div>
                     @endif
                 @elseif(($flow ?? '') === 'video')
-                    <div class="portal-flow-nav portal-flow-nav--tight">
+                    <div class="portal-flow-nav portal-flow-nav--tight portal-flow-nav--split">
                         <a href="{{ route('portal.landing', $portalBase) }}" class="portal-back-link">← Back</a>
+                        @if($recommendedVideo)
+                            <a class="portal-link-more portal-link-more--nav" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'video_more'])) }}">More videos</a>
+                        @endif
                     </div>
                     @if($recommendedVideo)
                         <section class="portal-reco portal-reco--quiz-tight" aria-labelledby="reco-video-title">
@@ -182,7 +187,6 @@
                                 @endif
                                 <p class="portal-reco-card__reward">Earn {{ (int) $recommendedVideo->time_reward_minutes }} min when you finish</p>
                                 <a class="portal-btn-start" href="{{ route('portal.video.show', array_merge($portalBase, ['video' => $recommendedVideo->id])) }}">Start</a>
-                                <a class="portal-link-more" href="{{ route('portal.landing', array_merge($portalBase, ['flow' => 'video_more'])) }}">More videos</a>
                             </div>
                         </section>
                     @else
@@ -197,37 +201,20 @@
                     </div>
                     <h2 class="portal-section-title portal-section-title--left">All your quizzes</h2>
 
-                    @if($quizGroups['Other']->isNotEmpty())
-                        <div class="portal-other-random-row">
-                            <div class="portal-chip-stack">
-                                <span class="portal-chip portal-chip--static">Other</span>
-                                <div class="portal-mini-grid">
-                                    @foreach($quizGroups['Other'] as $quiz)
-                                        <a href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $quiz->id])) }}" class="portal-tile portal-tile--compact">
-                                            <span class="portal-tile__title">{{ $quiz->title }}</span>
-                                        </a>
-                                    @endforeach
-                                </div>
+                    @foreach($quizSubjectSections as $index => $section)
+                        <section class="portal-browse-block" aria-labelledby="portal-quiz-subject-{{ $index }}">
+                            <h3 id="portal-quiz-subject-{{ $index }}" class="portal-browse-block__heading">{{ $section['heading'] }}</h3>
+                            <div class="portal-mini-grid">
+                                @foreach($section['quizzes'] as $quiz)
+                                    <a href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $quiz->id])) }}" class="portal-tile portal-tile--compact">
+                                        <span class="portal-tile__title">{{ $quiz->title }}</span>
+                                    </a>
+                                @endforeach
                             </div>
-                        </div>
-                    @endif
-
-                    @foreach(['Math', 'English', 'Science'] as $subject)
-                        @if($quizGroups[$subject]->isNotEmpty())
-                            <section class="portal-browse-block">
-                                <h3 class="portal-browse-block__heading">{{ $subject }}</h3>
-                                <div class="portal-mini-grid">
-                                    @foreach($quizGroups[$subject] as $quiz)
-                                        <a href="{{ route('portal.quiz.show', array_merge($portalBase, ['quiz' => $quiz->id])) }}" class="portal-tile portal-tile--compact">
-                                            <span class="portal-tile__title">{{ $quiz->title }}</span>
-                                        </a>
-                                    @endforeach
-                                </div>
-                            </section>
-                        @endif
+                        </section>
                     @endforeach
 
-                    @if($quizGroups['Math']->isEmpty() && $quizGroups['English']->isEmpty() && $quizGroups['Science']->isEmpty() && $quizGroups['Other']->isEmpty())
+                    @if($quizSubjectSections->isEmpty())
                         <p class="portal-muted-text">No quizzes in your list.</p>
                     @endif
                 @elseif(($flow ?? '') === 'video_more')
@@ -246,5 +233,6 @@
             @endif
         </div>
     </div>
+    <script src="{{ asset('js/portal-landing-tap.js') }}" defer></script>
 </body>
 </html>

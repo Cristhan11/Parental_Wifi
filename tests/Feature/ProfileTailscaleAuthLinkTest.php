@@ -77,4 +77,19 @@ class ProfileTailscaleAuthLinkTest extends TestCase
         $this->actingAs($user)->post(route('profile.tailscale.auth-link'))->assertRedirect(route('profile.edit'));
         $this->actingAs($user)->post(route('profile.tailscale.auth-link'))->assertStatus(429);
     }
+
+    public function test_profile_edit_includes_tailscale_remote_access_section_for_parent(): void
+    {
+        $user = User::factory()->create([
+            'role' => User::ROLE_PARENT,
+            'email_verified_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('profile.edit'))
+            ->assertOk()
+            ->assertSee('Remote dashboard access (Tailscale)', false)
+            ->assertSee('Get Tailscale sign-in link', false);
+    }
 }

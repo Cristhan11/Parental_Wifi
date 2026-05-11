@@ -8,6 +8,7 @@ use App\Models\Quiz;
 use App\Models\Video;
 use Carbon\Carbon;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Str;
 
 /**
  * Portal recommendations: optional parent pin (Phase A), then Phase B deterministic sort —
@@ -99,34 +100,56 @@ class PortalActivityRecommendationService
             ->first();
     }
 
-    /** @return Collection<string, Collection<int, Quiz>> */
+    /**
+     * One entry per distinct subject (case-insensitive). Heading is title-cased from the stored subject.
+     * Quizzes with no subject use heading "Uncategorized", sorted last.
+     *
+     * @return Collection<int, array{heading: string, quizzes: Collection<int, Quiz>}>
+     */
     public function quizzesGroupedBySubject(Collection $eligibleQuizzes): Collection
     {
-        $groups = collect([
-            'Math' => collect(),
-            'English' => collect(),
-            'Science' => collect(),
-            'Other' => collect(),
-        ]);
+        /** @var array<string, array{heading: string, quizzes: Collection<int, Quiz>}> $buckets */
+        $buckets = [];
+        $uncategorizedKey = "\0";
 
         foreach ($eligibleQuizzes as $quiz) {
-            $key = $this->subjectGroupKey($quiz->subject);
-            $groups[$key]->push($quiz);
+            $raw = trim((string) ($quiz->subject ?? ''));
+            $norm = $raw === '' ? $uncategorizedKey : mb_strtolower($raw, 'UTF-8');
+
+            if (! isset($buckets[$norm])) {
+                $buckets[$norm] = [
+                    'heading' => $norm === $uncategorizedKey
+                        ? 'Uncategorized'
+                        : Str::title(mb_strtolower($raw, 'UTF-8')),
+                    'quizzes' => collect(),
+                ];
+            }
+
+            $buckets[$norm]['quizzes']->push($quiz);
         }
 
-        return $groups;
-    }
+        return collect($buckets)
+            ->map(function (array $data, string $norm) use ($uncategorizedKey): array {
+                return [
+                    'norm' => $norm,
+                    'heading' => $data['heading'],
+                    'quizzes' => $data['quizzes'],
+                ];
+            })
+            ->sort(function (array $a, array $b) use ($uncategorizedKey): int {
+                $aUncat = $a['norm'] === $uncategorizedKey;
+                $bUncat = $b['norm'] === $uncategorizedKey;
+                if ($aUncat !== $bUncat) {
+                    return $aUncat <=> $bUncat;
+                }
 
-    private function subjectGroupKey(?string $subject): string
-    {
-        $s = strtolower(trim((string) $subject));
-
-        return match ($s) {
-            'math' => 'Math',
-            'english' => 'English',
-            'science' => 'Science',
-            default => 'Other',
-        };
+                return strcasecmp($a['heading'], $b['heading']);
+            })
+            ->values()
+            ->map(fn (array $row): array => [
+                'heading' => $row['heading'],
+                'quizzes' => $row['quizzes'],
+            ]);
     }
 
     /**

@@ -108,7 +108,7 @@ class PortalController extends Controller
         $eligibleVideos = $this->portalRecommendations->eligibleVideos($device);
         $recommendedQuiz = $this->portalRecommendations->recommendQuiz($device);
         $recommendedVideo = $this->portalRecommendations->recommendVideo($device);
-        $quizGroups = $this->portalRecommendations->quizzesGroupedBySubject($eligibleQuizzes);
+        $quizSubjectSections = $this->portalRecommendations->quizzesGroupedBySubject($eligibleQuizzes);
         $randomMixEligible = $this->portalRecommendations->randomMixEligible($device);
         $randomModeQuiz = $this->portalRecommendations->randomModeQuiz($device);
 
@@ -119,7 +119,7 @@ class PortalController extends Controller
             'eligibleVideos' => $eligibleVideos,
             'recommendedQuiz' => $recommendedQuiz,
             'recommendedVideo' => $recommendedVideo,
-            'quizGroups' => $quizGroups,
+            'quizSubjectSections' => $quizSubjectSections,
             'randomMixEligible' => $randomMixEligible,
             'randomModeQuiz' => $randomModeQuiz,
         ]);
