@@ -175,11 +175,21 @@ class PiTailscaleAuthLinkService
 
         $scheme = strtolower((string) ($parts['scheme'] ?? ''));
         $host = strtolower((string) ($parts['host'] ?? ''));
-        if ($scheme !== 'https' || $host !== 'login.tailscale.com') {
+        if ($scheme !== 'https' || ! $this->isAllowedTailscaleLoginHost($host)) {
             return null;
         }
 
         return $authUrl;
+    }
+
+    /** Tailscale may use regional hosts such as login.us.tailscale.com. */
+    private function isAllowedTailscaleLoginHost(string $host): bool
+    {
+        if ($host === 'login.tailscale.com') {
+            return true;
+        }
+
+        return (bool) preg_match('/^login(?:\.[a-z0-9-]+)?\.tailscale\.com$/', $host);
     }
 
     private function defaultMessageForStatus(string $status): string

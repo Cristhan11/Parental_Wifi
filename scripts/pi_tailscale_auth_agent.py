@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -24,11 +25,25 @@ from typing import Any
 HOST = os.getenv("PI_AGENT_HOST", "127.0.0.1")
 PORT = int(os.getenv("PI_AGENT_PORT", "9098"))
 TOKEN = os.getenv("PI_AGENT_TOKEN", "")
-TAILSCALE_BIN = os.getenv("PI_AGENT_TAILSCALE_BIN", "/usr/bin/tailscale")
-CMD_TIMEOUT = int(os.getenv("PI_AGENT_COMMAND_TIMEOUT_SECONDS", "8"))
+CMD_TIMEOUT = int(os.getenv("PI_AGENT_COMMAND_TIMEOUT_SECONDS", "60"))
+
+
+def _tailscale_executable() -> str:
+    configured = os.getenv("PI_AGENT_TAILSCALE_BIN", "/usr/bin/tailscale")
+    if os.path.isfile(configured) and os.access(configured, os.X_OK):
+        return configured
+    found = shutil.which("tailscale")
+    return found if found else configured
+
+
+TAILSCALE_BIN = _tailscale_executable()
 
 STATUS_ALLOWED = {"already_authenticated", "action_required", "unavailable", "error"}
-AUTH_URL_PATTERN = re.compile(r"https://login\.tailscale\.com/[^\s\"'<>]+")
+# Regional login hosts (e.g. login.us.tailscale.com) use the same path shape after the host.
+AUTH_URL_PATTERN = re.compile(
+    r"https://login(?:\.[a-z0-9-]+)?\.tailscale\.com/[^\s\"'<>]+",
+    re.IGNORECASE,
+)
 
 
 def _json_response(handler: BaseHTTPRequestHandler, code: int, payload: dict[str, Any]) -> None:
@@ -144,12 +159,35 @@ def _request_login_url() -> dict[str, Any]:
     """Assume Pi is not authenticated; obtain a login.tailscale.com URL."""
     try:
         login_res = _run_tailscale(["login"])
-    except (subprocess.TimeoutExpired, FileNotFoundError):
+    except FileNotFoundError:
         return {
             "status": "unavailable",
             "auth_url": None,
             "expires_at": None,
-            "message": "Unable to request Tailscale login link.",
+            "message": (
+                "Tailscale CLI was not found. Install Tailscale or set PI_AGENT_TAILSCALE_BIN "
+                "to the full path from `which tailscale` on the Pi."
+            ),
+        }
+    except subprocess.TimeoutExpired as e:
+        combined = (e.stdout or "") + "\n" + (e.stderr or "")
+        auth_url = _extract_auth_url(combined)
+        if auth_url:
+            return {
+                "status": "action_required",
+                "auth_url": auth_url,
+                "expires_at": _iso_now(),
+                "message": "Open this link to finish Tailscale sign-in on the Raspberry Pi.",
+            }
+        return {
+            "status": "unavailable",
+            "auth_url": None,
+            "expires_at": None,
+            "message": (
+                "Tailscale login did not finish before the command timeout, and no auth URL was "
+                "captured. Increase PI_AGENT_COMMAND_TIMEOUT_SECONDS for pi_tailscale_auth_agent "
+                "(e.g. 120), or run `sudo tailscale login` on the Pi once and try again."
+            ),
         }
 
     combined = (login_res.stdout or "") + "\n" + (login_res.stderr or "")

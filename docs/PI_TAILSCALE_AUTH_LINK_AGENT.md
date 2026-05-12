@@ -7,7 +7,7 @@ This guide documents the local helper service used by Laravel Profile to request
 - Service listens on `127.0.0.1` only.
 - Requests must include `X-Pi-Agent-Token`.
 - Only allowlisted command is executed (`/usr/bin/tailscale`).
-- Command timeout is enforced (`PI_AGENT_COMMAND_TIMEOUT_SECONDS`).
+- Command timeout is enforced per subprocess (`PI_AGENT_COMMAND_TIMEOUT_SECONDS`, default **60** in the script; match this in `pi_tailscale_auth_agent.service` on slow Pis).
 - Response is sanitized JSON only (no raw command output is returned).
 
 ## API contract
@@ -73,16 +73,18 @@ Set these values in `.env`:
 
 - `PI_AGENT_BASE_URL=http://127.0.0.1:9098`
 - `PI_AGENT_TOKEN=<same-token-as-agent>`
-- `PI_AGENT_TIMEOUT_SECONDS=8`
+- `PI_AGENT_TIMEOUT_SECONDS=60` (or higher on a very slow Pi; profile “sync with dashboard” chains several `tailscale` calls and can exceed a short HTTP timeout)
 
 ## Troubleshooting
 
 - `Pi helper service is unavailable`:
   - Check service: `sudo systemctl status pi_tailscale_auth_agent`
   - Check logs: `sudo journalctl -u pi_tailscale_auth_agent -n 100 --no-pager`
+  - If `curl` as `www-data` works but the profile button does not, raise `PI_AGENT_TIMEOUT_SECONDS` (Laravel may be timing out while Tailscale is still running).
 - `Pi helper service rejected the request`:
   - Verify `PI_AGENT_TOKEN` matches between Laravel and service.
-- No auth URL returned:
-  - Run `tailscale status` and `tailscale login` manually once to validate host setup.
+- `Tailscale login did not finish before the command timeout`:
+  - Raise `PI_AGENT_COMMAND_TIMEOUT_SECONDS` in the systemd unit (e.g. `120`), then `sudo systemctl daemon-reload && sudo systemctl restart pi_tailscale_auth_agent`.
+  - Or SSH to the Pi and run `sudo tailscale login` once to confirm the CLI prints a `https://login…tailscale.com/…` URL.
 - `Could not sign the Pi out of Tailscale` from the agent:
   - Copy the latest `scripts/pi_tailscale_auth_agent.service` from the repo (it runs as `root` for Tailscale CLI access), then `sudo systemctl daemon-reload && sudo systemctl restart pi_tailscale_auth_agent`. Confirm with `sudo tailscale logout` then `sudo tailscale status` from a shell (expect “logged out” / needs login).

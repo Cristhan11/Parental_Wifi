@@ -84,6 +84,31 @@ class PiTailscaleAuthLinkServiceTest extends TestCase
         $this->assertNull($result['auth_url']);
     }
 
+    public function test_fetch_auth_link_accepts_regional_tailscale_login_host(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.timeout_seconds', 8);
+
+        $regional = 'https://login.us.tailscale.com/a/example-token';
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/auth-link' => Http::response([
+                'status' => 'action_required',
+                'auth_url' => $regional,
+                'expires_at' => null,
+                'message' => 'Open this link.',
+            ], 200),
+        ]);
+
+        $service = new PiTailscaleAuthLinkService;
+        $result = $service->fetchAuthLink();
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('action_required', $result['status']);
+        $this->assertSame($regional, $result['auth_url']);
+    }
+
     public function test_invalid_auth_url_is_sanitized_out(): void
     {
         Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
