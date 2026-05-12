@@ -323,7 +323,55 @@ def _logout_then_login() -> dict[str, Any]:
     return _request_login_url()
 
 
-def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None) -> dict[str, Any]:
+def _passive_status_check(dashboard_email: str | None) -> dict[str, Any]:
+    """
+    Read-only Tailscale status snapshot for the profile page to render on load.
+    Never calls `tailscale login` or `tailscale logout`. Returns the logged-in
+    identity (if any) and whether it matches the dashboard email.
+    """
+    try:
+        status_res = _run_tailscale(["status"])
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {
+            "status": "unavailable",
+            "auth_url": None,
+            "expires_at": None,
+            "message": "Tailscale command is unavailable.",
+            "signed_in_as": None,
+            "matches_dashboard": None,
+        }
+
+    if status_res.returncode != 0:
+        return {
+            "status": "action_required",
+            "auth_url": None,
+            "expires_at": None,
+            "message": "Pi is not signed in to Tailscale yet. Click Get Tailscale sign-in link.",
+            "signed_in_as": None,
+            "matches_dashboard": None,
+        }
+
+    ident = _tailscale_logged_in_identity()
+    dash = (dashboard_email or "").strip()
+    matches = bool(dash) and ident is not None and _identity_matches_dashboard(ident, dash)
+    if ident:
+        message = f"Pi is signed in to Tailscale as {ident}."
+        if dash:
+            message += " It matches your dashboard email." if matches else " It does not match your dashboard email."
+    else:
+        message = "Pi is signed in to Tailscale."
+
+    return {
+        "status": "already_authenticated",
+        "auth_url": None,
+        "expires_at": None,
+        "message": message,
+        "signed_in_as": ident or None,
+        "matches_dashboard": matches if dash else None,
+    }
+
+
+def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None, status_only: bool = False) -> dict[str, Any]:
     if not TOKEN:
         return {
             "status": "error",
@@ -331,6 +379,9 @@ def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None) -> dict[
             "expires_at": None,
             "message": "Pi helper token is not configured.",
         }
+
+    if status_only:
+        return _passive_status_check(dashboard_email)
 
     if force_reauth:
         return _logout_then_login()
@@ -346,6 +397,8 @@ def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None) -> dict[
                 "auth_url": None,
                 "expires_at": None,
                 "message": "Pi is already signed in to Tailscale with this dashboard account.",
+                "signed_in_as": ident,
+                "matches_dashboard": True,
             }
         return _logout_then_login()
 
@@ -409,11 +462,13 @@ class Handler(BaseHTTPRequestHandler):
         raw = self.rfile.read(length) if length > 0 else b""
         force_reauth = False
         dashboard_email: str | None = None
+        status_only = False
         if raw.strip():
             try:
                 parsed = json.loads(raw.decode("utf-8"))
                 if isinstance(parsed, dict):
                     force_reauth = bool(parsed.get("force_reauth"))
+                    status_only = bool(parsed.get("status_only"))
                     de = parsed.get("dashboard_email")
                     if isinstance(de, str) and de.strip():
                         dashboard_email = de.strip()
@@ -421,7 +476,7 @@ class Handler(BaseHTTPRequestHandler):
                 pass
 
         try:
-            result = _resolve_auth_link(force_reauth, dashboard_email)
+            result = _resolve_auth_link(force_reauth, dashboard_email, status_only=status_only)
             if result.get("status") not in STATUS_ALLOWED:
                 result = {
                     "status": "error",

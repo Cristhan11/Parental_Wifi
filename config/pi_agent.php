@@ -46,4 +46,16 @@ return [
     |
     */
     'quick_timeout_seconds' => (int) env('PI_AGENT_QUICK_TIMEOUT_SECONDS', 90),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Status-snapshot HTTP timeout (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | Read-only `status_only` path used by the profile page to render the current
+    | Tailscale state on load (no `tailscale login` / `tailscale logout`). A short
+    | timeout keeps the page snappy; the Pi agent only runs `tailscale status`.
+    |
+    */
+    'status_timeout_seconds' => (int) env('PI_AGENT_STATUS_TIMEOUT_SECONDS', 8),
 ];

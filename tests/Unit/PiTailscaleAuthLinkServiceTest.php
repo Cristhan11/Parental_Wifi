@@ -109,6 +109,43 @@ class PiTailscaleAuthLinkServiceTest extends TestCase
         $this->assertSame($regional, $result['auth_url']);
     }
 
+    public function test_status_only_path_uses_short_timeout_and_returns_signed_in_email(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.timeout_seconds', 240);
+        Config::set('pi_agent.quick_timeout_seconds', 90);
+        Config::set('pi_agent.status_timeout_seconds', 5);
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/auth-link' => Http::response([
+                'status' => 'already_authenticated',
+                'auth_url' => null,
+                'expires_at' => null,
+                'message' => 'Pi is signed in to Tailscale as cristhangray@gmail.com.',
+                'signed_in_as' => 'cristhangray@gmail.com',
+                'matches_dashboard' => true,
+            ], 200),
+        ]);
+
+        $service = new PiTailscaleAuthLinkService;
+        $result = $service->fetchAuthLink(false, 'cristhangray@gmail.com', true);
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('already_authenticated', $result['status']);
+        $this->assertSame('cristhangray@gmail.com', $result['signed_in_as']);
+        $this->assertTrue($result['matches_dashboard']);
+
+        Http::assertSent(function (Request $request): bool {
+            $body = json_decode($request->body(), true);
+
+            return $request->url() === 'http://127.0.0.1:9098/v1/tailscale/auth-link'
+                && is_array($body)
+                && ($body['status_only'] ?? null) === true
+                && ($body['dashboard_email'] ?? null) === 'cristhangray@gmail.com';
+        });
+    }
+
     public function test_invalid_auth_url_is_sanitized_out(): void
     {
         Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');

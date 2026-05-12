@@ -113,16 +113,38 @@ class ProfileController extends Controller
         $request->validate([
             'force_reauth' => ['sometimes', 'boolean'],
             'sync_tailscale_with_dashboard' => ['sometimes', 'boolean'],
+            'status_only' => ['sometimes', 'boolean'],
+            'target_email' => ['sometimes', 'nullable', 'string', 'email'],
         ]);
 
-        $forceReauth = $request->boolean('force_reauth');
-        $syncTailscale = $request->boolean('sync_tailscale_with_dashboard') && ! $forceReauth;
-        $dashboardEmail = $syncTailscale ? trim((string) $user->email) : null;
+        $statusOnly = $request->boolean('status_only');
+        $forceReauth = ! $statusOnly && $request->boolean('force_reauth');
+        $syncTailscale = ! $statusOnly && $request->boolean('sync_tailscale_with_dashboard') && ! $forceReauth;
+
+        // The email-change flow passes target_email = the parent's *new* address before the profile
+        // is saved. Trust it only if it matches the address they just confirmed via the 6-digit code
+        // (ProfileEmailChangeSession::verifiedEmail). Anything else falls back to the saved email so a
+        // malicious or stale client cannot point the Pi at an unrelated account.
+        $targetEmailRequested = trim((string) $request->input('target_email', ''));
+        $sessionVerified = (string) (ProfileEmailChangeSession::verifiedEmail($request) ?? '');
+        $useTargetEmail = $targetEmailRequested !== ''
+            && $sessionVerified !== ''
+            && strcasecmp(ProfileEmailChangeSession::normalizeEmail($targetEmailRequested), $sessionVerified) === 0;
+
+        if ($useTargetEmail) {
+            $dashboardEmail = $targetEmailRequested;
+        } elseif ($syncTailscale || $statusOnly || $forceReauth) {
+            // Pass the saved email even on the force_reauth path so the Pi knows which account the
+            // parent expects after the relogin and can return matches_dashboard=true once they finish.
+            $dashboardEmail = trim((string) $user->email);
+        } else {
+            $dashboardEmail = null;
+        }
         if ($dashboardEmail === '') {
             $dashboardEmail = null;
         }
 
-        $result = $service->fetchAuthLink($forceReauth, $dashboardEmail);
+        $result = $service->fetchAuthLink($forceReauth, $dashboardEmail, $statusOnly);
         $maskedUrl = $service->maskAuthUrl($result['auth_url']);
 
         $auditLogger->record(
@@ -137,6 +159,8 @@ class ProfileController extends Controller
                 'auth_url_masked' => $maskedUrl,
                 'force_reauth' => $forceReauth,
                 'sync_tailscale_with_dashboard' => $syncTailscale,
+                'status_only' => $statusOnly,
+                'used_target_email' => $useTargetEmail,
             ],
         );
 
@@ -148,6 +172,10 @@ class ProfileController extends Controller
             'expires_at' => $result['expires_at'],
             'force_reauth' => $forceReauth,
             'sync_tailscale_with_dashboard' => $syncTailscale,
+            'status_only' => $statusOnly,
+            'used_target_email' => $useTargetEmail,
+            'signed_in_as' => $result['signed_in_as'] ?? null,
+            'matches_dashboard' => $result['matches_dashboard'] ?? null,
         ];
 
         if ($request->expectsJson() || $request->wantsJson()) {

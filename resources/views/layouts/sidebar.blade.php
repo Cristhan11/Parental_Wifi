@@ -220,7 +220,7 @@
 
     <!-- User Section -->
     <div class="border-t border-gray-200 p-4">
-        <x-dropdown align="left" width="48">
+        <x-dropdown align="left-up" width="48">
             <x-slot name="trigger">
                 <button class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-black focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-colors">
                     <div class="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center font-semibold text-black">

@@ -42,30 +42,59 @@
                 if (!v) return false;
                 return this.normalizeEmail(this.formEmail) === this.normalizeEmail(v);
             },
+            async callTailscaleEndpoint(body) {
+                const res = await fetch(@js(route('profile.tailscale.auth-link')), {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Accept': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'X-CSRF-TOKEN': @js(csrf_token()),
+                    },
+                    body: JSON.stringify(body),
+                });
+                const data = await res.json().catch(() => ({}));
+                return { ok: res.ok, data };
+            },
             async fetchTailscaleLink() {
                 this.tailscaleLoading = true;
                 this.tailscaleError = null;
+                this.tailscaleResult = null;
                 try {
-                    const res = await fetch(@js(route('profile.tailscale.auth-link')), {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Accept': 'application/json',
-                            'X-Requested-With': 'XMLHttpRequest',
-                            'X-CSRF-TOKEN': @js(csrf_token()),
-                        },
-                        body: JSON.stringify({ force_reauth: true }),
+                    const targetEmail = (this.formEmail ?? '').trim();
+                    // Step 1: fast read-only check. If the Pi happens to already be signed in to
+                    // Tailscale with the new email, we skip the disruptive logout+login entirely
+                    // and just confirm to the parent that nothing needs doing.
+                    const statusCall = await this.callTailscaleEndpoint({
+                        status_only: true,
+                        target_email: targetEmail,
                     });
-                    const data = await res.json();
-                    if (!res.ok) {
-                        this.tailscaleError = data?.message ?? 'Failed to get Tailscale sign-in link.';
-                        this.tailscaleResult = null;
+                    if (statusCall.ok
+                        && statusCall.data?.status === 'already_authenticated'
+                        && statusCall.data?.matches_dashboard === true) {
+                        this.tailscaleResult = statusCall.data;
+                        this.tailscaleConfirmed = true;
                         return;
                     }
-                    this.tailscaleResult = data;
+
+                    // Step 2: the Pi is signed in to someone else (or not at all). Sync to the new
+                    // email — this runs `tailscale logout` then returns a fresh sign-in URL.
+                    const syncCall = await this.callTailscaleEndpoint({
+                        sync_tailscale_with_dashboard: true,
+                        target_email: targetEmail,
+                    });
+                    if (!syncCall.ok) {
+                        this.tailscaleError = syncCall.data?.message ?? @js(__('Failed to get Tailscale sign-in link.'));
+                        return;
+                    }
+                    this.tailscaleResult = syncCall.data;
+                    if (syncCall.data?.status === 'already_authenticated'
+                        && syncCall.data?.matches_dashboard === true) {
+                        this.tailscaleConfirmed = true;
+                    }
                 } catch (e) {
                     this.tailscaleResult = null;
-                    this.tailscaleError = 'Failed to contact local Pi helper service.';
+                    this.tailscaleError = @js(__('Failed to contact local Pi helper service.'));
                 } finally {
                     this.tailscaleLoading = false;
                 }
@@ -275,12 +304,9 @@
             @keydown.escape.window="showTailscaleModal = false"
         >
             <div class="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl">
-                <h3 class="text-lg font-semibold text-gray-900">{{ __('Finish Tailscale setup for the new email') }}</h3>
+                <h3 class="text-lg font-semibold text-gray-900">{{ __('Pair Tailscale with your new email') }}</h3>
                 <p class="mt-2 text-sm text-gray-700">
-                    {{ __('You changed your account email. Before we save, update Tailscale so remote access uses this new email too.') }}
-                </p>
-                <p class="mt-2 text-sm text-gray-700">
-                    {{ __('The Pi will sign out of Tailscale first, then you get a browser link—sign in with the same identity as your new dashboard email below.') }}
+                    {{ __('Before we save, make sure the Raspberry Pi is signed in to Tailscale with your new email so remote access keeps working.') }}
                 </p>
                 <p class="mt-1 text-sm text-gray-700">
                     {{ __('New email:') }} <span class="font-mono text-gray-900" x-text="formEmail"></span>
@@ -288,32 +314,57 @@
 
                 <div class="mt-4 rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800">
                     <div class="flex items-center justify-between gap-3">
-                        <p class="font-medium">{{ __('Get Tailscale sign-in link') }}</p>
-                        <button type="button" class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold hover:bg-gray-100" @click="fetchTailscaleLink()" :disabled="tailscaleLoading">
-                            <span x-show="!tailscaleLoading">{{ __('Refresh link') }}</span>
-                            <span x-show="tailscaleLoading" style="display:none;">{{ __('Loading...') }}</span>
+                        <p class="font-medium">{{ __('Tailscale on the Pi') }}</p>
+                        <button type="button" class="rounded-md border border-gray-300 px-3 py-1.5 text-xs font-semibold hover:bg-gray-100 disabled:opacity-50" @click="fetchTailscaleLink()" :disabled="tailscaleLoading">
+                            <span x-show="!tailscaleLoading">{{ __('Check again') }}</span>
+                            <span x-show="tailscaleLoading" style="display:none;">{{ __('Working…') }}</span>
                         </button>
                     </div>
 
-                    <template x-if="tailscaleResult">
-                        <div class="mt-2">
-                            <p>
-                                <span class="font-medium">{{ __('Pi status:') }}</span>
-                                <span x-text="tailscaleResult.status"></span>
-                            </p>
-                            <p class="mt-1" x-text="tailscaleResult.message"></p>
-                            <template x-if="tailscaleResult.status === 'action_required' && tailscaleResult.auth_url">
-                                <p class="mt-2">
-                                    <a :href="tailscaleResult.auth_url" target="_blank" rel="noopener noreferrer" class="font-medium underline text-blue-700">
-                                        {{ __('Open Tailscale sign-in link') }}
-                                    </a>
-                                </p>
-                            </template>
+                    <template x-if="tailscaleLoading && !tailscaleResult">
+                        <p class="mt-3 text-xs text-gray-600">
+                            {{ __('Asking the Pi to switch Tailscale to your new email — this can take up to a minute the first time.') }}
+                        </p>
+                    </template>
+
+                    <template x-if="tailscaleResult && tailscaleResult.status === 'already_authenticated' && tailscaleResult.matches_dashboard === true">
+                        <div class="mt-3 rounded-md border border-green-200 bg-green-50 px-3 py-2 text-sm text-green-900">
+                            <p class="font-medium">{{ __('Pi is already signed in with your new email.') }}</p>
+                            <p class="mt-1 text-xs text-green-800">{{ __('No action needed — you can continue and save.') }}</p>
                         </div>
                     </template>
 
+                    <template x-if="tailscaleResult && tailscaleResult.status === 'action_required' && tailscaleResult.auth_url">
+                        <div class="mt-3 space-y-2">
+                            <p>
+                                <a :href="tailscaleResult.auth_url" target="_blank" rel="noopener noreferrer" class="font-medium underline text-blue-700">
+                                    {{ __('Open Tailscale sign-in link') }}
+                                </a>
+                            </p>
+                            <p class="text-xs text-gray-600">
+                                {{ __('Sign in with your new email when Tailscale asks. After that, tick the confirmation below and continue.') }}
+                            </p>
+                            <div class="flex flex-wrap items-end gap-2">
+                                <div class="min-w-0 flex-1">
+                                    <label class="mb-1 block text-xs font-medium text-gray-600">{{ __('Sign-in link (copy)') }}</label>
+                                    <input
+                                        type="text"
+                                        readonly
+                                        class="w-full rounded border border-gray-300 bg-white px-2 py-1.5 font-mono text-xs text-gray-800"
+                                        :value="tailscaleResult.auth_url"
+                                        @click="$event.target.select()"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="tailscaleResult && tailscaleResult.status === 'unavailable'">
+                        <p class="mt-3 text-sm text-red-700" x-text="tailscaleResult.message"></p>
+                    </template>
+
                     <template x-if="tailscaleError">
-                        <p class="mt-2 text-red-700" x-text="tailscaleError"></p>
+                        <p class="mt-3 text-red-700" x-text="tailscaleError"></p>
                     </template>
                 </div>
 

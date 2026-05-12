@@ -13,22 +13,27 @@ class PiTailscaleAuthLinkService
      *
      * @param  bool  $forceReauth  When true, the Pi signs out of Tailscale first, then returns a fresh sign-in URL (email-change flow).
      * @param  string|null  $dashboardEmail  When non-null, Pi compares Tailscale login to this email (slower; optional profile action).
+     * @param  bool  $statusOnly  When true, Pi runs a read-only `tailscale status` snapshot only (never login/logout); short timeout, safe to call on every page load.
      * @return array{
      *   ok: bool,
      *   status: string,
      *   auth_url: string|null,
      *   expires_at: string|null,
-     *   message: string
+     *   message: string,
+     *   signed_in_as?: string|null,
+     *   matches_dashboard?: bool|null
      * }
      */
-    public function fetchAuthLink(bool $forceReauth = false, ?string $dashboardEmail = null): array
+    public function fetchAuthLink(bool $forceReauth = false, ?string $dashboardEmail = null, bool $statusOnly = false): array
     {
         $baseUrl = $this->normalizePiAgentBaseUrl(rtrim((string) config('pi_agent.base_url'), '/'));
         $token = (string) config('pi_agent.token');
         $needsExtendedWait = $forceReauth || ($dashboardEmail !== null && $dashboardEmail !== '');
-        $timeout = $needsExtendedWait
-            ? max(1, (int) config('pi_agent.timeout_seconds', 240))
-            : max(1, (int) config('pi_agent.quick_timeout_seconds', 90));
+        $timeout = match (true) {
+            $statusOnly => max(1, (int) config('pi_agent.status_timeout_seconds', 8)),
+            $needsExtendedWait => max(1, (int) config('pi_agent.timeout_seconds', 240)),
+            default => max(1, (int) config('pi_agent.quick_timeout_seconds', 90)),
+        };
 
         if ($baseUrl === '' || $token === '') {
             return [
@@ -43,6 +48,9 @@ class PiTailscaleAuthLinkService
         $body = [
             'force_reauth' => $forceReauth,
         ];
+        if ($statusOnly) {
+            $body['status_only'] = true;
+        }
         if ($dashboardEmail !== null && $dashboardEmail !== '') {
             $body['dashboard_email'] = $dashboardEmail;
         }
@@ -99,6 +107,11 @@ class PiTailscaleAuthLinkService
         $message = is_array($payload) ? (string) ($payload['message'] ?? '') : '';
         $authUrl = is_array($payload) && isset($payload['auth_url']) ? (string) $payload['auth_url'] : null;
         $expiresAt = is_array($payload) && isset($payload['expires_at']) ? (string) $payload['expires_at'] : null;
+        $signedInAs = is_array($payload) && isset($payload['signed_in_as']) && is_string($payload['signed_in_as'])
+            ? trim($payload['signed_in_as']) : null;
+        $matchesDashboard = is_array($payload) && array_key_exists('matches_dashboard', $payload)
+            ? (is_bool($payload['matches_dashboard']) ? $payload['matches_dashboard'] : null)
+            : null;
 
         $allowedStatuses = ['already_authenticated', 'action_required', 'unavailable', 'error'];
         if (! in_array($status, $allowedStatuses, true)) {
@@ -119,6 +132,8 @@ class PiTailscaleAuthLinkService
             'auth_url' => $status === 'action_required' ? $validAuthUrl : null,
             'expires_at' => $expiresAt !== '' ? $expiresAt : null,
             'message' => $message !== '' ? $message : $this->defaultMessageForStatus($status),
+            'signed_in_as' => $signedInAs !== '' ? $signedInAs : null,
+            'matches_dashboard' => $matchesDashboard,
         ];
     }
 

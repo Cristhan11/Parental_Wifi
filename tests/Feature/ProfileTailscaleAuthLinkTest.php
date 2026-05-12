@@ -180,6 +180,133 @@ class ProfileTailscaleAuthLinkTest extends TestCase
         });
     }
 
+    public function test_status_only_check_uses_dashboard_email_and_returns_signed_in_as(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.status_timeout_seconds', 5);
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/auth-link' => Http::response([
+                'status' => 'already_authenticated',
+                'auth_url' => null,
+                'expires_at' => null,
+                'message' => 'Pi is signed in to Tailscale as parent-status@example.com.',
+                'signed_in_as' => 'parent-status@example.com',
+                'matches_dashboard' => true,
+            ], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'role' => User::ROLE_PARENT,
+            'email' => 'parent-status@example.com',
+            'email_verified_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('profile.tailscale.auth-link'), [
+            'status_only' => true,
+        ]);
+        $response->assertOk();
+        $response->assertJsonPath('status', 'already_authenticated');
+        $response->assertJsonPath('status_only', true);
+        $response->assertJsonPath('signed_in_as', 'parent-status@example.com');
+        $response->assertJsonPath('matches_dashboard', true);
+        $response->assertJsonPath('sync_tailscale_with_dashboard', false);
+
+        Http::assertSent(function (Request $request): bool {
+            $body = json_decode($request->body(), true);
+
+            return $request->url() === 'http://127.0.0.1:9098/v1/tailscale/auth-link'
+                && is_array($body)
+                && ($body['status_only'] ?? null) === true
+                && ($body['dashboard_email'] ?? null) === 'parent-status@example.com';
+        });
+    }
+
+    public function test_target_email_is_used_when_it_matches_session_verified_new_email(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/auth-link' => Http::response([
+                'status' => 'action_required',
+                'auth_url' => 'https://login.tailscale.com/a/target-email',
+                'expires_at' => null,
+                'message' => 'Open this link to finish.',
+            ], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'role' => User::ROLE_PARENT,
+            'email' => 'old-parent@example.com',
+            'email_verified_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        // Mirror what `verifyProfileEmailChangeCode` puts in the session after the parent confirms
+        // the 6-digit code for their new email; the controller must trust target_email only when it
+        // matches this verified value.
+        $verifiedPayload = [
+            'email' => 'new-parent@example.com',
+            'expires_at' => now()->addMinutes(20)->getTimestamp(),
+        ];
+
+        $response = $this->actingAs($user)
+            ->withSession(['profile_email_change_verified' => $verifiedPayload])
+            ->postJson(route('profile.tailscale.auth-link'), [
+                'sync_tailscale_with_dashboard' => true,
+                'target_email' => 'new-parent@example.com',
+            ]);
+        $response->assertOk();
+        $response->assertJsonPath('used_target_email', true);
+
+        Http::assertSent(function (Request $request): bool {
+            $body = json_decode($request->body(), true);
+
+            return is_array($body)
+                && ($body['dashboard_email'] ?? null) === 'new-parent@example.com';
+        });
+    }
+
+    public function test_target_email_is_ignored_when_session_has_no_matching_verified_email(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/auth-link' => Http::response([
+                'status' => 'already_authenticated',
+                'auth_url' => null,
+                'expires_at' => null,
+                'message' => 'Already signed in.',
+            ], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'role' => User::ROLE_PARENT,
+            'email' => 'real-parent@example.com',
+            'email_verified_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('profile.tailscale.auth-link'), [
+            'sync_tailscale_with_dashboard' => true,
+            'target_email' => 'attacker@example.com',
+        ]);
+        $response->assertOk();
+        $response->assertJsonPath('used_target_email', false);
+
+        Http::assertSent(function (Request $request): bool {
+            $body = json_decode($request->body(), true);
+
+            // Falls back to the saved email — attacker-supplied target ignored.
+            return is_array($body)
+                && ($body['dashboard_email'] ?? null) === 'real-parent@example.com';
+        });
+    }
+
     public function test_rate_limit_blocks_excessive_auth_link_requests(): void
     {
         Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
