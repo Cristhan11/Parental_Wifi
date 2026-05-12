@@ -6,6 +6,8 @@ After=network.target
 Type=simple
 User=www-data
 Group=www-data
+# Allow tailscale logout/login without adding www-data to /etc/group (tailscaled socket is often group tailscale).
+SupplementaryGroups=tailscale
 WorkingDirectory=/var/www/parental_wifi
 Environment=PI_AGENT_HOST=127.0.0.1
 Environment=PI_AGENT_PORT=9098

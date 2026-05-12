@@ -4,15 +4,7 @@
             tailscaleLoading: false,
             tailscaleResult: null,
             tailscaleError: null,
-            lastTailscaleForce: false,
-            requestTailscaleSwitch() {
-                if (! confirm(@js(__('This signs the Pi out of Tailscale until you finish the browser login. Remote access over Tailscale stops until you complete it. Continue?')))) {
-                    return;
-                }
-                this.fetchTailscaleLink(true);
-            },
-            async fetchTailscaleLink(forceReauth = false) {
-                this.lastTailscaleForce = !!forceReauth;
+            async setupTailscaleRemoteAccess() {
                 this.tailscaleLoading = true;
                 this.tailscaleError = null;
                 try {
@@ -24,11 +16,11 @@
                             'X-Requested-With': 'XMLHttpRequest',
                             'X-CSRF-TOKEN': @js(csrf_token()),
                         },
-                        body: JSON.stringify({ force_reauth: !!forceReauth }),
+                        body: JSON.stringify({ sync_tailscale_with_dashboard: true }),
                     });
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok) {
-                        this.tailscaleError = data?.message ?? @js(__('Failed to get Tailscale sign-in link.'));
+                        this.tailscaleError = data?.message ?? @js(__('Could not reach the Pi helper. Try again in a few minutes.'));
                         this.tailscaleResult = null;
                         return;
                     }
@@ -48,54 +40,27 @@
             </h2>
 
             <p class="mt-1 text-sm text-gray-600">
-                {{ __('To reach this dashboard from outside your home Wi-Fi, the Raspberry Pi must be signed in to Tailscale. Use the same identity you use for the login email (:email) when Tailscale asks you to sign in.', ['email' => $user->email]) }}
-            </p>
-            <p class="mt-2 text-sm text-gray-600">
-                {{ __('If the Pi was signed in with a different Google or Microsoft account, use “Sign in with a different Tailscale account” so the Pi can get a fresh link for this email.') }}
+                {{ __('Use one button to connect this Raspberry Pi to Tailscale with the same identity as your login email (:email). If the Pi was on a different account, we sign it out first, then you open the link and sign in on your phone or computer.', ['email' => $user->email]) }}
             </p>
         </header>
 
         <div class="mt-6 rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800">
             <div class="flex flex-wrap items-center justify-between gap-3">
                 <p class="font-medium text-gray-900">{{ __('Tailscale on the Pi') }}</p>
-                <div class="flex flex-wrap items-center gap-2">
-                    <button
-                        type="button"
-                        class="rounded-md bg-[#FFDE15] px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
-                        @click="fetchTailscaleLink()"
-                        :disabled="tailscaleLoading"
-                    >
-                        <span x-show="!tailscaleLoading">{{ __('Get Tailscale sign-in link') }}</span>
-                        <span x-show="tailscaleLoading" style="display: none;">{{ __('Loading…') }}</span>
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                        @click="fetchTailscaleLink(lastTailscaleForce)"
-                        :disabled="tailscaleLoading"
-                        x-show="tailscaleResult || tailscaleError"
-                        style="display: none;"
-                    >
-                        {{ __('Refresh link') }}
-                    </button>
-                    <button
-                        type="button"
-                        class="rounded-md border border-amber-600 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-50 disabled:opacity-50"
-                        @click="requestTailscaleSwitch()"
-                        :disabled="tailscaleLoading"
-                    >
-                        {{ __('Sign in with a different Tailscale account') }}
-                    </button>
-                </div>
+                <button
+                    type="button"
+                    class="rounded-md bg-[#FFDE15] px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+                    @click="setupTailscaleRemoteAccess()"
+                    :disabled="tailscaleLoading"
+                >
+                    <span x-show="!tailscaleLoading">{{ __('Set up remote access (Tailscale)') }}</span>
+                    <span x-show="tailscaleLoading" style="display: none;">{{ __('Working…') }}</span>
+                </button>
             </div>
 
             <template x-if="tailscaleResult">
                 <div class="mt-3 border-t border-gray-200 pt-3">
-                    <p>
-                        <span class="font-medium">{{ __('Pi status:') }}</span>
-                        <span x-text="tailscaleResult.status"></span>
-                    </p>
-                    <p class="mt-1" x-text="tailscaleResult.message"></p>
+                    <p class="text-gray-800" x-text="tailscaleResult.message"></p>
                     <template x-if="tailscaleResult.status === 'action_required' && tailscaleResult.auth_url">
                         <p class="mt-2">
                             <a
@@ -104,7 +69,7 @@
                                 rel="noopener noreferrer"
                                 class="font-medium text-blue-700 underline"
                             >
-                                {{ __('Open Tailscale sign-in link') }}
+                                {{ __('Open sign-in link') }}
                             </a>
                         </p>
                     </template>

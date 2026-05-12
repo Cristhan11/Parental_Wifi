@@ -45,7 +45,9 @@ class ProfileTailscaleAuthLinkTest extends TestCase
             }
             $data = json_decode($request->body(), true);
 
-            return is_array($data) && ($data['force_reauth'] ?? false) === false;
+            return is_array($data)
+                && ($data['force_reauth'] ?? false) === false
+                && ! array_key_exists('dashboard_email', $data);
         });
 
         $this->assertDatabaseHas('security_audit_events', [
@@ -82,6 +84,7 @@ class ProfileTailscaleAuthLinkTest extends TestCase
         $response->assertOk();
         $response->assertJsonPath('status', 'action_required');
         $response->assertJsonPath('force_reauth', true);
+        $response->assertJsonPath('sync_tailscale_with_dashboard', false);
 
         Http::assertSent(function (Request $request): bool {
             if ($request->url() !== 'http://127.0.0.1:9098/v1/tailscale/auth-link' || ! $request->hasHeader('X-Pi-Agent-Token', 'secret')) {
@@ -90,6 +93,47 @@ class ProfileTailscaleAuthLinkTest extends TestCase
             $data = json_decode($request->body(), true);
 
             return is_array($data) && ($data['force_reauth'] ?? null) === true;
+        });
+    }
+
+    public function test_sync_tailscale_sends_dashboard_email_to_pi_agent(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.timeout_seconds', 8);
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/auth-link' => Http::response([
+                'status' => 'already_authenticated',
+                'auth_url' => null,
+                'expires_at' => null,
+                'message' => 'Matched.',
+            ], 200),
+        ]);
+
+        $user = User::factory()->create([
+            'role' => User::ROLE_PARENT,
+            'email' => 'parent-sync@example.com',
+            'email_verified_at' => now(),
+            'approved_at' => now(),
+        ]);
+
+        $response = $this->actingAs($user)->postJson(route('profile.tailscale.auth-link'), [
+            'sync_tailscale_with_dashboard' => true,
+        ]);
+        $response->assertOk();
+        $response->assertJsonPath('sync_tailscale_with_dashboard', true);
+        $response->assertJsonPath('force_reauth', false);
+
+        Http::assertSent(function (Request $request): bool {
+            if ($request->url() !== 'http://127.0.0.1:9098/v1/tailscale/auth-link' || ! $request->hasHeader('X-Pi-Agent-Token', 'secret')) {
+                return false;
+            }
+            $data = json_decode($request->body(), true);
+
+            return is_array($data)
+                && ($data['force_reauth'] ?? null) === false
+                && ($data['dashboard_email'] ?? null) === 'parent-sync@example.com';
         });
     }
 
@@ -132,7 +176,6 @@ class ProfileTailscaleAuthLinkTest extends TestCase
             ->get(route('profile.edit'))
             ->assertOk()
             ->assertSee('Remote dashboard access (Tailscale)', false)
-            ->assertSee('Get Tailscale sign-in link', false)
-            ->assertSee('Sign in with a different Tailscale account', false);
+            ->assertSee('Set up remote access (Tailscale)', false);
     }
 }

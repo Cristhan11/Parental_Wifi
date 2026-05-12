@@ -11,7 +11,8 @@ class PiTailscaleAuthLinkService
     /**
      * Request current auth-link status from Pi local agent.
      *
-     * @param  bool  $forceReauth  When true, the Pi signs out of Tailscale first so a fresh browser sign-in URL is returned.
+     * @param  bool  $forceReauth  When true, the Pi signs out of Tailscale first, then returns a fresh sign-in URL (email-change flow).
+     * @param  string|null  $dashboardEmail  When non-null, Pi compares Tailscale login to this email; mismatch triggers logout + sign-in URL.
      * @return array{
      *   ok: bool,
      *   status: string,
@@ -20,7 +21,7 @@ class PiTailscaleAuthLinkService
      *   message: string
      * }
      */
-    public function fetchAuthLink(bool $forceReauth = false): array
+    public function fetchAuthLink(bool $forceReauth = false, ?string $dashboardEmail = null): array
     {
         $baseUrl = rtrim((string) config('pi_agent.base_url'), '/');
         $token = (string) config('pi_agent.token');
@@ -36,15 +37,20 @@ class PiTailscaleAuthLinkService
             ];
         }
 
+        $body = [
+            'force_reauth' => $forceReauth,
+        ];
+        if ($dashboardEmail !== null && $dashboardEmail !== '') {
+            $body['dashboard_email'] = $dashboardEmail;
+        }
+
         try {
             $response = Http::acceptJson()
                 ->asJson()
                 ->withHeaders(['X-Pi-Agent-Token' => $token])
                 ->timeout($timeout)
                 ->retry(1, 200)
-                ->post($baseUrl.'/v1/tailscale/auth-link', [
-                    'force_reauth' => $forceReauth,
-                ]);
+                ->post($baseUrl.'/v1/tailscale/auth-link', $body);
         } catch (ConnectionException) {
             return [
                 'ok' => false,

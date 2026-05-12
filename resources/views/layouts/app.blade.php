@@ -11,7 +11,7 @@
 
         <title>{{ config('app.name', 'Laravel') }}</title>
 
-        {{-- No external CDNs: captive-portal / Pi Wi‑Fi often has no WAN until the device is allowed through. --}}
+        {{-- Dashboard: Vite-bundled JS/CSS only; fonts from @fontsource in app.css. No CDN (LAN / captive without WAN). --}}
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
     <body class="font-sans antialiased">

@@ -62,6 +62,80 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def _login_from_status_json(data: dict[str, Any]) -> str | None:
+    self_block = data.get("Self")
+    if not isinstance(self_block, dict):
+        return None
+    uid = self_block.get("UserID")
+    users = data.get("User")
+    if not isinstance(users, dict) or uid is None:
+        return None
+    key = str(uid)
+    prof = users.get(key)
+    if not isinstance(prof, dict):
+        return None
+    for field in ("LoginName", "DisplayName"):
+        val = prof.get(field)
+        if isinstance(val, str) and val.strip():
+            return val.strip()
+    return None
+
+
+def _login_from_status_text(stdout: str) -> str | None:
+    for line in stdout.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        parts = line.split()
+        if len(parts) >= 3:
+            candidate = parts[2]
+            if "@" in candidate or candidate.endswith("@"):
+                return candidate
+    return None
+
+
+def _tailscale_logged_in_identity() -> str | None:
+    """
+    Return Tailscale login identity string if connected, None if not logged in.
+    Return empty string if connected but identity could not be parsed.
+    """
+    r = _run_tailscale(["status", "--json"])
+    if r.returncode == 0 and (r.stdout or "").strip():
+        try:
+            data = json.loads(r.stdout)
+            if isinstance(data, dict):
+                hint = _login_from_status_json(data)
+                if hint:
+                    return hint
+        except json.JSONDecodeError:
+            pass
+
+    r2 = _run_tailscale(["status"])
+    if r2.returncode != 0:
+        return None
+    hint = _login_from_status_text(r2.stdout or "")
+    return hint if hint else ""
+
+
+def _identity_matches_dashboard(tailscale_user: str, dashboard: str) -> bool:
+    a = tailscale_user.strip().lower()
+    b = dashboard.strip().lower()
+    if not a or not b:
+        return False
+    if a == b:
+        return True
+    if "@" not in a or "@" not in b:
+        return False
+    la, da = a.split("@", 1)
+    lb, db = b.split("@", 1)
+    if la != lb:
+        return False
+    if da == db:
+        return True
+    google_domains = frozenset({"gmail.com", "google.com", "googlemail.com"})
+    return da in google_domains and db in google_domains
+
+
 def _request_login_url() -> dict[str, Any]:
     """Assume Pi is not authenticated; obtain a login.tailscale.com URL."""
     try:
@@ -92,7 +166,40 @@ def _request_login_url() -> dict[str, Any]:
     }
 
 
-def _resolve_auth_link(force_reauth: bool) -> dict[str, Any]:
+def _logout_then_login() -> dict[str, Any]:
+    try:
+        _run_tailscale(["logout"])
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {
+            "status": "unavailable",
+            "auth_url": None,
+            "expires_at": None,
+            "message": "Tailscale command is unavailable.",
+        }
+    try:
+        status_after = _run_tailscale(["status"])
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {
+            "status": "unavailable",
+            "auth_url": None,
+            "expires_at": None,
+            "message": "Tailscale command is unavailable.",
+        }
+    if status_after.returncode == 0:
+        return {
+            "status": "error",
+            "auth_url": None,
+            "expires_at": None,
+            "message": (
+                "Could not sign the Pi out of Tailscale. The agent process needs permission to run "
+                "`tailscale logout` (for example: systemd SupplementaryGroups=tailscale, or run the agent as root). "
+                "See docs/PI_TAILSCALE_AUTH_LINK_AGENT.md."
+            ),
+        }
+    return _request_login_url()
+
+
+def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None) -> dict[str, Any]:
     if not TOKEN:
         return {
             "status": "error",
@@ -102,36 +209,21 @@ def _resolve_auth_link(force_reauth: bool) -> dict[str, Any]:
         }
 
     if force_reauth:
-        try:
-            _run_tailscale(["logout"])
-        except (subprocess.TimeoutExpired, FileNotFoundError):
+        return _logout_then_login()
+
+    dash = (dashboard_email or "").strip()
+    if dash:
+        ident = _tailscale_logged_in_identity()
+        if ident is None:
+            return _request_login_url()
+        if ident and _identity_matches_dashboard(ident, dash):
             return {
-                "status": "unavailable",
+                "status": "already_authenticated",
                 "auth_url": None,
                 "expires_at": None,
-                "message": "Tailscale command is unavailable.",
+                "message": "Pi is already signed in to Tailscale with this dashboard account.",
             }
-        try:
-            status_after = _run_tailscale(["status"])
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            return {
-                "status": "unavailable",
-                "auth_url": None,
-                "expires_at": None,
-                "message": "Tailscale command is unavailable.",
-            }
-        if status_after.returncode == 0:
-            return {
-                "status": "error",
-                "auth_url": None,
-                "expires_at": None,
-                "message": (
-                    "Could not sign the Pi out of Tailscale. The agent user (often www-data) "
-                    "needs permission to run: tailscale logout — for example add it to the "
-                    "tailscale group, then restart pi_tailscale_auth_agent."
-                ),
-            }
-        return _request_login_url()
+        return _logout_then_login()
 
     try:
         status_res = _run_tailscale(["status"])
@@ -144,7 +236,6 @@ def _resolve_auth_link(force_reauth: bool) -> dict[str, Any]:
         }
 
     if status_res.returncode == 0:
-        # Already authenticated.
         return {
             "status": "already_authenticated",
             "auth_url": None,
@@ -193,15 +284,19 @@ class Handler(BaseHTTPRequestHandler):
             length = 0
         raw = self.rfile.read(length) if length > 0 else b""
         force_reauth = False
+        dashboard_email: str | None = None
         if raw.strip():
             try:
                 parsed = json.loads(raw.decode("utf-8"))
                 if isinstance(parsed, dict):
                     force_reauth = bool(parsed.get("force_reauth"))
+                    de = parsed.get("dashboard_email")
+                    if isinstance(de, str) and de.strip():
+                        dashboard_email = de.strip()
             except json.JSONDecodeError:
-                force_reauth = False
+                pass
 
-        result = _resolve_auth_link(force_reauth)
+        result = _resolve_auth_link(force_reauth, dashboard_email)
         if result.get("status") not in STATUS_ALLOWED:
             result = {
                 "status": "error",
@@ -223,4 +318,3 @@ class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
 if __name__ == "__main__":
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     server.serve_forever()
-

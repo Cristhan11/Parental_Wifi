@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Video - {{ $video->title }}</title>
     @include('portal.partials.head-favicon')
-    <link rel="stylesheet" href="/css/portal-captive.css">
+    @include('portal.partials.head-assets')
     <style>
         /* Overlay must never steal taps from the video (dictionary cards are non-interactive). */
         #wordOverlayContainer {

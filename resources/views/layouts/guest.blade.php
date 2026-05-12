@@ -11,7 +11,7 @@
         <link rel="icon" type="image/png" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
         <link rel="shortcut icon" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
         <title>{{ config('app.name', 'Laravel') }}</title>
-        <link rel="stylesheet" href="/css/auth-captive.css">
+        @include('auth.partials.head-assets')
     </head>
     <body class="guest-auth">
         <div class="guest-shell">

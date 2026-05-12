@@ -11,7 +11,7 @@
                 <p class="mb-2 font-semibold">Instructions</p>
                 <ul class="list-inside list-disc space-y-1">
                     <li><strong>Profile</strong> updates your name and email used to sign in. If you change your email, confirm the new address with a code sent to that inbox, then a short Tailscale step appears before the change is saved.</li>
-                    <li><strong>Remote dashboard access (Tailscale)</strong> lets you open a sign-in link for the Pi’s Tailscale client anytime—useful on first setup or when you did not change email but still need to (re)authenticate Tailscale.</li>
+                    <li><strong>Remote dashboard access (Tailscale)</strong> uses one button to line up the Pi with your login email for access from your phone when you are away from home Wi‑Fi.</li>
                     <li><strong>Password</strong> is only if you want a new one—you must type your current password to confirm.</li>
                     <li><strong>Delete account</strong> removes your account for good. Only use it if you are sure.</li>
                 </ul>

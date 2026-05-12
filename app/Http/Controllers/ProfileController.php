@@ -112,11 +112,17 @@ class ProfileController extends Controller
 
         $request->validate([
             'force_reauth' => ['sometimes', 'boolean'],
+            'sync_tailscale_with_dashboard' => ['sometimes', 'boolean'],
         ]);
 
         $forceReauth = $request->boolean('force_reauth');
+        $syncTailscale = $request->boolean('sync_tailscale_with_dashboard') && ! $forceReauth;
+        $dashboardEmail = $syncTailscale ? trim((string) $user->email) : null;
+        if ($dashboardEmail === '') {
+            $dashboardEmail = null;
+        }
 
-        $result = $service->fetchAuthLink($forceReauth);
+        $result = $service->fetchAuthLink($forceReauth, $dashboardEmail);
         $maskedUrl = $service->maskAuthUrl($result['auth_url']);
 
         $auditLogger->record(
@@ -130,6 +136,7 @@ class ProfileController extends Controller
                 'ok' => $result['ok'],
                 'auth_url_masked' => $maskedUrl,
                 'force_reauth' => $forceReauth,
+                'sync_tailscale_with_dashboard' => $syncTailscale,
             ],
         );
 
@@ -140,6 +147,7 @@ class ProfileController extends Controller
             'auth_url' => $result['auth_url'],
             'expires_at' => $result['expires_at'],
             'force_reauth' => $forceReauth,
+            'sync_tailscale_with_dashboard' => $syncTailscale,
         ];
 
         if ($request->expectsJson() || $request->wantsJson()) {

@@ -6,7 +6,7 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Video Result - Parental WiFi</title>
     @include('portal.partials.head-favicon')
-    <link rel="stylesheet" href="/css/portal-captive.css">
+    @include('portal.partials.head-assets')
 </head>
 <body class="portal">
     <div class="portal-result-page">

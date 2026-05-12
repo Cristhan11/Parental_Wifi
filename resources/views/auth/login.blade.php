@@ -7,7 +7,7 @@
     <link rel="icon" type="image/png" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
     <link rel="shortcut icon" href="{{ asset('PARENTAL_WIFI_LOGO.png') }}">
     <title>Login - Parental WiFi</title>
-    <link rel="stylesheet" href="/css/auth-captive.css">
+    @include('auth.partials.head-assets')
 </head>
 <body class="login-page">
     <div class="login-split">
