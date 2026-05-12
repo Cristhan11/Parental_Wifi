@@ -29,6 +29,10 @@ return [
     | timeout only for `tailscale login`; this value must still exceed the worst-case total
     | wall time or Laravel will abort with a connection error while the agent keeps working.
     |
+    | Nginx fastcgi_read_timeout and PHP-FPM max_execution_time often default to ~60s;
+    | PiTailscaleAuthLinkService raises PHP's cap for this request; nginx must allow a long
+    | enough read (see docs/PI_TAILSCALE_AUTH_LINK_AGENT.md).
+    |
     */
     'timeout_seconds' => (int) env('PI_AGENT_TIMEOUT_SECONDS', 240),
 ];

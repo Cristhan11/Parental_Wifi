@@ -44,6 +44,15 @@ class PiTailscaleAuthLinkService
             $body['dashboard_email'] = $dashboardEmail;
         }
 
+        // PHP (max_execution_time) and nginx (fastcgi_read_timeout) often default to ~60s and end
+        // the request before Guzzle's PI_AGENT_TIMEOUT_SECONDS elapses, which surfaces as
+        // ConnectionException. Extend PHP's cap for this single outbound wait to the Pi agent.
+        $wallClockCap = min(600, $timeout + 120);
+        if (function_exists('set_time_limit')) {
+            @set_time_limit($wallClockCap);
+        }
+        @ini_set('max_execution_time', (string) $wallClockCap);
+
         try {
             $response = Http::acceptJson()
                 ->asJson()
@@ -60,7 +69,7 @@ class PiTailscaleAuthLinkService
                 'status' => 'unavailable',
                 'auth_url' => null,
                 'expires_at' => null,
-                'message' => 'Pi helper service is unavailable. If curl to 127.0.0.1:9098 works as www-data but this button fails, Laravel may be timing out: set PI_AGENT_TIMEOUT_SECONDS=240 in .env, run php artisan config:clear, redeploy the Pi agent systemd unit (status vs login timeouts), and restart pi_tailscale_auth_agent.',
+                'message' => 'Pi helper service is unavailable. If this shows after ~60–90s, nginx (fastcgi_read_timeout) or PHP-FPM (max_execution_time) is probably cutting the request off; raise both (e.g. 300s). Otherwise confirm PI_AGENT_TIMEOUT_SECONDS in .env, php artisan config:clear, and that pi_tailscale_auth_agent matches the repo unit.',
             ];
         } catch (Throwable) {
             return [
@@ -196,7 +205,7 @@ class PiTailscaleAuthLinkService
         return match ($status) {
             'already_authenticated' => 'Raspberry Pi is already signed in to Tailscale.',
             'action_required' => 'Open the link to complete Tailscale sign-in for the Raspberry Pi.',
-            'unavailable' => 'Pi helper service is unavailable. If curl to 127.0.0.1:9098 works as www-data but this button fails, Laravel may be timing out: set PI_AGENT_TIMEOUT_SECONDS=240 in .env, run php artisan config:clear, redeploy the Pi agent systemd unit (status vs login timeouts), and restart pi_tailscale_auth_agent.',
+            'unavailable' => 'Pi helper service is unavailable. If this shows after ~60–90s, nginx (fastcgi_read_timeout) or PHP-FPM (max_execution_time) is probably cutting the request off; raise both (e.g. 300s). Otherwise confirm PI_AGENT_TIMEOUT_SECONDS in .env, php artisan config:clear, and that pi_tailscale_auth_agent matches the repo unit.',
             default => 'Tailscale sign-in status is unavailable right now.',
         };
     }

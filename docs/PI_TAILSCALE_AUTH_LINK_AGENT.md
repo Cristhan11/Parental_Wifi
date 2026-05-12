@@ -81,6 +81,7 @@ Set these values in `.env`:
   - Check service: `sudo systemctl status pi_tailscale_auth_agent`
   - Check logs: `sudo journalctl -u pi_tailscale_auth_agent -n 100 --no-pager`
   - If `curl` as `www-data` works but the profile button does not, raise `PI_AGENT_TIMEOUT_SECONDS` (Laravel may be timing out while Tailscale is still running).
+  - **Fails consistently after ~60–90 seconds** (while `.env` has a much larger `PI_AGENT_TIMEOUT_SECONDS`): **nginx** is often waiting on PHP with the default `fastcgi_read_timeout` (60s). In your `server` / `location ~ \.php$` block set `fastcgi_read_timeout 300;` (and reload nginx). If needed, raise `max_execution_time` in `php.ini` or `php_admin_value[max_execution_time]` in the **www** PHP-FPM pool (the app also calls `set_time_limit` for this request, but the pool can still cap you).
 - `Pi helper service rejected the request`:
   - Verify `PI_AGENT_TOKEN` matches between Laravel and service.
 - `Tailscale login did not finish before the command timeout`:
