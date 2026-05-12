@@ -8,6 +8,7 @@ use App\Models\Device;
 use App\Models\DeviceRegistrationRequest;
 use App\Models\Quiz;
 use App\Services\BandwidthUsageService;
+use App\Services\ChildDeviceConnectionRestoreService;
 use App\Services\DeviceService;
 use App\Services\NetworkService;
 use App\Services\TimeTrackingService;
@@ -105,6 +106,8 @@ class DeviceController extends Controller
 
     protected BandwidthUsageService $bandwidthUsageService;
 
+    protected ChildDeviceConnectionRestoreService $childDeviceConnectionRestoreService;
+
     /**
      * Constructor - Called automatically when controller is created.
      *
@@ -116,19 +119,22 @@ class DeviceController extends Controller
      * @param  TimeTrackingService  $timeTrackingService  Time management
      * @param  UsageChartService  $usageChartService  Per-device / dashboard usage chart payload
      * @param  BandwidthUsageService  $bandwidthUsageService  Per-device bandwidth chart payload
+     * @param  ChildDeviceConnectionRestoreService  $childDeviceConnectionRestoreService  Captive unblock + nds auth after provisioning
      */
     public function __construct(
         DeviceService $deviceService,
         NetworkService $networkService,
         TimeTrackingService $timeTrackingService,
         UsageChartService $usageChartService,
-        BandwidthUsageService $bandwidthUsageService
+        BandwidthUsageService $bandwidthUsageService,
+        ChildDeviceConnectionRestoreService $childDeviceConnectionRestoreService
     ) {
         $this->deviceService = $deviceService;
         $this->networkService = $networkService;
         $this->timeTrackingService = $timeTrackingService;
         $this->usageChartService = $usageChartService;
         $this->bandwidthUsageService = $bandwidthUsageService;
+        $this->childDeviceConnectionRestoreService = $childDeviceConnectionRestoreService;
     }
 
     /**
@@ -264,7 +270,7 @@ class DeviceController extends Controller
         $fallbackMac = implode(':', str_split(str_pad($macHex, 12, '0'), 2));
         $mac = $registrationRequest->mac_address ?: $fallbackMac;
 
-        Device::create([
+        $device = Device::create([
             'user_id' => Auth::id(),
             'name' => $deviceName,
             'mac_address' => $this->deviceService->normalizeMacAddress($mac),
@@ -282,9 +288,17 @@ class DeviceController extends Controller
             'user_id' => Auth::id(),
         ]);
 
-        return redirect()->route('accounts.index')
-            ->with('success', 'Device request approved.')
-            ->with('info', 'Network rules update on the gateway in a few seconds. Check the status line below if live updates are enabled.');
+        $this->childDeviceConnectionRestoreService->tryRestoreAfterDeviceProvisioned($device->fresh());
+
+        $session = [
+            'success' => 'Device request approved.',
+            'info' => 'Network rules update on the gateway in a few seconds. Check the status line below if live updates are enabled.',
+        ];
+        if ($this->clientIpMatchesDevicePresence($request, $device->fresh())) {
+            $session['device_restore_portal_mac'] = $device->mac_address;
+        }
+
+        return redirect()->route('accounts.index')->with($session);
     }
 
     public function rejectRegistrationRequest(DeviceRegistrationRequest $registrationRequest): RedirectResponse
@@ -563,6 +577,8 @@ class DeviceController extends Controller
             'total_time_allocated' => $validated['total_time_allocated'],
         ]);
 
+        $this->attachProvisioningClientIpWhenLanArpMatches($request, $device, $validated);
+
         // Apply network-level blocking if status is 'blocked'
         // This ensures database status matches network status
         // If device is created as 'blocked', block it at network level immediately
@@ -576,10 +592,77 @@ class DeviceController extends Controller
             $this->networkService->whitelistDevice($device);
         }
 
-        // Redirect to accounts view with success message
-        // ->with() stores message in session that displays on next page
-        return redirect()->route('accounts.index')
-            ->with('success', 'Device created successfully!');
+        $this->childDeviceConnectionRestoreService->tryRestoreAfterDeviceProvisioned($device->fresh());
+
+        $session = ['success' => 'Device created successfully!'];
+        if ($this->clientIpMatchesDevicePresence($request, $device->fresh())) {
+            $session['device_restore_portal_mac'] = $device->mac_address;
+        }
+
+        return redirect()->route('accounts.index')->with($session);
+    }
+
+    /**
+     * When adding a whitelisted parent/guest from Advanced Options, if the gateway-reported
+     * connected list shows this device's MAC using the same IP as the browser submitting the
+     * form, persist that IP so the portal countdown redirect matches quiz/video behavior.
+     */
+    private function attachProvisioningClientIpWhenLanArpMatches(Request $request, Device $device, array $validated): void
+    {
+        $role = strtolower((string) ($validated['role'] ?? 'child'));
+        $status = strtolower((string) ($validated['status'] ?? ''));
+        if ($status !== 'whitelisted' || ! in_array($role, ['parent', 'guest'], true)) {
+            return;
+        }
+
+        if (! $request->boolean('advanced_mode')) {
+            return;
+        }
+
+        $clientIp = trim((string) ($request->ip() ?: ''));
+        if ($clientIp === '' || filter_var($clientIp, FILTER_VALIDATE_IP) === false) {
+            return;
+        }
+
+        $isLoopback = in_array($clientIp, ['127.0.0.1', '::1'], true);
+        if ($isLoopback && ! app()->environment(['local', 'testing'])) {
+            return;
+        }
+
+        $deviceMac = $this->deviceService->normalizeMacAddress((string) ($device->mac_address ?? ''));
+
+        try {
+            foreach ($this->networkService->getConnectedDevices() as $row) {
+                $rawMac = $row['mac_address'] ?? '';
+                if ($rawMac === '') {
+                    continue;
+                }
+                if ($this->deviceService->normalizeMacAddress((string) $rawMac) !== $deviceMac) {
+                    continue;
+                }
+                $rowIp = trim((string) ($row['ip_address'] ?? ''));
+                if ($rowIp !== '' && $rowIp === $clientIp) {
+                    $device->update(['ip_address' => $clientIp]);
+
+                    return;
+                }
+            }
+        } catch (\Exception $e) {
+            // Non-fatal: list may be unavailable in dev or on misconfigured gateways.
+        }
+    }
+
+    /**
+     * True when the HTTP client address matches the device's last known IP (e.g. the same
+     * handset that submitted a registration request is approving on the same network).
+     * Used to trigger the same portal redirect countdown as quiz/video success.
+     */
+    private function clientIpMatchesDevicePresence(Request $request, Device $device): bool
+    {
+        $clientIp = trim((string) ($request->ip() ?: ''));
+        $deviceIp = trim((string) ($device->ip_address ?? ''));
+
+        return $clientIp !== '' && $deviceIp !== '' && $clientIp === $deviceIp;
     }
 
     private function generateSyntheticMac(): string

@@ -158,9 +158,9 @@ class ProfileTailscaleAuthLinkTest extends TestCase
             'approved_at' => now(),
         ]);
 
-        $this->actingAs($user)->post(route('profile.tailscale.auth-link'))->assertRedirect(route('profile.edit'));
-        $this->actingAs($user)->post(route('profile.tailscale.auth-link'))->assertRedirect(route('profile.edit'));
-        $this->actingAs($user)->post(route('profile.tailscale.auth-link'))->assertRedirect(route('profile.edit'));
+        for ($i = 0; $i < 20; $i++) {
+            $this->actingAs($user)->post(route('profile.tailscale.auth-link'))->assertRedirect(route('profile.edit'));
+        }
         $this->actingAs($user)->post(route('profile.tailscale.auth-link'))->assertStatus(429);
     }
 

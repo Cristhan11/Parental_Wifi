@@ -60,7 +60,8 @@ class AppServiceProvider extends ServiceProvider
             $userPart = $request->user()?->getAuthIdentifier() ?? 'guest';
             $ipPart = $request->ip() ?? '0.0.0.0';
 
-            return Limit::perMinutes(10, 3)->by($userPart.'|'.$ipPart);
+            // Enough headroom for real setup (sync + force + retries); still bounded per user+IP.
+            return Limit::perMinutes(10, 20)->by($userPart.'|'.$ipPart);
         });
 
         RemoteAccessSetting::applyReportingDashboardUrlToConfig();

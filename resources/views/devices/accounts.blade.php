@@ -72,6 +72,11 @@
             @if(session('success'))
                 <div class="mb-4 p-4 rounded-lg" style="background-color: #10B981; color: white;">
                     {{ session('success') }}
+                    @if(session('device_restore_portal_mac'))
+                        <p class="mt-2 text-sm font-medium opacity-95">
+                            Finishing internet sign-in… redirecting in <span id="accounts-portal-restore-countdown">3</span>s
+                        </p>
+                    @endif
                 </div>
             @endif
 
@@ -229,4 +234,26 @@
     });
 </script>
 @endpush
+
+@if(session('device_restore_portal_mac'))
+@push('scripts')
+<script>
+(function () {
+    var url = @json(route('portal.landing', ['mac' => session('device_restore_portal_mac')]));
+    var sec = 3;
+    var el = document.getElementById('accounts-portal-restore-countdown');
+    var tick = function () {
+        if (el) el.textContent = String(sec);
+        if (sec <= 0) {
+            window.location.href = url;
+            return;
+        }
+        sec -= 1;
+        setTimeout(tick, 1000);
+    };
+    tick();
+})();
+</script>
+@endpush
+@endif
 

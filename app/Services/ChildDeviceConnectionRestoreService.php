@@ -6,9 +6,9 @@ use App\Models\Device;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Restores captive portal / network access for a child device that still has
- * remaining internet time (same primitives as quiz/video grants and
- * CheckTimeExpiration's "devices with time" path).
+ * Restores captive portal / network access after a device row is created or approved:
+ * whitelisted parent/guest (network whitelist + NoDogSplash auth), or child-style
+ * active/blocked with remaining time (same primitives as quiz/video grants).
  */
 class ChildDeviceConnectionRestoreService
 {
@@ -16,6 +16,46 @@ class ChildDeviceConnectionRestoreService
         protected NetworkService $networkService,
         protected NoDogSplashService $noDogSplashService,
     ) {}
+
+    /**
+     * After provisioning a device record, apply the right network + captive steps.
+     * Whitelisted devices (typical parent/guest accounts) skip time-based restore but still
+     * need whitelist rules and ndsctl auth to leave the splash.
+     */
+    public function tryRestoreAfterDeviceProvisioned(?Device $device): void
+    {
+        if (! $device) {
+            return;
+        }
+
+        $device->refresh();
+
+        if ($device->isWhitelisted()) {
+            try {
+                $this->networkService->whitelistDevice($device);
+            } catch (\Exception $e) {
+                Log::debug('whitelistDevice after provision failed (non-fatal)', [
+                    'device_id' => $device->id,
+                    'mac_address' => $device->mac_address,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            try {
+                $this->noDogSplashService->allowDeviceThrough($device);
+            } catch (\Exception $e) {
+                Log::debug('allowDeviceThrough after whitelist provision failed (non-fatal)', [
+                    'device_id' => $device->id,
+                    'mac_address' => $device->mac_address,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            return;
+        }
+
+        $this->tryRestoreIfHasRemainingTime($device);
+    }
 
     /**
      * If the device is non-whitelisted, has remaining_time_minutes > 0, and status is
