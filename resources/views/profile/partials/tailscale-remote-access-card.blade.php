@@ -32,6 +32,37 @@
                     this.tailscaleLoading = false;
                 }
             },
+            async fetchForceTailscaleSignIn() {
+                if (! confirm(@js(__('This signs the Pi out of Tailscale until you finish the browser login. Remote access over Tailscale pauses until you complete it. Continue?')))) {
+                    return;
+                }
+                this.tailscaleLoading = true;
+                this.tailscaleError = null;
+                try {
+                    const res = await fetch(@js(route('profile.tailscale.auth-link')), {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Accept': 'application/json',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'X-CSRF-TOKEN': @js(csrf_token()),
+                        },
+                        body: JSON.stringify({ force_reauth: true }),
+                    });
+                    const data = await res.json().catch(() => ({}));
+                    if (!res.ok) {
+                        this.tailscaleError = data?.message ?? @js(__('Could not get a sign-in link. Try again in a few minutes.'));
+                        this.tailscaleResult = null;
+                        return;
+                    }
+                    this.tailscaleResult = data;
+                } catch (e) {
+                    this.tailscaleResult = null;
+                    this.tailscaleError = @js(__('Failed to contact local Pi helper service.'));
+                } finally {
+                    this.tailscaleLoading = false;
+                }
+            },
         }"
     >
         <header>
@@ -71,6 +102,19 @@
                             >
                                 {{ __('Open sign-in link') }}
                             </a>
+                        </p>
+                    </template>
+                    <template x-if="tailscaleResult.status === 'already_authenticated'">
+                        <p class="mt-3 text-sm text-gray-700">
+                            {{ __('If the Pi still does not appear in the Tailscale app on your phone, open a new sign-in link and use :email when Tailscale asks.', ['email' => $user->email]) }}
+                            <button
+                                type="button"
+                                class="ml-1 font-medium text-blue-700 underline hover:text-blue-900 disabled:opacity-50"
+                                @click="fetchForceTailscaleSignIn()"
+                                :disabled="tailscaleLoading"
+                            >
+                                {{ __('Get a new sign-in link') }}
+                            </button>
                         </p>
                     </template>
                 </div>
