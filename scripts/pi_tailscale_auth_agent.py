@@ -25,7 +25,10 @@ from typing import Any
 HOST = os.getenv("PI_AGENT_HOST", "127.0.0.1")
 PORT = int(os.getenv("PI_AGENT_PORT", "9098"))
 TOKEN = os.getenv("PI_AGENT_TOKEN", "")
-CMD_TIMEOUT = int(os.getenv("PI_AGENT_COMMAND_TIMEOUT_SECONDS", "60"))
+# Short timeout for status/logout (several calls per HTTP request; keep total wall time bounded).
+CMD_TIMEOUT = int(os.getenv("PI_AGENT_COMMAND_TIMEOUT_SECONDS", "25"))
+# `tailscale login` can be slow on a Pi; use a separate generous cap so Laravel does not time out first.
+LOGIN_TIMEOUT = int(os.getenv("PI_AGENT_LOGIN_TIMEOUT_SECONDS", "120"))
 
 
 def _tailscale_executable() -> str:
@@ -59,13 +62,14 @@ def _json_response(handler: BaseHTTPRequestHandler, code: int, payload: dict[str
         return
 
 
-def _run_tailscale(args: list[str]) -> subprocess.CompletedProcess[str]:
+def _run_tailscale(args: list[str], *, seconds: int | None = None) -> subprocess.CompletedProcess[str]:
+    limit = CMD_TIMEOUT if seconds is None else seconds
     return subprocess.run(
         [TAILSCALE_BIN] + args,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         text=True,
-        timeout=CMD_TIMEOUT,
+        timeout=limit,
         check=False,
     )
 
@@ -158,7 +162,7 @@ def _identity_matches_dashboard(tailscale_user: str, dashboard: str) -> bool:
 def _request_login_url() -> dict[str, Any]:
     """Assume Pi is not authenticated; obtain a login.tailscale.com URL."""
     try:
-        login_res = _run_tailscale(["login"])
+        login_res = _run_tailscale(["login"], seconds=LOGIN_TIMEOUT)
     except FileNotFoundError:
         return {
             "status": "unavailable",
@@ -185,8 +189,8 @@ def _request_login_url() -> dict[str, Any]:
             "expires_at": None,
             "message": (
                 "Tailscale login did not finish before the command timeout, and no auth URL was "
-                "captured. Increase PI_AGENT_COMMAND_TIMEOUT_SECONDS for pi_tailscale_auth_agent "
-                "(e.g. 120), or run `sudo tailscale login` on the Pi once and try again."
+                "captured. Increase PI_AGENT_LOGIN_TIMEOUT_SECONDS for pi_tailscale_auth_agent "
+                "(e.g. 180), or run `sudo tailscale login` on the Pi once and try again."
             ),
         }
 

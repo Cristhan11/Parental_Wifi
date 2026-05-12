@@ -25,7 +25,7 @@ class PiTailscaleAuthLinkService
     {
         $baseUrl = $this->normalizePiAgentBaseUrl(rtrim((string) config('pi_agent.base_url'), '/'));
         $token = (string) config('pi_agent.token');
-        $timeout = max(1, (int) config('pi_agent.timeout_seconds', 8));
+        $timeout = max(1, (int) config('pi_agent.timeout_seconds', 240));
 
         if ($baseUrl === '' || $token === '') {
             return [
@@ -53,7 +53,6 @@ class PiTailscaleAuthLinkService
                 ])
                 ->withHeaders(['X-Pi-Agent-Token' => $token])
                 ->timeout($timeout)
-                ->retry(1, 200)
                 ->post($baseUrl.'/v1/tailscale/auth-link', $body);
         } catch (ConnectionException) {
             return [
@@ -61,7 +60,7 @@ class PiTailscaleAuthLinkService
                 'status' => 'unavailable',
                 'auth_url' => null,
                 'expires_at' => null,
-                'message' => 'Pi helper service is unavailable. Use http://127.0.0.1:9098 in PI_AGENT_BASE_URL (not localhost) if the agent only listens on IPv4, and avoid HTTP_PROXY for PHP-FPM on this host.',
+                'message' => 'Pi helper service is unavailable. If curl to 127.0.0.1:9098 works as www-data but this button fails, Laravel may be timing out: set PI_AGENT_TIMEOUT_SECONDS=240 in .env, run php artisan config:clear, redeploy the Pi agent systemd unit (status vs login timeouts), and restart pi_tailscale_auth_agent.',
             ];
         } catch (Throwable) {
             return [
@@ -197,7 +196,7 @@ class PiTailscaleAuthLinkService
         return match ($status) {
             'already_authenticated' => 'Raspberry Pi is already signed in to Tailscale.',
             'action_required' => 'Open the link to complete Tailscale sign-in for the Raspberry Pi.',
-            'unavailable' => 'Pi helper service is unavailable. Use http://127.0.0.1:9098 in PI_AGENT_BASE_URL (not localhost) if the agent only listens on IPv4, and avoid HTTP_PROXY for PHP-FPM on this host.',
+            'unavailable' => 'Pi helper service is unavailable. If curl to 127.0.0.1:9098 works as www-data but this button fails, Laravel may be timing out: set PI_AGENT_TIMEOUT_SECONDS=240 in .env, run php artisan config:clear, redeploy the Pi agent systemd unit (status vs login timeouts), and restart pi_tailscale_auth_agent.',
             default => 'Tailscale sign-in status is unavailable right now.',
         };
     }

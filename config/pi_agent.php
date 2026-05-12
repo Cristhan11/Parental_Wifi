@@ -25,10 +25,10 @@ return [
     |--------------------------------------------------------------------------
     |
     | Profile "sync with dashboard" asks the Pi agent to run several tailscale
-    | subprocesses in sequence (status, optional logout/login). On a busy Pi each
-    | step can take several seconds; keep this comfortably above the worst case or
-    | Laravel will time out while the agent is still working.
+    | subprocesses in sequence (status, optional logout/login). The Pi agent uses a long
+    | timeout only for `tailscale login`; this value must still exceed the worst-case total
+    | wall time or Laravel will abort with a connection error while the agent keeps working.
     |
     */
-    'timeout_seconds' => (int) env('PI_AGENT_TIMEOUT_SECONDS', 60),
+    'timeout_seconds' => (int) env('PI_AGENT_TIMEOUT_SECONDS', 240),
 ];
