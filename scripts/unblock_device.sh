@@ -123,11 +123,9 @@ remove_block_rule() {
     # Loop to remove all matching rules (in case duplicates exist)
     # while true = Infinite loop (we'll break out when done)
     while true; do
-        # Try to remove one rule
-        # 2>&1 = Redirect stderr to stdout (capture both)
-        # > /dev/null = Discard output (we only care about exit code)
-        # || true = If command fails, continue anyway (don't exit script)
-        if sudo iptables -D "$chain" -i wlan0 -m mac --mac-source "$mac" -j DROP 2>&1 > /dev/null; then
+        # Try to remove one rule. Use >/dev/null 2>&1 (not 2>&1 >/dev/null) so iptables
+        # does not print "Bad rule" to the terminal when the rule is already absent.
+        if sudo iptables -D "$chain" -i wlan0 -m mac --mac-source "$mac" -j DROP >/dev/null 2>&1; then
             # Rule was removed successfully
             removed_count=$((removed_count + 1))
             # Continue loop to check for more rules

@@ -89,7 +89,7 @@ remove_block_rule() {
     
     # Remove all matching DROP rules
     while true; do
-        if sudo iptables -D "$chain" -i wlan0 -m mac --mac-source "$mac" -j DROP 2>&1 > /dev/null; then
+        if sudo iptables -D "$chain" -i wlan0 -m mac --mac-source "$mac" -j DROP >/dev/null 2>&1; then
             removed_count=$((removed_count + 1))
         else
             break
@@ -123,7 +123,7 @@ remove_accept_rule() {
     
     # Remove all existing ACCEPT rules for this MAC
     while true; do
-        if sudo iptables -D "$chain" -i wlan0 -m mac --mac-source "$mac" -j ACCEPT 2>&1 > /dev/null; then
+        if sudo iptables -D "$chain" -i wlan0 -m mac --mac-source "$mac" -j ACCEPT >/dev/null 2>&1; then
             removed_count=$((removed_count + 1))
         else
             break
