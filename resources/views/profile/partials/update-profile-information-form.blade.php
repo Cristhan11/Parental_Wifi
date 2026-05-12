@@ -49,10 +49,12 @@
                     const res = await fetch(@js(route('profile.tailscale.auth-link')), {
                         method: 'POST',
                         headers: {
+                            'Content-Type': 'application/json',
                             'Accept': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest',
                             'X-CSRF-TOKEN': @js(csrf_token()),
                         },
+                        body: JSON.stringify({ force_reauth: true }),
                     });
                     const data = await res.json();
                     if (!res.ok) {
@@ -276,6 +278,9 @@
                 <h3 class="text-lg font-semibold text-gray-900">{{ __('Finish Tailscale setup for the new email') }}</h3>
                 <p class="mt-2 text-sm text-gray-700">
                     {{ __('You changed your account email. Before we save, update Tailscale so remote access uses this new email too.') }}
+                </p>
+                <p class="mt-2 text-sm text-gray-700">
+                    {{ __('The Pi will sign out of Tailscale first, then you get a browser link—sign in with the same identity as your new dashboard email below.') }}
                 </p>
                 <p class="mt-1 text-sm text-gray-700">
                     {{ __('New email:') }} <span class="font-mono text-gray-900" x-text="formEmail"></span>

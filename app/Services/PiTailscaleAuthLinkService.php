@@ -11,6 +11,7 @@ class PiTailscaleAuthLinkService
     /**
      * Request current auth-link status from Pi local agent.
      *
+     * @param  bool  $forceReauth  When true, the Pi signs out of Tailscale first so a fresh browser sign-in URL is returned.
      * @return array{
      *   ok: bool,
      *   status: string,
@@ -19,7 +20,7 @@ class PiTailscaleAuthLinkService
      *   message: string
      * }
      */
-    public function fetchAuthLink(): array
+    public function fetchAuthLink(bool $forceReauth = false): array
     {
         $baseUrl = rtrim((string) config('pi_agent.base_url'), '/');
         $token = (string) config('pi_agent.token');
@@ -37,10 +38,13 @@ class PiTailscaleAuthLinkService
 
         try {
             $response = Http::acceptJson()
+                ->asJson()
                 ->withHeaders(['X-Pi-Agent-Token' => $token])
                 ->timeout($timeout)
                 ->retry(1, 200)
-                ->post($baseUrl.'/v1/tailscale/auth-link');
+                ->post($baseUrl.'/v1/tailscale/auth-link', [
+                    'force_reauth' => $forceReauth,
+                ]);
         } catch (ConnectionException) {
             return [
                 'ok' => false,

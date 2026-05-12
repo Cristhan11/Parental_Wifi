@@ -62,35 +62,8 @@ def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _resolve_auth_link() -> dict[str, Any]:
-    if not TOKEN:
-        return {
-            "status": "error",
-            "auth_url": None,
-            "expires_at": None,
-            "message": "Pi helper token is not configured.",
-        }
-
-    try:
-        status_res = _run_tailscale(["status"])
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return {
-            "status": "unavailable",
-            "auth_url": None,
-            "expires_at": None,
-            "message": "Tailscale command is unavailable.",
-        }
-
-    if status_res.returncode == 0:
-        # Already authenticated.
-        return {
-            "status": "already_authenticated",
-            "auth_url": None,
-            "expires_at": None,
-            "message": "Pi is already signed in to Tailscale.",
-        }
-
-    # Not authenticated or requires action; request login URL.
+def _request_login_url() -> dict[str, Any]:
+    """Assume Pi is not authenticated; obtain a login.tailscale.com URL."""
     try:
         login_res = _run_tailscale(["login"])
     except (subprocess.TimeoutExpired, FileNotFoundError):
@@ -117,6 +90,69 @@ def _resolve_auth_link() -> dict[str, Any]:
         "expires_at": None,
         "message": "Could not extract a Tailscale auth URL from command output.",
     }
+
+
+def _resolve_auth_link(force_reauth: bool) -> dict[str, Any]:
+    if not TOKEN:
+        return {
+            "status": "error",
+            "auth_url": None,
+            "expires_at": None,
+            "message": "Pi helper token is not configured.",
+        }
+
+    if force_reauth:
+        try:
+            _run_tailscale(["logout"])
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return {
+                "status": "unavailable",
+                "auth_url": None,
+                "expires_at": None,
+                "message": "Tailscale command is unavailable.",
+            }
+        try:
+            status_after = _run_tailscale(["status"])
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return {
+                "status": "unavailable",
+                "auth_url": None,
+                "expires_at": None,
+                "message": "Tailscale command is unavailable.",
+            }
+        if status_after.returncode == 0:
+            return {
+                "status": "error",
+                "auth_url": None,
+                "expires_at": None,
+                "message": (
+                    "Could not sign the Pi out of Tailscale. The agent user (often www-data) "
+                    "needs permission to run: tailscale logout — for example add it to the "
+                    "tailscale group, then restart pi_tailscale_auth_agent."
+                ),
+            }
+        return _request_login_url()
+
+    try:
+        status_res = _run_tailscale(["status"])
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return {
+            "status": "unavailable",
+            "auth_url": None,
+            "expires_at": None,
+            "message": "Tailscale command is unavailable.",
+        }
+
+    if status_res.returncode == 0:
+        # Already authenticated.
+        return {
+            "status": "already_authenticated",
+            "auth_url": None,
+            "expires_at": None,
+            "message": "Pi is already signed in to Tailscale.",
+        }
+
+    return _request_login_url()
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -150,7 +186,22 @@ class Handler(BaseHTTPRequestHandler):
         if not self._authorized():
             return self._reject_unauthorized()
 
-        result = _resolve_auth_link()
+        length_header = self.headers.get("Content-Length", "0")
+        try:
+            length = min(int(length_header), 4096)
+        except ValueError:
+            length = 0
+        raw = self.rfile.read(length) if length > 0 else b""
+        force_reauth = False
+        if raw.strip():
+            try:
+                parsed = json.loads(raw.decode("utf-8"))
+                if isinstance(parsed, dict):
+                    force_reauth = bool(parsed.get("force_reauth"))
+            except json.JSONDecodeError:
+                force_reauth = False
+
+        result = _resolve_auth_link(force_reauth)
         if result.get("status") not in STATUS_ALLOWED:
             result = {
                 "status": "error",

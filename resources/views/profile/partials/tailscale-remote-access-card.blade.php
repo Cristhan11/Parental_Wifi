@@ -4,17 +4,27 @@
             tailscaleLoading: false,
             tailscaleResult: null,
             tailscaleError: null,
-            async fetchTailscaleLink() {
+            lastTailscaleForce: false,
+            requestTailscaleSwitch() {
+                if (! confirm(@js(__('This signs the Pi out of Tailscale until you finish the browser login. Remote access over Tailscale stops until you complete it. Continue?')))) {
+                    return;
+                }
+                this.fetchTailscaleLink(true);
+            },
+            async fetchTailscaleLink(forceReauth = false) {
+                this.lastTailscaleForce = !!forceReauth;
                 this.tailscaleLoading = true;
                 this.tailscaleError = null;
                 try {
                     const res = await fetch(@js(route('profile.tailscale.auth-link')), {
                         method: 'POST',
                         headers: {
+                            'Content-Type': 'application/json',
                             'Accept': 'application/json',
                             'X-Requested-With': 'XMLHttpRequest',
                             'X-CSRF-TOKEN': @js(csrf_token()),
                         },
+                        body: JSON.stringify({ force_reauth: !!forceReauth }),
                     });
                     const data = await res.json().catch(() => ({}));
                     if (!res.ok) {
@@ -40,6 +50,9 @@
             <p class="mt-1 text-sm text-gray-600">
                 {{ __('To reach this dashboard from outside your home Wi-Fi, the Raspberry Pi must be signed in to Tailscale. Use the same identity you use for the login email (:email) when Tailscale asks you to sign in.', ['email' => $user->email]) }}
             </p>
+            <p class="mt-2 text-sm text-gray-600">
+                {{ __('If the Pi was signed in with a different Google or Microsoft account, use “Sign in with a different Tailscale account” so the Pi can get a fresh link for this email.') }}
+            </p>
         </header>
 
         <div class="mt-6 rounded-md border border-gray-200 bg-gray-50 p-4 text-sm text-gray-800">
@@ -58,12 +71,20 @@
                     <button
                         type="button"
                         class="rounded-md border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
-                        @click="fetchTailscaleLink()"
+                        @click="fetchTailscaleLink(lastTailscaleForce)"
                         :disabled="tailscaleLoading"
                         x-show="tailscaleResult || tailscaleError"
                         style="display: none;"
                     >
                         {{ __('Refresh link') }}
+                    </button>
+                    <button
+                        type="button"
+                        class="rounded-md border border-amber-600 px-3 py-2 text-xs font-semibold text-amber-900 hover:bg-amber-50 disabled:opacity-50"
+                        @click="requestTailscaleSwitch()"
+                        :disabled="tailscaleLoading"
+                    >
+                        {{ __('Sign in with a different Tailscale account') }}
                     </button>
                 </div>
             </div>

@@ -110,7 +110,13 @@ class ProfileController extends Controller
             abort(403, 'Access denied.');
         }
 
-        $result = $service->fetchAuthLink();
+        $request->validate([
+            'force_reauth' => ['sometimes', 'boolean'],
+        ]);
+
+        $forceReauth = $request->boolean('force_reauth');
+
+        $result = $service->fetchAuthLink($forceReauth);
         $maskedUrl = $service->maskAuthUrl($result['auth_url']);
 
         $auditLogger->record(
@@ -123,6 +129,7 @@ class ProfileController extends Controller
                 'status' => $result['status'],
                 'ok' => $result['ok'],
                 'auth_url_masked' => $maskedUrl,
+                'force_reauth' => $forceReauth,
             ],
         );
 
@@ -132,6 +139,7 @@ class ProfileController extends Controller
             'message' => $result['message'],
             'auth_url' => $result['auth_url'],
             'expires_at' => $result['expires_at'],
+            'force_reauth' => $forceReauth,
         ];
 
         if ($request->expectsJson() || $request->wantsJson()) {

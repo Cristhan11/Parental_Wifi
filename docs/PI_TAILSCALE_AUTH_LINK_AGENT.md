@@ -29,6 +29,7 @@ This guide documents the local helper service used by Laravel Profile to request
 
 - `POST /v1/tailscale/auth-link`
 - Header: `X-Pi-Agent-Token: <secret>`
+- Optional JSON body (max ~4 KiB): `{ "force_reauth": true }`. When `force_reauth` is true, the agent runs `tailscale logout` on the Pi, then `tailscale login` and returns a fresh browser URL so the device can sign in with a different identity. The service user (often `www-data`) must be allowed to run `tailscale logout` (typically: add that user to the `tailscale` group and restart `pi_tailscale_auth_agent`).
 - Response statuses:
   - `already_authenticated`
   - `action_required`
