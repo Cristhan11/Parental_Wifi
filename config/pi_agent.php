@@ -35,4 +35,15 @@ return [
     |
     */
     'timeout_seconds' => (int) env('PI_AGENT_TIMEOUT_SECONDS', 240),
+
+    /*
+    |--------------------------------------------------------------------------
+    | Quick-path HTTP timeout (seconds)
+    |--------------------------------------------------------------------------
+    |
+    | Profile "Get Tailscale sign-in link" does not send dashboard_email; the Pi agent only
+    | runs status + login. Use a smaller HTTP timeout so parents are not left waiting minutes.
+    |
+    */
+    'quick_timeout_seconds' => (int) env('PI_AGENT_QUICK_TIMEOUT_SECONDS', 90),
 ];

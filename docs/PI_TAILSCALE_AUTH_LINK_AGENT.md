@@ -7,7 +7,7 @@ This guide documents the local helper service used by Laravel Profile to request
 - Service listens on `127.0.0.1` only.
 - Requests must include `X-Pi-Agent-Token`.
 - Only allowlisted command is executed (`/usr/bin/tailscale`).
-- Per-command timeouts: `PI_AGENT_COMMAND_TIMEOUT_SECONDS` (default **25**) for `status` / `logout`; `PI_AGENT_LOGIN_TIMEOUT_SECONDS` (default **120**) for `tailscale login` only. Match these in `pi_tailscale_auth_agent.service`.
+- Per-command timeouts: `PI_AGENT_COMMAND_TIMEOUT_SECONDS` (default **15**) for `status` / `logout`; `PI_AGENT_LOGIN_TIMEOUT_SECONDS` (default **75**) for `tailscale login` only. Match these in `pi_tailscale_auth_agent.service`.
 - Response is sanitized JSON only (no raw command output is returned).
 
 ## API contract
@@ -31,7 +31,7 @@ This guide documents the local helper service used by Laravel Profile to request
 - Header: `X-Pi-Agent-Token: <secret>`
 - Optional JSON body (max ~4 KiB), keys:
   - `force_reauth` (boolean): when true, the agent always runs `tailscale logout` then `tailscale login` and returns a fresh browser URL (used when changing the dashboard email).
-  - `dashboard_email` (string): when set and `force_reauth` is false, the agent reads the current Tailscale login (via `tailscale status --json` when possible). If it matches this email (exact match, or same name with two Google-style domains such as `gmail.com` and `google.com`), it returns `already_authenticated`. Otherwise it runs logout + login and returns a sign-in URL so the Pi can match the dashboard account.
+  - `dashboard_email` (string): **slower path** — when set and `force_reauth` is false, the agent compares the current Tailscale login to this email; mismatch runs logout + login. The profile UI uses this only for the optional “Match Pi to my login email” action. The main **Get Tailscale sign-in link** button omits this key so the agent only runs `tailscale status` then `tailscale login` when needed (fast).
 - The bundled systemd unit runs the agent as **`root`** so `tailscale logout` / `tailscale login` work reliably on Raspberry Pi OS (the `www-data` user often cannot use the Tailscale CLI even with extra groups). The agent still listens only on `127.0.0.1` and requires `X-Pi-Agent-Token`.
 - Response statuses:
   - `already_authenticated`
@@ -73,7 +73,8 @@ Set these values in `.env`:
 
 - `PI_AGENT_BASE_URL=http://127.0.0.1:9098`
 - `PI_AGENT_TOKEN=<same-token-as-agent>`
-- `PI_AGENT_TIMEOUT_SECONDS=240` in Laravel (HTTP wait for the whole Pi agent request; must exceed worst-case `status`/`logout`/`login` chain)
+- `PI_AGENT_TIMEOUT_SECONDS=240` — HTTP wait when `dashboard_email` is sent or `force_reauth` is true (long chain).
+- `PI_AGENT_QUICK_TIMEOUT_SECONDS=90` — HTTP wait for the main sign-in link request (no `dashboard_email`).
 
 ## Troubleshooting
 

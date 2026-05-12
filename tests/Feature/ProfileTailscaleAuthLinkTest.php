@@ -176,7 +176,8 @@ class ProfileTailscaleAuthLinkTest extends TestCase
             ->get(route('profile.edit'))
             ->assertOk()
             ->assertSee('Remote dashboard access (Tailscale)', false)
-            ->assertSee('Set up remote access (Tailscale)', false)
+            ->assertSee('Get Tailscale sign-in link', false)
+            ->assertSee('Match Pi to my login email', false)
             ->assertSee('Get a new sign-in link', false);
     }
 }

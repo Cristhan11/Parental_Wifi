@@ -12,7 +12,7 @@ class PiTailscaleAuthLinkService
      * Request current auth-link status from Pi local agent.
      *
      * @param  bool  $forceReauth  When true, the Pi signs out of Tailscale first, then returns a fresh sign-in URL (email-change flow).
-     * @param  string|null  $dashboardEmail  When non-null, Pi compares Tailscale login to this email; mismatch triggers logout + sign-in URL.
+     * @param  string|null  $dashboardEmail  When non-null, Pi compares Tailscale login to this email (slower; optional profile action).
      * @return array{
      *   ok: bool,
      *   status: string,
@@ -25,7 +25,10 @@ class PiTailscaleAuthLinkService
     {
         $baseUrl = $this->normalizePiAgentBaseUrl(rtrim((string) config('pi_agent.base_url'), '/'));
         $token = (string) config('pi_agent.token');
-        $timeout = max(1, (int) config('pi_agent.timeout_seconds', 240));
+        $needsExtendedWait = $forceReauth || ($dashboardEmail !== null && $dashboardEmail !== '');
+        $timeout = $needsExtendedWait
+            ? max(1, (int) config('pi_agent.timeout_seconds', 240))
+            : max(1, (int) config('pi_agent.quick_timeout_seconds', 90));
 
         if ($baseUrl === '' || $token === '') {
             return [
@@ -47,7 +50,7 @@ class PiTailscaleAuthLinkService
         // PHP (max_execution_time) and nginx (fastcgi_read_timeout) often default to ~60s and end
         // the request before Guzzle's PI_AGENT_TIMEOUT_SECONDS elapses, which surfaces as
         // ConnectionException. Extend PHP's cap for this single outbound wait to the Pi agent.
-        $wallClockCap = min(600, $timeout + 120);
+        $wallClockCap = min(600, $timeout + 60);
         if (function_exists('set_time_limit')) {
             @set_time_limit($wallClockCap);
         }
@@ -69,7 +72,7 @@ class PiTailscaleAuthLinkService
                 'status' => 'unavailable',
                 'auth_url' => null,
                 'expires_at' => null,
-                'message' => 'Pi helper service is unavailable. If this shows after ~60–90s, nginx (fastcgi_read_timeout) or PHP-FPM (max_execution_time) is probably cutting the request off; raise both (e.g. 300s). Otherwise confirm PI_AGENT_TIMEOUT_SECONDS in .env, php artisan config:clear, and that pi_tailscale_auth_agent matches the repo unit.',
+                'message' => 'Pi helper service is unavailable. Confirm the Pi agent is running, PI_AGENT_* in .env, and php artisan config:clear. If only the slow “match dashboard email” action fails, raise PI_AGENT_TIMEOUT_SECONDS and nginx/PHP limits; the main sign-in link uses a shorter timeout (PI_AGENT_QUICK_TIMEOUT_SECONDS).',
             ];
         } catch (Throwable) {
             return [
@@ -205,7 +208,7 @@ class PiTailscaleAuthLinkService
         return match ($status) {
             'already_authenticated' => 'Raspberry Pi is already signed in to Tailscale.',
             'action_required' => 'Open the link to complete Tailscale sign-in for the Raspberry Pi.',
-            'unavailable' => 'Pi helper service is unavailable. If this shows after ~60–90s, nginx (fastcgi_read_timeout) or PHP-FPM (max_execution_time) is probably cutting the request off; raise both (e.g. 300s). Otherwise confirm PI_AGENT_TIMEOUT_SECONDS in .env, php artisan config:clear, and that pi_tailscale_auth_agent matches the repo unit.',
+            'unavailable' => 'Pi helper service is unavailable. Confirm the Pi agent is running, PI_AGENT_* in .env, and php artisan config:clear. If only the slow “match dashboard email” action fails, raise PI_AGENT_TIMEOUT_SECONDS and nginx/PHP limits; the main sign-in link uses a shorter timeout (PI_AGENT_QUICK_TIMEOUT_SECONDS).',
             default => 'Tailscale sign-in status is unavailable right now.',
         };
     }

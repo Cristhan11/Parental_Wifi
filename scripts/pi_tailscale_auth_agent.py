@@ -25,10 +25,10 @@ from typing import Any
 HOST = os.getenv("PI_AGENT_HOST", "127.0.0.1")
 PORT = int(os.getenv("PI_AGENT_PORT", "9098"))
 TOKEN = os.getenv("PI_AGENT_TOKEN", "")
-# Short timeout for status/logout (several calls per HTTP request; keep total wall time bounded).
-CMD_TIMEOUT = int(os.getenv("PI_AGENT_COMMAND_TIMEOUT_SECONDS", "25"))
-# `tailscale login` can be slow on a Pi; use a separate generous cap so Laravel does not time out first.
-LOGIN_TIMEOUT = int(os.getenv("PI_AGENT_LOGIN_TIMEOUT_SECONDS", "120"))
+# Short timeout for status/logout (keep chained calls from stacking into multi-minute waits).
+CMD_TIMEOUT = int(os.getenv("PI_AGENT_COMMAND_TIMEOUT_SECONDS", "15"))
+# `tailscale login` usually prints the URL quickly; cap avoids hanging the HTTP request for ages.
+LOGIN_TIMEOUT = int(os.getenv("PI_AGENT_LOGIN_TIMEOUT_SECONDS", "75"))
 
 
 def _tailscale_executable() -> str:
@@ -123,21 +123,29 @@ def _tailscale_logged_in_identity() -> str | None:
     Return empty string if connected but identity could not be parsed.
     """
     r = _run_tailscale(["status", "--json"])
-    if r.returncode == 0 and (r.stdout or "").strip():
-        try:
-            data = json.loads(r.stdout)
-            if isinstance(data, dict):
-                hint = _login_from_status_json(data)
-                if hint:
-                    return hint
-        except json.JSONDecodeError:
-            pass
+    if r.returncode != 0:
+        return None
+    out = (r.stdout or "").strip()
+    if not out:
+        return None
+    try:
+        data = json.loads(r.stdout)
+        if isinstance(data, dict):
+            hint = _login_from_status_json(data)
+            if hint:
+                return hint
+    except json.JSONDecodeError:
+        pass
+
+    hint = _login_from_status_text(r.stdout or "")
+    if hint:
+        return hint
 
     r2 = _run_tailscale(["status"])
     if r2.returncode != 0:
         return None
-    hint = _login_from_status_text(r2.stdout or "")
-    return hint if hint else ""
+    hint2 = _login_from_status_text(r2.stdout or "")
+    return hint2 if hint2 else ""
 
 
 def _identity_matches_dashboard(tailscale_user: str, dashboard: str) -> bool:
