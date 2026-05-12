@@ -14,15 +14,15 @@ class PiTailscaleAuthLinkService
      */
     public function fetchTailscaleDashboardUrl(): ?string
     {
-        $baseUrl = $this->normalizePiAgentBaseUrl(rtrim((string) config('pi_agent.base_url'), '/'));
-        $token = (string) config('pi_agent.token');
-        $timeout = max(1, (int) config('pi_agent.status_timeout_seconds', 8));
-
-        if ($baseUrl === '' || $token === '') {
-            return null;
-        }
-
         try {
+            $baseUrl = $this->normalizePiAgentBaseUrl(rtrim($this->piAgentConfigBaseUrl(), '/'));
+            $token = $this->piAgentConfigToken();
+            $timeout = max(1, (int) config('pi_agent.status_timeout_seconds', 8));
+
+            if ($baseUrl === '' || $token === '') {
+                return null;
+            }
+
             $response = Http::acceptJson()
                 ->withOptions([
                     'proxy' => false,
@@ -30,17 +30,17 @@ class PiTailscaleAuthLinkService
                 ->withHeaders(['X-Pi-Agent-Token' => $token])
                 ->timeout($timeout)
                 ->get($baseUrl.'/v1/tailscale/dashboard-url');
-        } catch (ConnectionException|Throwable) {
+
+            if (! $response->ok()) {
+                return null;
+            }
+
+            $url = $response->json('dashboard_url');
+
+            return $this->sanitizeTailscaleDashboardUrl(is_string($url) ? $url : null);
+        } catch (Throwable) {
             return null;
         }
-
-        if (! $response->ok()) {
-            return null;
-        }
-
-        $url = $response->json('dashboard_url');
-
-        return $this->sanitizeTailscaleDashboardUrl(is_string($url) ? $url : null);
     }
 
     /**
@@ -62,8 +62,8 @@ class PiTailscaleAuthLinkService
      */
     public function fetchAuthLink(bool $forceReauth = false, ?string $dashboardEmail = null, bool $statusOnly = false): array
     {
-        $baseUrl = $this->normalizePiAgentBaseUrl(rtrim((string) config('pi_agent.base_url'), '/'));
-        $token = (string) config('pi_agent.token');
+        $baseUrl = $this->normalizePiAgentBaseUrl(rtrim($this->piAgentConfigBaseUrl(), '/'));
+        $token = $this->piAgentConfigToken();
         $needsExtendedWait = $forceReauth || ($dashboardEmail !== null && $dashboardEmail !== '');
         $timeout = match (true) {
             $statusOnly => max(1, (int) config('pi_agent.status_timeout_seconds', 8)),
@@ -197,10 +197,6 @@ class PiTailscaleAuthLinkService
     }
 
     /**
-     * The Pi agent binds 127.0.0.1 only. If PI_AGENT_BASE_URL uses "localhost", PHP may resolve it to ::1
-     * (IPv6) while nothing is listening there, which surfaces as ConnectionException from Laravel Http.
-     */
-    /**
      * Accept only http://100.64.0.0–100.127.255.255/... from the Pi agent.
      */
     private function sanitizeTailscaleDashboardUrl(?string $url): ?string
@@ -247,6 +243,33 @@ class PiTailscaleAuthLinkService
         return $long >= $start && $long <= $end;
     }
 
+    private function piAgentConfigBaseUrl(): string
+    {
+        $v = config('pi_agent.base_url');
+
+        return is_string($v) ? trim($v) : '';
+    }
+
+    private function piAgentConfigToken(): string
+    {
+        $v = config('pi_agent.token');
+        if (is_string($v)) {
+            return trim($v);
+        }
+        if ($v === null) {
+            return '';
+        }
+        if (is_scalar($v)) {
+            return trim((string) $v);
+        }
+
+        return '';
+    }
+
+    /**
+     * The Pi agent binds 127.0.0.1 only. If PI_AGENT_BASE_URL uses "localhost", PHP may resolve it to ::1
+     * (IPv6) while nothing is listening there, which surfaces as ConnectionException from Laravel Http.
+     */
     private function normalizePiAgentBaseUrl(string $baseUrl): string
     {
         if ($baseUrl === '') {

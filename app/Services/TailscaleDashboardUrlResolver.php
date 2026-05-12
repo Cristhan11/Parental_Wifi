@@ -28,6 +28,17 @@ class TailscaleDashboardUrlResolver
      */
     public function resolve(): ?string
     {
+        try {
+            return $this->resolveUnchecked();
+        } catch (Throwable $e) {
+            report($e);
+
+            return null;
+        }
+    }
+
+    private function resolveUnchecked(): ?string
+    {
         $ttl = max(0, (int) config('reporting.tailscale_dashboard_cache_seconds', 300));
         if ($ttl === 0) {
             return $this->detect();
@@ -57,9 +68,13 @@ class TailscaleDashboardUrlResolver
      */
     private function detect(): ?string
     {
-        $fromPi = app(PiTailscaleAuthLinkService::class)->fetchTailscaleDashboardUrl();
-        if (is_string($fromPi) && $fromPi !== '') {
-            return $fromPi;
+        try {
+            $fromPi = app(PiTailscaleAuthLinkService::class)->fetchTailscaleDashboardUrl();
+            if (is_string($fromPi) && $fromPi !== '') {
+                return $fromPi;
+            }
+        } catch (Throwable $e) {
+            report($e);
         }
 
         return $this->detectViaLocalTailscaleCli();
@@ -72,7 +87,12 @@ class TailscaleDashboardUrlResolver
      */
     private function detectViaLocalTailscaleCli(): ?string
     {
-        $binary = (string) config('reporting.tailscale_binary', '/usr/bin/tailscale');
+        $binaryRaw = config('reporting.tailscale_binary', '/usr/bin/tailscale');
+        $binary = trim(is_string($binaryRaw) ? $binaryRaw : '');
+        if ($binary === '') {
+            return null;
+        }
+
         $timeout = max(1, (int) config('reporting.tailscale_command_timeout_seconds', 4));
         $path = (string) config('reporting.tailscale_dashboard_path', '/dashboard');
 

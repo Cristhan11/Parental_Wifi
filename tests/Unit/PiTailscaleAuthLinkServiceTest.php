@@ -222,4 +222,18 @@ class PiTailscaleAuthLinkServiceTest extends TestCase
         $service = new PiTailscaleAuthLinkService;
         $this->assertNull($service->fetchTailscaleDashboardUrl());
     }
+
+    public function test_fetch_tailscale_dashboard_url_swallows_http_layer_exceptions(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.status_timeout_seconds', 5);
+
+        Http::fake(function () {
+            throw new \RuntimeException('simulated transport failure');
+        });
+
+        $service = new PiTailscaleAuthLinkService;
+        $this->assertNull($service->fetchTailscaleDashboardUrl());
+    }
 }
