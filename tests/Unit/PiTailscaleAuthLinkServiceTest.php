@@ -40,6 +40,32 @@ class PiTailscaleAuthLinkServiceTest extends TestCase
         });
     }
 
+    public function test_fetch_auth_link_rewrites_localhost_to_ipv4_loopback(): void
+    {
+        Config::set('pi_agent.base_url', 'http://localhost:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.timeout_seconds', 8);
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/auth-link' => Http::response([
+                'status' => 'already_authenticated',
+                'auth_url' => null,
+                'expires_at' => null,
+                'message' => 'OK',
+            ], 200),
+        ]);
+
+        $service = new PiTailscaleAuthLinkService;
+        $result = $service->fetchAuthLink();
+
+        $this->assertTrue($result['ok']);
+        $this->assertSame('already_authenticated', $result['status']);
+
+        Http::assertSent(function (Request $request): bool {
+            return $request->url() === 'http://127.0.0.1:9098/v1/tailscale/auth-link';
+        });
+    }
+
     public function test_fetch_auth_link_handles_connection_failure(): void
     {
         Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');

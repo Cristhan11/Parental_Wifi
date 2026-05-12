@@ -23,7 +23,7 @@ class PiTailscaleAuthLinkService
      */
     public function fetchAuthLink(bool $forceReauth = false, ?string $dashboardEmail = null): array
     {
-        $baseUrl = rtrim((string) config('pi_agent.base_url'), '/');
+        $baseUrl = $this->normalizePiAgentBaseUrl(rtrim((string) config('pi_agent.base_url'), '/'));
         $token = (string) config('pi_agent.token');
         $timeout = max(1, (int) config('pi_agent.timeout_seconds', 8));
 
@@ -47,6 +47,10 @@ class PiTailscaleAuthLinkService
         try {
             $response = Http::acceptJson()
                 ->asJson()
+                ->withOptions([
+                    // Guzzle honors HTTP_PROXY/HTTPS_PROXY from the environment; loopback must not go through a proxy.
+                    'proxy' => false,
+                ])
                 ->withHeaders(['X-Pi-Agent-Token' => $token])
                 ->timeout($timeout)
                 ->retry(1, 200)
@@ -57,7 +61,7 @@ class PiTailscaleAuthLinkService
                 'status' => 'unavailable',
                 'auth_url' => null,
                 'expires_at' => null,
-                'message' => 'Pi helper service is unavailable.',
+                'message' => 'Pi helper service is unavailable. Use http://127.0.0.1:9098 in PI_AGENT_BASE_URL (not localhost) if the agent only listens on IPv4, and avoid HTTP_PROXY for PHP-FPM on this host.',
             ];
         } catch (Throwable) {
             return [
@@ -126,6 +130,34 @@ class PiTailscaleAuthLinkService
         return $masked.'?[masked]';
     }
 
+    /**
+     * The Pi agent binds 127.0.0.1 only. If PI_AGENT_BASE_URL uses "localhost", PHP may resolve it to ::1
+     * (IPv6) while nothing is listening there, which surfaces as ConnectionException from Laravel Http.
+     */
+    private function normalizePiAgentBaseUrl(string $baseUrl): string
+    {
+        if ($baseUrl === '') {
+            return '';
+        }
+
+        $parts = parse_url($baseUrl);
+        if (! is_array($parts) || ! isset($parts['host'])) {
+            return $baseUrl;
+        }
+
+        if (strcasecmp((string) $parts['host'], 'localhost') !== 0) {
+            return $baseUrl;
+        }
+
+        $scheme = strtolower((string) ($parts['scheme'] ?? 'http'));
+        $port = isset($parts['port']) ? ':'.$parts['port'] : '';
+        $path = (string) ($parts['path'] ?? '');
+        $query = isset($parts['query']) ? '?'.$parts['query'] : '';
+        $fragment = isset($parts['fragment']) ? '#'.$parts['fragment'] : '';
+
+        return $scheme.'://127.0.0.1'.$port.$path.$query.$fragment;
+    }
+
     private function sanitizeAuthUrl(?string $authUrl): ?string
     {
         if (! is_string($authUrl) || $authUrl === '') {
@@ -155,7 +187,7 @@ class PiTailscaleAuthLinkService
         return match ($status) {
             'already_authenticated' => 'Raspberry Pi is already signed in to Tailscale.',
             'action_required' => 'Open the link to complete Tailscale sign-in for the Raspberry Pi.',
-            'unavailable' => 'Pi helper service is unavailable.',
+            'unavailable' => 'Pi helper service is unavailable. Use http://127.0.0.1:9098 in PI_AGENT_BASE_URL (not localhost) if the agent only listens on IPv4, and avoid HTTP_PROXY for PHP-FPM on this host.',
             default => 'Tailscale sign-in status is unavailable right now.',
         };
     }
