@@ -316,7 +316,7 @@ class DeviceController extends Controller
     /**
      * Display the Child Devices stats view (Image 3).
      *
-     * Route: GET /devices or GET /devices/{device}
+     * Route: GET /child_devices or GET /child_devices/{device}
      *
      * This view shows statistics for a selected device:
      * - TIME USAGE graph (daily / weekly / monthly / yearly via usage-chart JSON)
@@ -337,29 +337,34 @@ class DeviceController extends Controller
      * @return View The child devices stats view
      *
      * Usage:
-     * - GET /devices - Shows stats for first device (or empty if no devices)
-     * - GET /devices?device=1 - Shows stats for device with ID 1 (from query parameter)
-     * - GET /devices/1 - Shows stats for device with ID 1 (from route parameter)
+     * - GET /child_devices - Shows stats for first eligible child device (or empty if none)
+     * - GET /child_devices?device=1 - Shows stats for device 1 if it is a child device (not parent/guest, not whitelisted)
+     * - GET /child_devices/1 - Same, via route parameter
      */
     public function index(Request $request, ?Device $device = null): View
     {
-        // Get all devices for the authenticated user
-        // Used for the child dropdown selector
+        // Child stats page: only devices that are role child (not parent/guest) and not whitelisted,
+        // same rule as the dashboard TIME USAGE card (see Device::scopeForDashboardTimeUsage).
         $devices = Auth::user()->devices()
+            ->forDashboardTimeUsage()
             ->orderBy('name')
             ->get();
 
-        // If device is provided via query parameter, load it
+        // Route model binding (e.g. /child_devices/1): ignore parent/guest/whitelisted selections
+        if ($device && ! Auth::user()->devices()->forDashboardTimeUsage()->whereKey($device->getKey())->exists()) {
+            $device = null;
+        }
+
         // Query parameter format: /child_devices?device=1
         if (! $device && $request->has('device')) {
             $deviceId = $request->input('device');
-            $device = Auth::user()->devices()->find($deviceId);
+            $device = Auth::user()->devices()
+                ->forDashboardTimeUsage()
+                ->whereKey($deviceId)
+                ->first();
         }
 
-        // If device is provided via route parameter (e.g., /child_devices/1), it's already loaded
-        // Route model binding automatically resolves Device from route {device} parameter
-
-        // If no device specified, use first device (or null if no devices)
+        // If no device specified, use first eligible child device (or null if none)
         if (! $device && $devices->isNotEmpty()) {
             $device = $devices->first();
         }

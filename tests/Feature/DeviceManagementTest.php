@@ -623,17 +623,46 @@ class DeviceManagementTest extends TestCase
     public function test_child_devices_stats_page_displays(): void
     {
         $user = User::factory()->create();
-        $device = Device::factory()->create(['user_id' => $user->id]);
+        Device::factory()->active()->role('child')->create(['user_id' => $user->id]);
 
         $response = $this->actingAs($user)->get(route('child_devices.index'));
 
         $response->assertOk();
     }
 
+    public function test_child_devices_page_excludes_parent_and_guest_devices(): void
+    {
+        $user = User::factory()->create();
+        $parentDevice = Device::factory()->active()->role('parent')->create([
+            'user_id' => $user->id,
+            'name' => 'Parent Laptop Unique',
+        ]);
+        Device::factory()->active()->role('guest')->create([
+            'user_id' => $user->id,
+            'name' => 'Guest Phone Unique',
+        ]);
+        Device::factory()->active()->role('child')->create([
+            'user_id' => $user->id,
+            'name' => 'Kid Tablet Unique',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('child_devices.index', ['device' => $parentDevice->id]));
+
+        $response->assertOk();
+        $response->assertSee('Kid Tablet Unique');
+        $response->assertDontSee('Parent Laptop Unique');
+        $response->assertDontSee('Guest Phone Unique');
+
+        $response = $this->actingAs($user)->get(route('child_devices.show', $parentDevice));
+        $response->assertOk();
+        $response->assertSee('Kid Tablet Unique');
+        $response->assertDontSee('Parent Laptop Unique');
+    }
+
     public function test_child_devices_page_lists_assigned_quizzes_and_videos(): void
     {
         $user = User::factory()->create();
-        $device = Device::factory()->create(['user_id' => $user->id]);
+        $device = Device::factory()->active()->role('child')->create(['user_id' => $user->id]);
         $quiz = Quiz::create([
             'user_id' => $user->id,
             'title' => 'Child Portal Math Quiz',
