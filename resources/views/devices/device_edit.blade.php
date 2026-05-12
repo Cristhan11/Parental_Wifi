@@ -52,6 +52,7 @@
                     <li><strong>Active</strong>: normal rules apply (schedules and time limits for children, and so on).</li>
                     <li><strong>Blocked</strong>: this device cannot use the internet. <strong>Whitelisted</strong>: treated as trusted, without the usual child limits.</li>
                     <li><strong>Remaining time</strong> and <strong>Total time</strong> are in minutes and matter most for child-style devices—adjust them here, then tap <strong>Update device</strong>.</li>
+                    <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
                 </ul>
             </x-collapsible-instructions>
 

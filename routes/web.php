@@ -27,7 +27,7 @@ Route::post('/device-request', [DeviceController::class, 'submitRegistrationRequ
     ->middleware('throttle:6,1')
     ->name('device-request.store');
 
-Route::middleware(['auth', 'verified', 'audit.sensitive'])->group(function () {
+Route::middleware(['auth', 'verified', 'password.changed', 'audit.sensitive'])->group(function () {
     Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::post('/profile/email-change/send-code', [ProfileController::class, 'sendProfileEmailChangeCode'])
@@ -42,7 +42,7 @@ Route::middleware(['auth', 'verified', 'audit.sensitive'])->group(function () {
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
 
-Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->group(function () {
+Route::middleware(['auth', 'verified', 'password.changed', 'parent.dashboard', 'audit.sensitive'])->group(function () {
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
     Route::get('/dashboard/usage-chart', [DashboardController::class, 'usageChart'])
         ->name('dashboard.usage-chart');
@@ -156,7 +156,7 @@ Route::middleware(['auth', 'verified', 'parent.dashboard', 'audit.sensitive'])->
     });
 });
 
-Route::middleware(['auth', 'verified', 'role.admin', 'audit.sensitive'])->prefix('admin')->name('admin.')->group(function () {
+Route::middleware(['auth', 'verified', 'password.changed', 'role.admin', 'audit.sensitive'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('/', [AdminDashboardController::class, 'index'])->name('dashboard');
     Route::get('/password-reset-requests', [AdminParentPasswordResetRequestController::class, 'index'])->name('password-reset-requests.index');
     Route::post('/password-reset-requests/{parent_password_reset_request}/fulfill', [AdminParentPasswordResetRequestController::class, 'fulfill'])->name('password-reset-requests.fulfill');

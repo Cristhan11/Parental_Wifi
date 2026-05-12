@@ -26,7 +26,7 @@
                             <p class="mb-2 font-semibold">Instructions</p>
                             <ul class="list-inside list-disc space-y-1">
                                 <li>Update the quiz name, settings, and questions you want children to answer.</li>
-                                <li>Red boxes mean a required value is missing. They turn green when the value is valid.</li>
+                                <li>Red boxes or an asterisk (*) in the label mean a required value is missing. Borders turn green when the value is valid.</li>
                                 <li>Choose which <strong>child</strong> devices can take this quiz, then tap <strong>Save Changes</strong>.</li>
                             </ul>
                         </x-collapsible-instructions>

@@ -1,4 +1,7 @@
 @if ($user->hasParentCapability())
+    @php
+        $remoteUrl = is_string($remote_dashboard_url ?? null) && ($remote_dashboard_url ?? '') !== '' ? $remote_dashboard_url : null;
+    @endphp
     <section
         x-data="{
             tailscaleLoading: false,
@@ -7,6 +10,9 @@
             tailscaleStatus: null,
             tailscaleError: null,
             copyFeedback: null,
+            copyRemoteFeedback: null,
+            instructionsOpen: false,
+            remoteDashboardUrl: @js($remoteUrl),
             init() {
                 this.fetchTailscaleStatus();
             },
@@ -58,6 +64,7 @@
                     if (data?.status === 'already_authenticated' || data?.signed_in_as) {
                         this.tailscaleStatus = data;
                     }
+                    await this.fetchTailscaleStatus();
                 } catch (e) {
                     this.tailscaleResult = null;
                     this.tailscaleError = @js(__('Failed to contact local Pi helper service.'));
@@ -76,6 +83,16 @@
                 }
                 setTimeout(() => { this.copyFeedback = null }, 2500);
             },
+            async copyRemoteDashboardUrl() {
+                if (!this.remoteDashboardUrl) return;
+                try {
+                    await navigator.clipboard.writeText(this.remoteDashboardUrl);
+                    this.copyRemoteFeedback = @js(__('Copied'));
+                } catch (e) {
+                    this.copyRemoteFeedback = @js(__('Tap the box, select all, then copy'));
+                }
+                setTimeout(() => { this.copyRemoteFeedback = null }, 2500);
+            },
         }"
     >
         <header>
@@ -84,9 +101,133 @@
             </h2>
 
             <p class="mt-1 text-sm text-gray-600">
-                {{ __('One click sets up Tailscale on this Raspberry Pi using your login email (:email). The Pi sends you a sign-in link below — open it on your phone or computer to finish. You do not need to log in to the Pi yourself.', ['email' => $user->email]) }}
+                {{ __('Use this section when you want to check Parental WiFi from your phone or laptop while you are away from home Wi‑Fi. You do not need technical skills, and you never need to log in to the Raspberry Pi yourself.') }}
             </p>
         </header>
+
+        {{-- Inlined from x-collapsible-instructions so Alpine can read tailscaleStatus on the section --}}
+        <div class="mb-4 mt-5">
+            <button
+                type="button"
+                @click="instructionsOpen = !instructionsOpen"
+                :aria-expanded="instructionsOpen"
+                class="group inline-flex w-full items-center justify-center gap-2.5 rounded-xl border border-amber-200/90 bg-gradient-to-br from-amber-50 via-yellow-50 to-amber-100/70 px-4 py-2.5 text-sm font-medium text-gray-800 shadow-sm ring-1 ring-black/5 transition hover:border-amber-300 hover:shadow-md focus:outline-none focus-visible:ring-2 focus-visible:ring-yellow-400 focus-visible:ring-offset-2 sm:w-auto sm:justify-start"
+            >
+                <span class="flex shrink-0 items-center text-gray-600 group-hover:text-gray-800" aria-hidden="true">
+                    <svg class="h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.75" stroke="currentColor" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="m11.25 11.25.041-.02a.75.75 0 0 1 1.063.852l-.708 2.836a.75.75 0 0 0 1.063.853l.041-.021M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Zm-9-3.75h.008v.008H12V8.25Z" />
+                    </svg>
+                </span>
+                <span
+                    class="min-w-0 flex-1 text-left sm:flex-none"
+                    x-text="instructionsOpen ? '{{ e(__('Hide instructions')) }}' : '{{ e(__('Show instructions')) }}'"
+                ></span>
+                <svg class="h-4 w-4 shrink-0 text-gray-500 transition-transform duration-200 ease-out group-hover:text-gray-700" :class="{ 'rotate-180': instructionsOpen }" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            <div
+                x-show="instructionsOpen"
+                x-cloak
+                x-transition:enter="transition ease-out duration-200"
+                x-transition:enter-start="opacity-0 -translate-y-1"
+                x-transition:enter-end="opacity-100 translate-y-0"
+                x-transition:leave="transition ease-in duration-150"
+                x-transition:leave-start="opacity-100 translate-y-0"
+                x-transition:leave-end="opacity-0 -translate-y-1"
+                class="mt-3 rounded-md border border-yellow-100 bg-yellow-50 px-4 py-3 text-sm text-gray-700"
+            >
+                <p class="mb-3 text-sm text-gray-700">
+                    {{ __('The address below is plain text (not a website button). It only appears after the Pi is signed in to Tailscale with the same email as your Parental WiFi account. Copy it and paste it into your browser’s address bar on a device where you have also opened Tailscale and signed in with that same email.') }}
+                </p>
+
+                <div x-show="tailscaleStatusLoading" class="mb-4 text-sm text-gray-600">
+                    {{ __('Checking whether the Pi is signed in to Tailscale with your dashboard email…') }}
+                </div>
+
+                <div
+                    x-show="!tailscaleStatusLoading && tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true && remoteDashboardUrl"
+                    class="mb-4"
+                >
+                    <p class="mb-2 font-semibold text-gray-900">{{ __('Your remote dashboard link') }}</p>
+                    <p class="mb-2 text-xs text-gray-600">
+                        {{ __('Tap the box, select all, then copy—or use Copy. This is not a clickable link on purpose (it only works when Tailscale is running on this device).') }}
+                    </p>
+                    <div class="flex flex-wrap items-end gap-2">
+                        <div class="min-w-0 flex-1">
+                            <input
+                                type="text"
+                                readonly
+                                tabindex="0"
+                                class="w-full cursor-text rounded border border-gray-300 bg-white px-2 py-2 font-mono text-xs text-gray-900"
+                                :value="remoteDashboardUrl"
+                                @click="$event.target.select()"
+                            />
+                        </div>
+                        <button
+                            type="button"
+                            class="rounded-md border border-gray-300 bg-white px-3 py-2 text-xs font-medium text-gray-800 hover:bg-gray-100"
+                            @click="copyRemoteDashboardUrl()"
+                        >
+                            {{ __('Copy address') }}
+                        </button>
+                    </div>
+                    <p x-show="copyRemoteFeedback" class="mt-1 text-xs text-gray-600" x-text="copyRemoteFeedback"></p>
+                </div>
+
+                <div
+                    x-show="!tailscaleStatusLoading && !(tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true && remoteDashboardUrl)"
+                    class="mb-4 rounded-md border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm text-amber-950"
+                >
+                    <p class="mb-1 font-semibold">{{ __('Sign in to Tailscale first') }}</p>
+                    <p class="text-sm text-amber-950" x-show="tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === false">
+                        {{ __('The Pi is signed in to a different Tailscale account than your Parental WiFi email. Use the yellow “Get Tailscale sign-in link” button below to switch the Pi to :email.', ['email' => $user->email]) }}
+                    </p>
+                    <p class="text-sm text-amber-950" x-show="tailscaleStatus && tailscaleStatus.status === 'action_required'">
+                        {{ __('The Pi is not signed in to Tailscale yet. Use the yellow “Get Tailscale sign-in link” button below, then finish the prompts.') }}
+                    </p>
+                    <p class="text-sm text-amber-950" x-show="tailscaleStatus && tailscaleStatus.status === 'unavailable'">
+                        {{ __('We could not check Tailscale on the Pi right now. Try again in a moment, or use the yellow button below.') }}
+                    </p>
+                    <p class="text-sm text-amber-950" x-show="tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true && !remoteDashboardUrl">
+                        {{ __('Tailscale looks correct, but we do not have a dashboard address yet. Refresh this page in a minute or check your Pi connection.') }}
+                    </p>
+                    <p class="text-sm text-amber-950" x-show="!tailscaleStatus && !tailscaleStatusLoading">
+                        {{ __('We could not verify Tailscale on the Pi. Refresh this page or use the yellow “Get Tailscale sign-in link” button below.') }}
+                    </p>
+                    <p
+                        class="text-sm text-amber-950"
+                        x-show="tailscaleStatus && tailscaleStatus.status !== 'already_authenticated' && tailscaleStatus.status !== 'action_required' && tailscaleStatus.status !== 'unavailable'"
+                    >
+                        {{ __('Finish Tailscale setup using the yellow “Get Tailscale sign-in link” button below, then open these instructions again.') }}
+                    </p>
+                </div>
+
+                <p class="mb-2 font-semibold text-gray-900">{{ __('How to set this up') }}</p>
+                <ul class="list-inside list-disc space-y-1">
+                    <li>
+                        <strong>{{ __('Install Tailscale') }}</strong>
+                        {{ __('on the phone or computer you use away from home (App Store on iPhone, Google Play on Android, or the official website on Windows or Mac).') }}
+                    </li>
+                    <li>
+                        <strong>{{ __('Sign in') }}</strong>
+                        {{ __('in the Tailscale app with the same account you use for Parental WiFi (for example :email).', ['email' => $user->email]) }}
+                    </li>
+                    <li>
+                        <strong>{{ __('Turn Tailscale on') }}</strong>
+                        {{ __('and check that your home Raspberry Pi appears in the list (often named something like “parentalpi”).') }}
+                    </li>
+                    <li>
+                        <strong>{{ __('Pair the Pi') }}</strong>
+                        {{ __('using the yellow “Get Tailscale sign-in link” button on this page below, then open the link it gives you on the same device and follow the prompts.') }}
+                    </li>
+                    <li>
+                        <strong>{{ __('If a page does not open') }}</strong>
+                        {{ __('wait a few seconds and try again, or open the Tailscale app first and then paste the address from this section into your browser’s address bar once it appears.') }}
+                    </li>
+                </ul>
+            </div>
+        </div>
 
         <div class="mt-4" x-show="tailscaleStatusLoading" style="display: none;">
             <div class="flex items-center gap-2 rounded-md border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-600">

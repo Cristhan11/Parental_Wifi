@@ -26,7 +26,7 @@
                         <x-collapsible-instructions class="mb-6">
                             <p class="mb-2 font-semibold">Instructions</p>
                             <ul class="list-inside list-disc space-y-1">
-                                <li>Fill in the quiz name and rules first. Red boxes mean something is missing; they turn green when the value is OK.</li>
+                                <li>Fill in the quiz name and rules first. Red boxes or an asterisk (*) in the label mean something is missing; borders turn green when the value is OK.</li>
                                 <li>Add your questions below, then pick which <strong>child</strong> devices can use this quiz (you can change that later on <strong>Edit</strong>).</li>
                                 <li>Tap <strong>Save</strong> at the bottom to store the quiz. Use the back arrow to return to the list without saving.</li>
                             </ul>

@@ -38,6 +38,7 @@
                     <li>Schedules set when this device may use the internet for the day you pick.</li>
                     <li>End time must be after start time. Daily minutes limit is optional.</li>
                     <li>Turn off <strong>Active</strong> to pause this rule without deleting it.</li>
+                    <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
                 </ul>
             </x-collapsible-instructions>
 

@@ -32,7 +32,7 @@
                             <ul class="list-inside list-disc space-y-1">
                                 <li>Update the full URL if needed; visits for that address are included in your reports.</li>
                                 <li>The reason field is optional but helps you remember why you flagged this site.</li>
-                                <li>Red border on a required field means it needs a value before you can save.</li>
+                                <li>Red border on a required field, or an asterisk (*) in the label, means it needs a value before you can save.</li>
                             </ul>
                         </x-collapsible-instructions>
 

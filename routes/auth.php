@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\ConfirmablePasswordController;
 use App\Http\Controllers\Auth\EmailVerificationNotificationController;
 use App\Http\Controllers\Auth\EmailVerificationPromptController;
+use App\Http\Controllers\Auth\ForcePasswordChangeController;
 use App\Http\Controllers\Auth\ForgotPasswordCompleteController;
 use App\Http\Controllers\Auth\ForgotPasswordVerifyCodeController;
 use App\Http\Controllers\Auth\NewPasswordController;
@@ -93,9 +94,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('registration.account-rejected');
 });
 
-Route::middleware(['auth', 'audit.sensitive'])->group(function () {
+Route::middleware(['auth', 'password.changed', 'audit.sensitive'])->group(function () {
     Route::get('owner/onboarding', [OwnerOnboardingController::class, 'edit'])->name('owner.onboarding.edit');
     Route::post('owner/onboarding', [OwnerOnboardingController::class, 'update'])->name('owner.onboarding.update');
+
+    // Forced password change after an admin reset (parent role only; admins go to owner-onboarding).
+    Route::get('password/force-change', [ForcePasswordChangeController::class, 'show'])
+        ->name('password.force-change');
+    Route::post('password/force-change', [ForcePasswordChangeController::class, 'update'])
+        ->middleware('throttle:10,1')
+        ->name('password.force-change.update');
 
     // EMAIL VERIFICATION ROUTES
     // GET /verify-email - Shows email verification notice page

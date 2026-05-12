@@ -43,6 +43,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'role.admin' => \App\Http\Middleware\EnsureUserIsAdmin::class,
             'parent.dashboard' => \App\Http\Middleware\EnsureParentDashboardAccess::class,
             'audit.sensitive' => \App\Http\Middleware\AuditSensitiveAction::class,
+            'password.changed' => \App\Http\Middleware\EnsurePasswordChanged::class,
         ]);
     })
     // Configure exception handling - how errors are displayed/logged

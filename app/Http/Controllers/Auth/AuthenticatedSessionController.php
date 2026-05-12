@@ -38,6 +38,10 @@ class AuthenticatedSessionController extends Controller
             return redirect()->route('owner.onboarding.edit');
         }
 
+        if (! $user->hasAdminCapability() && $user->force_password_change) {
+            return redirect()->route('password.force-change');
+        }
+
         if ($user->hasAdminCapability() && ! $user->canAccessParentDashboard()) {
             return redirect()->intended(route('admin.dashboard', absolute: false));
         }

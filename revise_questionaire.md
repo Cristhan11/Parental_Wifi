@@ -73,34 +73,43 @@ Source basis for numbered items: Meloncon et al. — appendix quick-reference gu
 
 Wording basis for ages 7-9 [R9][R10]: First-person yes or no lines with concrete words, suited to early school years. Sources: [R9](https://www.ncbi.nlm.nih.gov/books/NBK537095/), [R10](https://www.ncbi.nlm.nih.gov/books/NBK448206/)
 
-Child instructions: I will read each line. You answer by yourself. Circle Yes or No for how you feel. Your parent is not in the room for this part.
+Methodology (how the survey was conducted)
 
-Coding note (optional for analysis): Yes = 5, No = 1 when you need numbers for Section E means.
+- A.2 (child portal, ages 7-9): The child was the direct respondent on the printed form. The session followed Meloncon et al. (parent in a separate room; neutral researcher present). The researcher read the opening script once, then read each question aloud only if the child needed assistance (for example, difficult words); the child still chose and marked Yes/No (or Oo/Hindi) without the parent coaching answers during the items.
+- Section C (parent dashboard): The parent was the direct respondent while using the system's parent dashboard (live or as deployed for the study). The researcher read items aloud when the parent requested help (for example, wording), without suggesting which rating to choose.
+- Section B (IT specialist): The researcher demonstrated the live system or supporting documents (parent/child flows and relevant controls) and explained how the logic works (how scheduling, devices, filtering, and security-related behavior fit together). The IT participant then completed the Section B checklist from what they observed and heard.
+
+Recording for A.2: Code each answer as Yes or No only (do not convert to 5 or 1). After all child sessions, count Yes versus No per item across children; if most answered Yes (for example, five Yes and zero No out of five children), treat that item as satisfactory for reporting; otherwise note it for follow-up or improvement.
 
 1. (Source-selected from R16 — Appendix: incorporate games that support learning goals; integrated activities as discussed in Meloncon et al.; item form [R9][R10])  
    "Incorporate games that play a role in the site's learning objectives." Harbeck and Sherman define integrated activities as those that involve and relate to content areas (1999, p. 43, as cited in Meloncon et al.). The authors also summarize Gelderblom and Kotzé (2009, p. 55) that designers should "not separate the instructional part from the fun part of the product."  
-   After I finish the quiz or video on the portal, I can tell I earned more time to keep using the internet. [R16][R9][R10]  
-   [ ] Yes [ ] No
+   After I finish the quiz or the video on the portal, I can tell that I earned more time to keep using the internet. [R16][R9][R10]  
+   *Pagkatapos kong tapusin ang pagsusulit o ang video sa portal, alam ko na may karagdagang oras ako para magpatuloy sa internet.*  
+   [ ] Yes [ ] No  [ ] Oo [ ] Hindi
 
 2. (Source-selected from R16 — Appendix: provide clear directions and goals; multiple navigational cues as discussed in Meloncon et al.; item form [R9][R10])  
    "Provide clear directions and goals." The Multiple cues subsection explains that children in this age range "need prompts or cues to stimulate them" (Rose et al., 2009, pp. 6–7, as cited in Meloncon et al.).  
-   On the Portal, I can see how much internet time I have left. [R16][R9][R10]  
-   [ ] Yes [ ] No
+   On the portal, I can see how much internet time I have left. [R16][R9][R10]  
+   *Sa portal, nakikita ko kung magkano pang oras ang natitira sa akin sa internet.*  
+   [ ] Yes [ ] No  [ ] Oo [ ] Hindi
 
 3. (Source-selected from R16 — Appendix: limit navigational topics; hierarchical navigation with limited initial choices in Meloncon et al.; item form [R9][R10])  
    "Limit navigational topics." The authors recommend limiting initial choices because "children at this age have difficulty processing a large number of choices (Piaget, 1970), we recommend no more than five initial choices for children in this age range."  
-   On the start screen, I can tell which part is for the quiz and which part is for the video without feeling lost. [R16][R9][R10]  
-   [ ] Yes [ ] No
+   On the start screen, I can tell which part is for the quiz and which part is for the video without getting confused. [R16][R9][R10]  
+   *Sa unang screen, alam ko kung saan ang pagsusulit at kung saan ang video nang hindi ako nalilito.*  
+   [ ] Yes [ ] No  [ ] Oo [ ] Hindi
 
 4. (Source-selected from R16 — Appendix: make clickable hotspots obvious; usability observation on rollover feedback in Meloncon et al.; item form [R9][R10])  
    "Take care to make clickable hotspots obvious through rollover effects (e.g., blinking, changing color)." During testing, "One child said, 'I like how it [the images in the kite] gets bigger.'"  
-   When I tap pictures or buttons on the portal, I notice right away that the screen saw my tap, like it lights up, changes, or moves a little. [R16][R9][R10]  
-   [ ] Yes [ ] No
+   When I tap pictures or buttons on the portal, I notice right away that the screen responds to my tap—for example, something lights up, changes, or moves a little. [R16][R9][R10]  
+   *Kapag pumipindot ako ng larawan o button sa portal, agad kong napapansin na tumutugon ang screen sa tap ko—halimbawa, may umiilaw, nagbabago, o gumagalaw nang kaunti.*  
+   [ ] Yes [ ] No  [ ] Oo [ ] Hindi
 
 5. (Source-selected from R16 — Appendix: provide multiple options for navigation; Multiple cues subsection in Meloncon et al.; item form [R9][R10])  
    Appendix guideline: provide multiple options for navigation (for example breadcrumbs, a clearly shown back control, or the browser back control). In the same article the authors report that children used the browser Back button repeatedly and recommend an emphasis on multiple ways to get back home.  
-   If I tap the wrong thing on the portal, I can still get back to where I was or to the main choices without getting stuck. [R16][R9][R10]  
-   [ ] Yes [ ] No
+   If I tap the wrong thing on the portal, I can still return to where I was or to the main choices without getting stuck. [R16][R9][R10]  
+   *Kapag mali ang napindot ko sa portal, makakabalik pa rin ako sa dati kong lugar o sa mga pangunahing pagpipilian nang hindi ako naipit.*  
+   [ ] Yes [ ] No  [ ] Oo [ ] Hindi
 
 Researcher note (after session, not shown to child during items): 
 Parent was out of room for A.2 [ ] Yes [ ] No; 
@@ -144,57 +153,58 @@ Philippine policy alignment references for Chapter 4 discussion (optional):
 
 ## C. Parent Dashboard Survey (Scope/Objectives-Focused)
 
+Each item below is shown in English, with a Tagalog line for parents who are more comfortable in Filipino. The researcher may read either wording; the parent still marks one score (1-5 or N/A) per item.
+
 1. I can monitor visited websites of assigned child devices, and I can manually flag and block selected websites. [R8][R7]  
+   *Kaya kong subaybayan ang mga binisitang website ng mga device ng anak na naka-assign sa akin, at kaya kong manu-manong i-flag at harangin ang mga piniling website.*  
 Source basis: "Are network traffic logs reviewed regularly for suspicious or unauthorized activities?" (R8), "How do you handle firewall rule reviews and lifecycle management?" (R7)  
 Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/ ; https://vendict.com/blog/50-essential-security-questionnaire-questions  
 Scope: 1, 7 | Objective: 1, 3, 5  
 Score: ___
 2. The system redirects the child device to quiz/video activity and only continues internet after required completion/passing. [R7]  
+   *Inililipat ng sistema ang device ng bata sa quiz o video, at magpapatuloy lamang sa internet pagkatapos matapos o pumasa ayon sa itinakda.*  
 Source basis: "What controls are in place to enforce least privilege and need-to-know principles?"  
 Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
 Scope: 2, 7 | Objective: 2, 3, 5  
 Score: ___
 3. I can set and enforce internet schedule and duration limits for each assigned child device. [R7]  
+   *Kaya kong magtakda at ipatupad ang iskedyul at tagal ng paggamit ng internet para sa bawat device ng anak na naka-assign sa akin.*  
 Source basis: "How are network changes reviewed and authorized?"  
 Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
 Scope: 3, 7 | Objective: 3, 5  
 Score: ___
 4. I receive real-time notifications for time limit reached, flagged-site visit, blocked-site attempt, and new-device connection. [R8]  
+   *Tumatanggap ako ng abiso agad-agad kapag naabot na ang limitasyon sa oras, may binisitang site na minarkahan ko, may tangkang pagbisita sa hinarang na site, at may bagong device na kumonekta.*  
 Source basis: "Are real-time alerts configured for critical events or threshold breaches?"  
 Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
 Scope: 4 | Objective: 1, 3  
 Score: ___
 5. I can monitor the total time each child device spends online. [R8]  
+   *Kaya kong subaybayan ang kabuuang oras na ginugol online ng bawat device ng anak.*  
 Source basis: "Are key security metrics ... tracked and reported to management?"  
 Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
 Scope: 5 | Objective: 1, 3, 5  
 Score: ___
 6. The dashboard provides clear daily, weekly, and monthly reports (usage, visited sites, flagged/blocked attempts, and bandwidth). [R8]  
+   *Nagbibigay ang dashboard ng malinaw na ulat araw-araw, lingguhan, at buwan-buwan (paggamit, binisitang site, mga tangka sa niranggo/hinarang na site, at bandwidth).*  
 Source basis: "Does the organization have defined KPIs or KRIs ... for cybersecurity?"  
 Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
 Scope: 6, 7 | Objective: 1, 3, 5  
 Score: ___
 7. I can manage connected devices using block and whitelist controls. [R7]  
+   *Kaya kong pamahalaan ang mga konektang device gamit ang pag-harang at listahan ng mga payagang device.*  
 Source basis: "How are unauthorized devices or shadow IT identified and handled?"  
 Source: https://vendict.com/blog/50-essential-security-questionnaire-questions  
 Scope: 8, 7 | Objective: 3, 4, 5  
 Score: ___
-8. Parent/admin dashboard access is secure through authentication and secure session handling. [R7][R12]  
-Source basis: "What authentication methods do you use for internal and external access?" (R7), "The session ID must be renewed or regenerated..." (R12)  
-Source: https://vendict.com/blog/50-essential-security-questionnaire-questions ; https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet  
-Scope: 9 | Objective: 4, 7  
+8. I can add, update, or remove quizzes and educational videos assigned to the captive portal for my child's devices. [R7][R8]  
+   *Kaya kong magdagdag, magbago, o magtanggal ng mga pagsusulit at pang-edukasyong video na nakatalaga sa captive portal para sa mga device ng anak ko.*  
+Source basis: "What controls are in place to enforce least privilege and need-to-know principles?" (R7), "How are network changes reviewed and authorized?" (R8)  
+Source: https://vendict.com/blog/50-essential-security-questionnaire-questions ; https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
+Scope: 7, 2 | Objective: 2, 3, 5  
 Score: ___
-9. Network protection controls (firewall rules and MAC/device allowlist behavior) prevent unauthorized access attempts. [R8][R7]  
-Source basis: "Are firewalls configured with a default deny rule set...?" (R8), "How are unauthorized devices or shadow IT identified and handled?" (R7)  
-Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/ ; https://vendict.com/blog/50-essential-security-questionnaire-questions  
-Scope: 9, 8 | Objective: 4, 7  
-Score: ___
-10. The system logs and monitors security-relevant activity for review and incident response. [R8]  
-Source basis: "Are network traffic logs reviewed regularly for suspicious or unauthorized activities?"  
-Source: https://copla.com/blog/cybersecurity/the-complete-guide-to-information-and-cybersecurity-risk-assessment-questionnaire/  
-Scope: 9 | Objective: 7  
-Score: ___
-11. The system works reliably at home using our local setup and PLDT modem connection for internet control and child portal access. [R14]  
+9. The system works reliably at home using our local setup and PLDT modem connection for internet control and child portal access. [R14]  
+   *Maaasahan ang sistema sa bahay gamit ang aming lokal na setup at koneksyon sa modem ng PLDT para sa kontrol ng internet at pagpasok sa portal ng bata.*  
 Source basis: national cybersecurity planning emphasizes layered, network-level controls.  
 Source: https://cms-cdn.e.gov.ph/DICT/pdf/NCSP-2023-2028-FINAL-DICT.pdf  
 Scope: 7 | Objective: 1, 6  
@@ -205,20 +215,22 @@ Score: ___
 ## D. Objective/Scope Mapping (for Chapter 4)
 
 - Scope 1, 7: C1, C2
-- Scope 2: C8, C9, A2(1-5)
+- Scope 2: C2, C8, A2(1-5)
 - Scope 3: C3
 - Scope 4: C4
 - Scope 5: C5
 - Scope 6: C6
+- Scope 7: C8, C9
 - Scope 8: C7
-- Scope 9: B1-B6, C10
+- Scope 9: B1-B6
 
 ---
 
 ## E. Quick Analysis Rules
 
-- Compute mean per section (A, B, C).
-- Decision rule:
+- **Section A (child portal, A.2):** Use **Yes**/**No** tallies only (see **Recording for A.2** under the methodology above). For each item, report counts of **Yes** and **No**; if a **majority** of children answered **Yes**, treat that item as **satisfactory**. Do not compute a Likert-style mean for A.2.
+- **Sections B and C:** Compute the mean score per section from the 1–5 scale (handle N/A per your coding plan).
+- Decision rule (for **B** and **C** means only):
   - Mean >= 4.00 = achieved/acceptable
   - Mean 3.50-3.99 = partially achieved, improve
   - Mean < 3.50 = not achieved, needs revision

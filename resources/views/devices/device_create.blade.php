@@ -164,6 +164,7 @@
                                 <li>Pick the <strong>role</strong> and <strong>status</strong> that match how this device should behave on your network.</li>
                                 <li>For child devices, set <strong>Initial time</strong> and <strong>Total time</strong> in minutes if you use time limits.</li>
                                 <li>Tap <strong>Save device</strong> when you are finished.</li>
+                                <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
                             </ul>
                         </x-collapsible-instructions>
 

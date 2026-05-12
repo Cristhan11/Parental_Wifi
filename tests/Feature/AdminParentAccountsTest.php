@@ -123,7 +123,7 @@ class AdminParentAccountsTest extends TestCase
         $this->assertSame(User::ROLE_PARENT_ADMIN, $operator->role);
     }
 
-    public function test_admin_can_reset_parent_password_to_default(): void
+    public function test_household_operator_can_reset_parent_password_to_default(): void
     {
         $this->actingAsHouseholdOperator();
 
@@ -131,20 +131,65 @@ class AdminParentAccountsTest extends TestCase
             'role' => User::ROLE_PARENT,
             'approved_at' => now(),
             'email_verified_at' => now(),
+            'force_password_change' => false,
         ]);
 
         $this->post(route('admin.parents.reset-password-default', $parent))
             ->assertRedirect(route('admin.parents.index'))
-            ->assertSessionHas('status');
+            ->assertSessionHas('status')
+            ->assertSessionHas('default_password_popup');
 
         $parent->refresh();
         $this->assertTrue(Hash::check(AdminParentAccountController::DEFAULT_PARENT_RESET_PASSWORD, $parent->password));
+        $this->assertTrue($parent->force_password_change);
         $this->assertNotNull($parent->email_verified_at);
 
         $this->assertDatabaseHas('admin_action_logs', [
             'target_user_id' => $parent->id,
             'action' => 'parent_password_reset_to_default',
         ]);
+    }
+
+    public function test_parent_owner_role_cannot_reset_password_to_default(): void
+    {
+        $owner = User::factory()->create([
+            'role' => User::ROLE_ADMIN,
+            'email_verified_at' => now(),
+            'requires_email_setup' => false,
+            'force_password_change' => false,
+        ]);
+
+        $this->actingAs($owner);
+
+        $parent = User::factory()->create([
+            'role' => User::ROLE_PARENT,
+            'approved_at' => now(),
+            'email_verified_at' => now(),
+            'force_password_change' => false,
+        ]);
+
+        $originalHash = $parent->password;
+
+        $this->post(route('admin.parents.reset-password-default', $parent))
+            ->assertForbidden();
+
+        $parent->refresh();
+        $this->assertFalse($parent->force_password_change);
+        $this->assertSame($originalHash, $parent->password);
+    }
+
+    public function test_household_operator_cannot_reset_their_own_password_to_default(): void
+    {
+        $actor = $this->actingAsHouseholdOperator();
+
+        $originalHash = $actor->password;
+
+        $this->post(route('admin.parents.reset-password-default', $actor))
+            ->assertForbidden();
+
+        $actor->refresh();
+        $this->assertFalse($actor->force_password_change);
+        $this->assertSame($originalHash, $actor->password);
     }
 
     public function test_parent_user_cannot_access_admin_parent_routes(): void

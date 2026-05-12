@@ -37,6 +37,9 @@
                             <p class="text-gray-700">
                                 Blocks the main domain and suggested related addresses so typical app traffic is covered. Saving upgrades this rule to full app-style blocking.
                             </p>
+                            <ul class="mt-2 list-inside list-disc space-y-1 text-gray-700">
+                                <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
+                            </ul>
                         </x-collapsible-instructions>
 
                         <div class="mb-6">

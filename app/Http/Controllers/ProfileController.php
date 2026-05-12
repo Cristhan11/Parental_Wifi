@@ -28,8 +28,14 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): View
     {
+        $user = $request->user();
+        $resolver = app(TailscaleDashboardUrlResolver::class);
+        $remoteDashboardUrl = $resolver->resolve() ?? config('reporting.email_dashboard_url');
+        $remoteDashboardUrl = is_string($remoteDashboardUrl) && $remoteDashboardUrl !== '' ? $remoteDashboardUrl : null;
+
         return view('profile.edit', [
-            'user' => $request->user(),
+            'user' => $user,
+            'remote_dashboard_url' => $remoteDashboardUrl,
         ]);
     }
 

@@ -8,13 +8,12 @@
             });
         }
     }" 
-       class="fixed left-0 top-0 h-screen w-64 bg-white border-r-4 border-[#FFDE15] shadow-2xl z-30 transform transition-transform duration-300 ease-in-out overflow-y-auto"
+       class="fixed left-0 top-0 h-screen w-64 bg-white border-r-4 border-[#FFDE15] shadow-2xl z-30 transform transition-transform duration-300 ease-in-out flex flex-col overflow-hidden min-h-0"
        :class="open ? 'translate-x-0' : '-translate-x-full'"
        @click.outside="if (window.innerWidth < 1280 && open) { open = false; $root.sidebarOpen = false; $root.manuallyToggled = false; window.dispatchEvent(new CustomEvent('sidebar-state-updated', { detail: { open: false } })); }"
-       aria-label="Main navigation"
-       style="scrollbar-width: thin; scrollbar-color: #FFDE15 #F3F4F6;">
+       aria-label="Main navigation">
     <!-- Logo Section -->
-    <div class="h-16 flex items-center justify-between border-b border-gray-200 px-4">
+    <div class="h-16 shrink-0 flex items-center justify-between border-b border-gray-200 px-4">
         <a href="{{ auth()->user()->canAccessParentDashboard() ? route('dashboard') : route('admin.dashboard') }}" class="flex items-center gap-2 focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 rounded">
             <x-application-logo class="block w-16 h-auto" />
             <span class="font-semibold text-lg text-black">Parental WiFi</span>
@@ -29,8 +28,10 @@
         </button>
     </div>
 
-    <!-- Navigation Menu -->
-    <nav class="flex-1 overflow-y-auto py-4" aria-label="Main navigation">
+    <!-- Navigation Menu (only this region scrolls so the user menu stays visible at the bottom) -->
+    <nav class="flex-1 min-h-0 overflow-y-auto py-4"
+         style="scrollbar-width: thin; scrollbar-color: #FFDE15 #F3F4F6;"
+         aria-label="Main navigation">
         <ul class="space-y-1 px-3">
             @if (auth()->user()->hasAdminCapability())
             <li>
@@ -219,7 +220,7 @@
     </nav>
 
     <!-- User Section -->
-    <div class="border-t border-gray-200 p-4">
+    <div class="shrink-0 border-t border-gray-200 p-4">
         <x-dropdown align="left-up" width="48">
             <x-slot name="trigger">
                 <button class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-black focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-colors">

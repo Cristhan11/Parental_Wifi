@@ -30,6 +30,7 @@
                     <li>If you set a daily limit, internet also turns off after the allowed minutes are used.</li>
                     <li>You can make different schedules for weekdays, weekends, or bedtime.</li>
                     <li>Tap <strong>Create schedule</strong> when you are finished. Turn off <strong>Active</strong> only if you want to save this rule but not use it yet.</li>
+                    <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
                 </ul>
             </x-collapsible-instructions>
 

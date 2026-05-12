@@ -64,10 +64,12 @@
                                                 <span class="text-gray-400">Remove household operator (disabled: last operator)</span>
                                             @endif
                                         @endif
-                                        <form action="{{ route('admin.parents.reset-password-default', $user) }}" method="POST" class="inline" onsubmit="return confirm('Set this account’s password to the default 12345678? The parent should change it after logging in.');">
-                                            @csrf
-                                            <button type="submit" class="underline text-black">Reset password to default</button>
-                                        </form>
+                                        @if (auth()->user()->isParentAdmin() && $user->id !== auth()->id())
+                                            <form action="{{ route('admin.parents.reset-password-default', $user) }}" method="POST" class="inline" onsubmit="return confirm('Set this account’s password to the default 12345678? The parent will be required to change it on next login.');">
+                                                @csrf
+                                                <button type="submit" class="underline text-black">Reset password to default</button>
+                                            </form>
+                                        @endif
                                         @if ($user->isStrictParentRole())
                                             <form action="{{ route('admin.parents.destroy', $user) }}" method="POST" class="inline" onsubmit="return confirm('Permanently delete this parent account and all related data? This cannot be undone.');">
                                                 @csrf
@@ -96,4 +98,45 @@
             {{ $parents->links() }}
         </div>
     </div>
+
+    @if ($popup = session('default_password_popup'))
+        <div x-data="{ open: true }" x-cloak x-show="open"
+             class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
+             role="dialog" aria-modal="true" aria-labelledby="default-password-popup-title">
+            <div @click.outside="open = false" @keydown.escape.window="open = false"
+                 class="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+                <div class="flex items-start gap-3">
+                    <div class="flex-shrink-0 w-10 h-10 rounded-full bg-yellow-100 text-yellow-700 flex items-center justify-center font-bold">!</div>
+                    <div class="flex-1">
+                        <h3 id="default-password-popup-title" class="text-lg font-semibold text-black">Password reset to default</h3>
+                        <p class="mt-2 text-sm text-gray-700">
+                            <span class="font-medium text-black">{{ $popup['parent_name'] }}</span>
+                            (<span class="text-gray-600">{{ $popup['parent_email'] }}</span>)
+                            can now sign in with the default password below. They will be required to change it immediately after logging in.
+                        </p>
+                        <div class="mt-4 p-3 rounded-md bg-gray-50 border border-gray-200">
+                            <div class="text-xs uppercase tracking-wider text-gray-500">Default password</div>
+                            <div class="mt-1 flex items-center gap-2">
+                                <code id="default-password-popup-value" class="text-lg font-mono font-bold text-black select-all">{{ $popup['default_password'] }}</code>
+                                <button type="button"
+                                        class="text-xs underline text-black hover:opacity-75"
+                                        onclick="navigator.clipboard?.writeText(document.getElementById('default-password-popup-value').innerText); this.textContent='Copied';">
+                                    Copy
+                                </button>
+                            </div>
+                        </div>
+                        <p class="mt-3 text-xs text-gray-500">
+                            Share this with the parent through a trusted channel. They will be forced to set a new password on their next login.
+                        </p>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end">
+                    <button type="button" @click="open = false"
+                            class="inline-flex items-center px-4 py-2 bg-black text-white text-xs font-semibold rounded-md hover:opacity-80 focus:outline-none">
+                        Got it
+                    </button>
+                </div>
+            </div>
+        </div>
+    @endif
 </x-app-layout>

@@ -11,7 +11,7 @@
                 <p class="mb-2 font-semibold">Instructions</p>
                 <ul class="list-inside list-disc space-y-1">
                     <li><strong>Profile</strong> updates your name and email used to sign in. If you change your email, confirm the new address with a code sent to that inbox, then a short Tailscale step appears before the change is saved.</li>
-                    <li><strong>Remote dashboard access (Tailscale)</strong> uses one button. The Raspberry Pi sends a Tailscale sign-in link to this page — open it on your phone or computer and sign in with your login email. You never need to log in to the Pi yourself.</li>
+                    <li><strong>Remote dashboard access (Tailscale)</strong> uses one button on this page so the Pi can send you a sign-in link. You will also find plain-language steps for installing Tailscale on your phone or computer, plus the same away-from-home web link that appears in report emails—so you do not have to wait for an email to open the dashboard.</li>
                     <li><strong>Password</strong> is only if you want a new one—you must type your current password to confirm.</li>
                     <li><strong>Delete account</strong> removes your account for good. Only use it if you are sure.</li>
                 </ul>
@@ -25,7 +25,9 @@
 
             <div class="p-4 sm:p-8 bg-white shadow sm:rounded-lg">
                 <div class="max-w-xl">
-                    @include('profile.partials.tailscale-remote-access-card')
+                    @include('profile.partials.tailscale-remote-access-card', [
+                        'remote_dashboard_url' => $remote_dashboard_url ?? null,
+                    ])
                 </div>
             </div>
 

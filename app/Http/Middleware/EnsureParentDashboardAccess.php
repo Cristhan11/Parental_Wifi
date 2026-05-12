@@ -27,6 +27,10 @@ class EnsureParentDashboardAccess
             return redirect()->route('owner.onboarding.edit');
         }
 
+        if (! $user->hasAdminCapability() && $user->force_password_change) {
+            return redirect()->route('password.force-change');
+        }
+
         if ($user->canAccessParentDashboard()) {
             return $next($request);
         }

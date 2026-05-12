@@ -78,7 +78,7 @@
                             <ul class="list-inside list-disc space-y-1">
                                 <li>Enter the site you want to block, or pick from common websites below.</li>
                                 <li>We also block common app and website addresses for that site (ex: Facebook links used by the app).</li>
-                                <li>Red input border means required. Fill it in until it turns green.</li>
+                                <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
                             </ul>
                         </x-collapsible-instructions>
 

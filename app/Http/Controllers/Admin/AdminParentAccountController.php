@@ -212,12 +212,25 @@ class AdminParentAccountController extends Controller
     {
         $user->forceFill([
             'password' => self::DEFAULT_PARENT_RESET_PASSWORD,
+            'force_password_change' => true,
         ])->save();
     }
 
     public function resetPasswordToDefault(User $user): RedirectResponse
     {
+        abort_unless(
+            auth()->user()?->isParentAdmin(),
+            403,
+            'Only a household operator (parent + admin) can reset a parent account password to the default.'
+        );
+
         $this->assertManageableApprovedParent($user);
+
+        abort_if(
+            $user->id === auth()->id(),
+            403,
+            'You cannot reset your own password from the parent accounts list. Use profile settings or the forgot-password flow.'
+        );
 
         self::setUserPasswordToDefault($user);
 
@@ -233,10 +246,13 @@ class AdminParentAccountController extends Controller
             'note' => null,
         ]);
 
-        return redirect()->route('admin.parents.index')->with(
-            'status',
-            'Password set to the default (12345678). Ask the parent to sign in and change it under profile settings.'
-        );
+        return redirect()->route('admin.parents.index')
+            ->with('status', 'Password set to the default (12345678). The parent will be required to change it on next login.')
+            ->with('default_password_popup', [
+                'parent_name' => $user->name,
+                'parent_email' => $user->email,
+                'default_password' => self::DEFAULT_PARENT_RESET_PASSWORD,
+            ]);
     }
 
     private function assertManageableApprovedParent(User $user): void

@@ -18,11 +18,19 @@ $width = match ($width) {
 @endphp
 
 <div class="relative" x-data="{ open: false }" @click.outside="open = false" @close.stop="open = false">
-    <div @click="open = ! open">
+    <div @click="
+            open = ! open;
+            if (open) {
+                $nextTick(() => {
+                    $refs.dropdownPanel?.scrollIntoView({ block: 'nearest', behavior: 'smooth', inline: 'nearest' });
+                });
+            }
+        ">
         {{ $trigger }}
     </div>
 
     <div x-show="open"
+            x-ref="dropdownPanel"
             x-transition:enter="transition ease-out duration-200"
             x-transition:enter-start="opacity-0 scale-95"
             x-transition:enter-end="opacity-100 scale-100"

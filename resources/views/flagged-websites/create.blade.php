@@ -31,7 +31,7 @@
                             <ul class="list-inside list-disc space-y-1">
                                 <li>Flagging means the website is still accessible, but we will include visits in your reports.</li>
                                 <li>Enter the full website link, or pick from common websites below.</li>
-                                <li>Red input border means required. Fill it in until it turns green.</li>
+                                <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
                             </ul>
                         </x-collapsible-instructions>
 

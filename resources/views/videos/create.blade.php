@@ -30,6 +30,7 @@
                                 <li>Then add a title, optional notes, and how many <strong>minutes of internet time</strong> a child gets after they finish.</li>
                                 <li><strong>Dictionary words</strong> are optional: if you turn them on, the child must type the words shown during the video before they earn time.</li>
                                 <li>Tap <strong>Save</strong> to upload. Big files can take a while—wait until the upload finishes.</li>
+                                <li>An asterisk (*) in the label marks a required field.</li>
                             </ul>
                         </x-collapsible-instructions>
 
