@@ -9,6 +9,41 @@ use Throwable;
 class PiTailscaleAuthLinkService
 {
     /**
+     * Read-only: ask the Pi agent for the dashboard base URL from `tailscale ip -4` on the Pi.
+     * Used when PHP runs as a user that cannot execute the Tailscale CLI (e.g. www-data).
+     */
+    public function fetchTailscaleDashboardUrl(): ?string
+    {
+        $baseUrl = $this->normalizePiAgentBaseUrl(rtrim((string) config('pi_agent.base_url'), '/'));
+        $token = (string) config('pi_agent.token');
+        $timeout = max(1, (int) config('pi_agent.status_timeout_seconds', 8));
+
+        if ($baseUrl === '' || $token === '') {
+            return null;
+        }
+
+        try {
+            $response = Http::acceptJson()
+                ->withOptions([
+                    'proxy' => false,
+                ])
+                ->withHeaders(['X-Pi-Agent-Token' => $token])
+                ->timeout($timeout)
+                ->get($baseUrl.'/v1/tailscale/dashboard-url');
+        } catch (ConnectionException|Throwable) {
+            return null;
+        }
+
+        if (! $response->ok()) {
+            return null;
+        }
+
+        $url = $response->json('dashboard_url');
+
+        return $this->sanitizeTailscaleDashboardUrl(is_string($url) ? $url : null);
+    }
+
+    /**
      * Request current auth-link status from Pi local agent.
      *
      * @param  bool  $forceReauth  When true, the Pi signs out of Tailscale first, then returns a fresh sign-in URL (email-change flow).
@@ -21,7 +56,8 @@ class PiTailscaleAuthLinkService
      *   expires_at: string|null,
      *   message: string,
      *   signed_in_as?: string|null,
-     *   matches_dashboard?: bool|null
+     *   matches_dashboard?: bool|null,
+     *   dashboard_url?: string|null
      * }
      */
     public function fetchAuthLink(bool $forceReauth = false, ?string $dashboardEmail = null, bool $statusOnly = false): array
@@ -112,6 +148,9 @@ class PiTailscaleAuthLinkService
         $matchesDashboard = is_array($payload) && array_key_exists('matches_dashboard', $payload)
             ? (is_bool($payload['matches_dashboard']) ? $payload['matches_dashboard'] : null)
             : null;
+        $dashboardUrl = is_array($payload) && isset($payload['dashboard_url']) && is_string($payload['dashboard_url'])
+            ? $this->sanitizeTailscaleDashboardUrl($payload['dashboard_url'])
+            : null;
 
         $allowedStatuses = ['already_authenticated', 'action_required', 'unavailable', 'error'];
         if (! in_array($status, $allowedStatuses, true)) {
@@ -134,6 +173,7 @@ class PiTailscaleAuthLinkService
             'message' => $message !== '' ? $message : $this->defaultMessageForStatus($status),
             'signed_in_as' => $signedInAs !== '' ? $signedInAs : null,
             'matches_dashboard' => $matchesDashboard,
+            'dashboard_url' => $dashboardUrl,
         ];
     }
 
@@ -160,6 +200,53 @@ class PiTailscaleAuthLinkService
      * The Pi agent binds 127.0.0.1 only. If PI_AGENT_BASE_URL uses "localhost", PHP may resolve it to ::1
      * (IPv6) while nothing is listening there, which surfaces as ConnectionException from Laravel Http.
      */
+    /**
+     * Accept only http://100.64.0.0–100.127.255.255/... from the Pi agent.
+     */
+    private function sanitizeTailscaleDashboardUrl(?string $url): ?string
+    {
+        if (! is_string($url) || $url === '') {
+            return null;
+        }
+
+        if (! filter_var($url, FILTER_VALIDATE_URL)) {
+            return null;
+        }
+
+        $parts = parse_url($url);
+        if (! is_array($parts) || strtolower((string) ($parts['scheme'] ?? '')) !== 'http') {
+            return null;
+        }
+
+        $host = strtolower((string) ($parts['host'] ?? ''));
+        if (! filter_var($host, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return null;
+        }
+
+        if (! $this->isTailscaleCgNatIpv4($host)) {
+            return null;
+        }
+
+        $path = (string) ($parts['path'] ?? '');
+        if ($path === '' || $path[0] !== '/') {
+            return null;
+        }
+
+        return $url;
+    }
+
+    private function isTailscaleCgNatIpv4(string $ip): bool
+    {
+        $long = ip2long($ip);
+        if ($long === false) {
+            return false;
+        }
+        $start = ip2long('100.64.0.0');
+        $end = ip2long('100.127.255.255');
+
+        return $long >= $start && $long <= $end;
+    }
+
     private function normalizePiAgentBaseUrl(string $baseUrl): string
     {
         if ($baseUrl === '') {

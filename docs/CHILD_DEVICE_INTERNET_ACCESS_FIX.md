@@ -4,6 +4,8 @@
 **Issue:** Child devices with time remaining don't have internet access (still in Preauthenticated state)  
 **Status:** ✅ Fixed
 
+**See also:** If the portal shows **Authenticated** but the phone still has no usable internet, the cause may be on the Pi (**dual DHCP on `eth0`**, **iptables rule order**, or **Tailscale `CONNMARK` vs NoDogSplash marks**). See **[PI_GATEWAY_NETWORK_DEBUGGING.md](PI_GATEWAY_NETWORK_DEBUGGING.md)**.
+
 ---
 
 ## Problem

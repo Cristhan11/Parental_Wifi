@@ -32,6 +32,9 @@
                     const data = await res.json().catch(() => ({}));
                     if (res.ok) {
                         this.tailscaleStatus = data;
+                        if (typeof data.dashboard_url === 'string' && data.dashboard_url !== '') {
+                            this.remoteDashboardUrl = data.dashboard_url;
+                        }
                     }
                 } catch (e) {
                     this.tailscaleStatus = null;
@@ -61,6 +64,9 @@
                         return;
                     }
                     this.tailscaleResult = data;
+                    if (typeof data.dashboard_url === 'string' && data.dashboard_url !== '') {
+                        this.remoteDashboardUrl = data.dashboard_url;
+                    }
                     if (data?.status === 'already_authenticated' || data?.signed_in_as) {
                         this.tailscaleStatus = data;
                     }

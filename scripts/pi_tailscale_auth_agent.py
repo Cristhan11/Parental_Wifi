@@ -54,6 +54,54 @@ AUTH_URL_PATTERN = re.compile(
 )
 
 
+def _is_tailscale_cgnat_ipv4(ip: str) -> bool:
+    """True for addresses in 100.64.0.0/10 (Tailscale CGNAT range)."""
+    parts = ip.split(".")
+    if len(parts) != 4:
+        return False
+    try:
+        a, b, c, d = (int(p) for p in parts)
+    except ValueError:
+        return False
+    if a != 100:
+        return False
+    if b < 64 or b > 127:
+        return False
+    return 0 <= c <= 255 and 0 <= d <= 255
+
+
+def _tailscale_cgnat_dashboard_url() -> str | None:
+    """
+    First tailnet IPv4 from `tailscale ip -4`, as http://100.x.y.z/<dashboard_path>.
+    Returns None if Tailscale is unavailable or not on a tailnet address.
+    """
+    try:
+        r = _run_tailscale(["ip", "-4"])
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        return None
+    if r.returncode != 0:
+        return None
+    raw = (r.stdout or "").strip()
+    if not raw:
+        return None
+    path = (os.getenv("PI_AGENT_DASHBOARD_PATH") or "/dashboard").strip() or "/dashboard"
+    if not path.startswith("/"):
+        path = "/" + path
+    for line in raw.splitlines():
+        candidate = line.strip()
+        if candidate and _is_tailscale_cgnat_ipv4(candidate):
+            return f"http://{candidate}{path}"
+    return None
+
+
+def _merge_dashboard_url(payload: dict[str, Any]) -> dict[str, Any]:
+    """Attach dashboard_url when the Pi has a usable tailnet IPv4 (read-only)."""
+    url = _tailscale_cgnat_dashboard_url()
+    if url:
+        return {**payload, "dashboard_url": url}
+    return payload
+
+
 def _json_response(handler: BaseHTTPRequestHandler, code: int, payload: dict[str, Any]) -> None:
     body = json.dumps(payload).encode("utf-8")
     handler.send_response(code)
@@ -361,14 +409,16 @@ def _passive_status_check(dashboard_email: str | None) -> dict[str, Any]:
     else:
         message = "Pi is signed in to Tailscale."
 
-    return {
-        "status": "already_authenticated",
-        "auth_url": None,
-        "expires_at": None,
-        "message": message,
-        "signed_in_as": ident or None,
-        "matches_dashboard": matches if dash else None,
-    }
+    return _merge_dashboard_url(
+        {
+            "status": "already_authenticated",
+            "auth_url": None,
+            "expires_at": None,
+            "message": message,
+            "signed_in_as": ident or None,
+            "matches_dashboard": matches if dash else None,
+        }
+    )
 
 
 def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None, status_only: bool = False) -> dict[str, Any]:
@@ -392,14 +442,16 @@ def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None, status_o
         if ident is None:
             return _request_login_url()
         if ident and _identity_matches_dashboard(ident, dash):
-            return {
-                "status": "already_authenticated",
-                "auth_url": None,
-                "expires_at": None,
-                "message": "Pi is already signed in to Tailscale with this dashboard account.",
-                "signed_in_as": ident,
-                "matches_dashboard": True,
-            }
+            return _merge_dashboard_url(
+                {
+                    "status": "already_authenticated",
+                    "auth_url": None,
+                    "expires_at": None,
+                    "message": "Pi is already signed in to Tailscale with this dashboard account.",
+                    "signed_in_as": ident,
+                    "matches_dashboard": True,
+                }
+            )
         return _logout_then_login()
 
     try:
@@ -413,12 +465,14 @@ def _resolve_auth_link(force_reauth: bool, dashboard_email: str | None, status_o
         }
 
     if status_res.returncode == 0:
-        return {
-            "status": "already_authenticated",
-            "auth_url": None,
-            "expires_at": None,
-            "message": "Pi is already signed in to Tailscale.",
-        }
+        return _merge_dashboard_url(
+            {
+                "status": "already_authenticated",
+                "auth_url": None,
+                "expires_at": None,
+                "message": "Pi is already signed in to Tailscale.",
+            }
+        )
 
     return _request_login_url()
 
@@ -444,6 +498,12 @@ class Handler(BaseHTTPRequestHandler):
                     "timestamp": _iso_now(),
                 },
             )
+
+        if self.path == "/v1/tailscale/dashboard-url":
+            if not self._authorized():
+                return self._reject_unauthorized()
+            url = _tailscale_cgnat_dashboard_url()
+            return _json_response(self, 200, {"ok": True, "dashboard_url": url})
 
         _json_response(self, 404, {"status": "error", "message": "Not found"})
 

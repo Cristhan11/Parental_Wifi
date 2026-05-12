@@ -22,8 +22,8 @@ class RemoteAccessSetting extends Model
      * Resolve {@see config('reporting.email_dashboard_url')} with this precedence:
      *  1. Legacy DB row (`remote_access_settings.reporting_dashboard_url`).
      *  2. `REPORTING_DASHBOARD_URL` env (e.g. an explicit MagicDNS hostname).
-     *  3. Pi's current Tailscale IPv4 via `tailscale ip -4` (auto-detected, cached) — preferred
-     *     so reporting emails point parents to a URL that works off home Wi-Fi.
+     *  3. Pi's current Tailscale IPv4 via the Pi local agent (preferred) or `tailscale ip -4` on this host
+     *     (auto-detected, cached) so reporting emails point parents to a URL that works off home Wi-Fi.
      *  4. `APP_URL` + `/dashboard` (LAN fallback).
      *
      * Called from {@see \App\Providers\AppServiceProvider::boot()}.

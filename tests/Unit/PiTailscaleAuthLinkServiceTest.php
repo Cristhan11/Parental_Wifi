@@ -125,6 +125,7 @@ class PiTailscaleAuthLinkServiceTest extends TestCase
                 'message' => 'Pi is signed in to Tailscale as cristhangray@gmail.com.',
                 'signed_in_as' => 'cristhangray@gmail.com',
                 'matches_dashboard' => true,
+                'dashboard_url' => 'http://100.88.1.1/dashboard',
             ], 200),
         ]);
 
@@ -135,6 +136,7 @@ class PiTailscaleAuthLinkServiceTest extends TestCase
         $this->assertSame('already_authenticated', $result['status']);
         $this->assertSame('cristhangray@gmail.com', $result['signed_in_as']);
         $this->assertTrue($result['matches_dashboard']);
+        $this->assertSame('http://100.88.1.1/dashboard', $result['dashboard_url']);
 
         Http::assertSent(function (Request $request): bool {
             $body = json_decode($request->body(), true);
@@ -167,5 +169,57 @@ class PiTailscaleAuthLinkServiceTest extends TestCase
         $this->assertTrue($result['ok']);
         $this->assertSame('action_required', $result['status']);
         $this->assertNull($result['auth_url']);
+    }
+
+    public function test_fetch_tailscale_dashboard_url_returns_sanitized_url(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.status_timeout_seconds', 5);
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/dashboard-url' => Http::response([
+                'ok' => true,
+                'dashboard_url' => 'http://100.99.1.7/dashboard',
+            ], 200),
+        ]);
+
+        $service = new PiTailscaleAuthLinkService;
+        $this->assertSame('http://100.99.1.7/dashboard', $service->fetchTailscaleDashboardUrl());
+
+        Http::assertSent(function (Request $request): bool {
+            return $request->method() === 'GET'
+                && $request->url() === 'http://127.0.0.1:9098/v1/tailscale/dashboard-url';
+        });
+    }
+
+    public function test_fetch_tailscale_dashboard_url_returns_null_when_agent_not_configured(): void
+    {
+        Config::set('pi_agent.base_url', '');
+        Config::set('pi_agent.token', '');
+
+        Http::fake();
+
+        $service = new PiTailscaleAuthLinkService;
+        $this->assertNull($service->fetchTailscaleDashboardUrl());
+
+        Http::assertNothingSent();
+    }
+
+    public function test_fetch_tailscale_dashboard_url_rejects_non_tailnet_ip(): void
+    {
+        Config::set('pi_agent.base_url', 'http://127.0.0.1:9098');
+        Config::set('pi_agent.token', 'secret');
+        Config::set('pi_agent.status_timeout_seconds', 5);
+
+        Http::fake([
+            'http://127.0.0.1:9098/v1/tailscale/dashboard-url' => Http::response([
+                'ok' => true,
+                'dashboard_url' => 'http://192.168.4.1/dashboard',
+            ], 200),
+        ]);
+
+        $service = new PiTailscaleAuthLinkService;
+        $this->assertNull($service->fetchTailscaleDashboardUrl());
     }
 }

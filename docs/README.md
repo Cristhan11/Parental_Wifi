@@ -55,6 +55,7 @@ This directory contains all project documentation for the Child-Centric WiFi Cap
 1. **[LINTER_ERRORS_EXPLANATION.md](LINTER_ERRORS_EXPLANATION.md)** - IDE error explanations
 2. **[PROJECT_FUNDAMENTALS.md](PROJECT_FUNDAMENTALS.md)** - Troubleshooting guide section
 3. **[TESTING.md](TESTING.md)** - Troubleshooting sections in testing guide
+4. **[PI_GATEWAY_NETWORK_DEBUGGING.md](PI_GATEWAY_NETWORK_DEBUGGING.md)** - Pi gateway “no internet”: dual DHCP on `eth0`, iptables whitelist vs `ndsNET`, Tailscale `CONNMARK` vs NoDogSplash marks
 
 ## 📝 Document Categories
 
@@ -85,9 +86,10 @@ This directory contains all project documentation for the Child-Centric WiFi Cap
 ### Reference & Guides
 - `PROJECT_FUNDAMENTALS.md`
 - `LINTER_ERRORS_EXPLANATION.md`
+- `PI_GATEWAY_NETWORK_DEBUGGING.md` - Pi WAN / iptables / NoDogSplash / Tailscale debugging
 - `THESIS_DEFENSE.md`
 
 ---
 
-**Last Updated:** 2025-11-25
+**Last Updated:** 2026-05-13
 

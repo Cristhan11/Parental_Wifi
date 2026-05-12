@@ -12,8 +12,9 @@ use Throwable;
  * Resolves the Raspberry Pi's current Tailscale IPv4 so reporting emails point parents to a URL
  * that works from outside the home network (e.g. http://100.113.109.90/dashboard).
  *
- * Runs `tailscale ip -4` once per cache window (default 5 minutes). Returns null when Tailscale
- * is not installed, not signed in, or the command times out so callers can fall back to APP_URL.
+ * Prefer the Pi local agent (runs Tailscale as root) when {@see config('pi_agent.base_url')} is set;
+ * otherwise runs `tailscale ip -4` on this host. Cached for {@see config('reporting.tailscale_dashboard_cache_seconds')}.
+ * Returns null when Tailscale is unavailable so callers can fall back to APP_URL.
  *
  * @see \App\Models\RemoteAccessSetting::applyReportingDashboardUrlToConfig()
  */
@@ -52,11 +53,24 @@ class TailscaleDashboardUrlResolver
     }
 
     /**
-     * Execute `tailscale ip -4` and turn the first IPv4 into a dashboard URL.
+     * Ask the Pi agent first (Tailscale CLI as root), then fall back to local `tailscale ip -4`.
+     */
+    private function detect(): ?string
+    {
+        $fromPi = app(PiTailscaleAuthLinkService::class)->fetchTailscaleDashboardUrl();
+        if (is_string($fromPi) && $fromPi !== '') {
+            return $fromPi;
+        }
+
+        return $this->detectViaLocalTailscaleCli();
+    }
+
+    /**
+     * Execute `tailscale ip -4` on this machine and turn the first tailnet IPv4 into a dashboard URL.
      * Kept defensive: any failure (missing binary, not signed in, timeout) returns null
      * so the reporting URL fallback chain can take over without surfacing the error.
      */
-    private function detect(): ?string
+    private function detectViaLocalTailscaleCli(): ?string
     {
         $binary = (string) config('reporting.tailscale_binary', '/usr/bin/tailscale');
         $timeout = max(1, (int) config('reporting.tailscale_command_timeout_seconds', 4));

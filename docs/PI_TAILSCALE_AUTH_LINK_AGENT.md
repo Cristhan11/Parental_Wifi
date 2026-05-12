@@ -25,6 +25,14 @@ This guide documents the local helper service used by Laravel Profile to request
 }
 ```
 
+### Dashboard URL (reporting / profile)
+
+- `GET /v1/tailscale/dashboard-url`
+- Header: `X-Pi-Agent-Token: <secret>`
+- Response: `{ "ok": true, "dashboard_url": "http://100.x.y.z/dashboard" }` or `"dashboard_url": null` when Tailscale has no tailnet IPv4 yet.
+- Path suffix follows env **`PI_AGENT_DASHBOARD_PATH`** (default `/dashboard`), aligned with Laravel `REPORTING_TAILSCALE_DASHBOARD_PATH` / `reporting.tailscale_dashboard_path`.
+- Laravel uses this from `www-data` when the PHP user cannot run `tailscale ip -4` locally.
+
 ### Auth link
 
 - `POST /v1/tailscale/auth-link`
@@ -32,6 +40,7 @@ This guide documents the local helper service used by Laravel Profile to request
 - Optional JSON body (max ~4 KiB), keys:
   - `force_reauth` (boolean): when true, the agent always runs `tailscale logout` then `tailscale login` and returns a fresh browser URL (used when changing the dashboard email).
   - `dashboard_email` (string): **slower path** — when set and `force_reauth` is false, the agent compares the current Tailscale login to this email; mismatch runs logout + login. The profile UI uses this only for the optional “Match Pi to my login email” action. The main **Get Tailscale sign-in link** button omits this key so the agent only runs `tailscale status` then `tailscale login` when needed (fast).
+  - `status_only` (boolean): when true, the agent runs a read-only `tailscale status` snapshot (and may include **`dashboard_url`** when the Pi has a tailnet address).
 - The bundled systemd unit runs the agent as **`root`** so `tailscale logout` / `tailscale login` work reliably on Raspberry Pi OS (the `www-data` user often cannot use the Tailscale CLI even with extra groups). The agent still listens only on `127.0.0.1` and requires `X-Pi-Agent-Token`.
 - Response statuses:
   - `already_authenticated`
