@@ -191,9 +191,9 @@ def _logout_then_login() -> dict[str, Any]:
             "auth_url": None,
             "expires_at": None,
             "message": (
-                "Could not sign the Pi out of Tailscale. The agent process needs permission to run "
-                "`tailscale logout` (for example: systemd SupplementaryGroups=tailscale, or run the agent as root). "
-                "See docs/PI_TAILSCALE_AUTH_LINK_AGENT.md."
+                "Could not sign the Pi out of Tailscale. Update the systemd unit from the repo "
+                "(pi_tailscale_auth_agent.service runs as root so tailscale logout works), then "
+                "`sudo systemctl daemon-reload && sudo systemctl restart pi_tailscale_auth_agent`."
             ),
         }
     return _request_login_url()

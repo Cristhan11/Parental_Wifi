@@ -32,7 +32,7 @@ This guide documents the local helper service used by Laravel Profile to request
 - Optional JSON body (max ~4 KiB), keys:
   - `force_reauth` (boolean): when true, the agent always runs `tailscale logout` then `tailscale login` and returns a fresh browser URL (used when changing the dashboard email).
   - `dashboard_email` (string): when set and `force_reauth` is false, the agent reads the current Tailscale login (via `tailscale status --json` when possible). If it matches this email (exact match, or same name with two Google-style domains such as `gmail.com` and `google.com`), it returns `already_authenticated`. Otherwise it runs logout + login and returns a sign-in URL so the Pi can match the dashboard account.
-- The systemd unit sets `SupplementaryGroups=tailscale` so the `www-data` process can use the Tailscale CLI without editing `/etc/group`. If logout still fails, run the agent as `root` or follow your OS docs for `tailscaled` socket permissions.
+- The bundled systemd unit runs the agent as **`root`** so `tailscale logout` / `tailscale login` work reliably on Raspberry Pi OS (the `www-data` user often cannot use the Tailscale CLI even with extra groups). The agent still listens only on `127.0.0.1` and requires `X-Pi-Agent-Token`.
 - Response statuses:
   - `already_authenticated`
   - `action_required`
@@ -85,4 +85,4 @@ Set these values in `.env`:
 - No auth URL returned:
   - Run `tailscale status` and `tailscale login` manually once to validate host setup.
 - `Could not sign the Pi out of Tailscale` from the agent:
-  - Ensure the installed unit includes `SupplementaryGroups=tailscale`, then `sudo systemctl daemon-reload && sudo systemctl restart pi_tailscale_auth_agent`. As a last resort, run the agent as `root` (still bound to `127.0.0.1` with a strong `PI_AGENT_TOKEN`).
+  - Copy the latest `scripts/pi_tailscale_auth_agent.service` from the repo (it runs as `root` for Tailscale CLI access), then `sudo systemctl daemon-reload && sudo systemctl restart pi_tailscale_auth_agent`. Confirm with `sudo tailscale logout` then `sudo tailscale status` from a shell (expect “logged out” / needs login).
