@@ -786,6 +786,9 @@ class DeviceController extends Controller
         // Sync network-level blocking if status changed
         // This ensures database status matches network status
         if ($oldStatus !== $device->status) {
+            if ($oldStatus === 'whitelisted' && $device->status !== 'whitelisted') {
+                $this->networkService->removeWhitelistAcceptRules($device->fresh());
+            }
             // If status changed to 'blocked', block at network level
             if ($device->status === 'blocked') {
                 $this->networkService->blockDevice($device);
@@ -836,6 +839,8 @@ class DeviceController extends Controller
         // Important: Do this before deletion so we can still access device data
         if ($device->status === 'blocked') {
             $this->networkService->unblockDevice($device);
+        } elseif ($device->status === 'whitelisted') {
+            $this->networkService->removeWhitelistAcceptRules($device);
         }
 
         // Delete device from database
@@ -890,6 +895,9 @@ class DeviceController extends Controller
 
         // Sync network-level blocking if status changed
         if ($oldStatus !== $newStatus) {
+            if ($oldStatus === 'whitelisted' && $newStatus !== 'whitelisted') {
+                $this->networkService->removeWhitelistAcceptRules($device->fresh());
+            }
             if ($newStatus === 'blocked') {
                 $this->networkService->blockDevice($device);
             } elseif ($newStatus === 'active') {

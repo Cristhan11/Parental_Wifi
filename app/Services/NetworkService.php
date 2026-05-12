@@ -838,6 +838,43 @@ class NetworkService
     }
 
     /**
+     * Remove high-priority INPUT/FORWARD ACCEPT rules added by whitelist_device.sh.
+     *
+     * Those rules are not removed when the dashboard only changes status away from
+     * whitelisted; without this, the MAC bypasses OpenNDS forever while other child
+     * devices still traverse ndsNET.
+     */
+    public function removeWhitelistAcceptRules(Device $device): bool
+    {
+        $macAddress = $device->mac_address;
+        if (empty($macAddress)) {
+            Log::error('Cannot remove whitelist iptables rules: MAC address is missing', [
+                'device_id' => $device->id,
+            ]);
+
+            return false;
+        }
+
+        $result = $this->scriptExecutor->execute('remove_whitelist_accept_rules.sh', [$macAddress]);
+        if ($result['success']) {
+            Log::info('Removed whitelist-style iptables ACCEPT rules for device', [
+                'device_id' => $device->id,
+                'mac_address' => $macAddress,
+                'script_output' => $result['output'],
+            ]);
+        } else {
+            Log::warning('remove_whitelist_accept_rules.sh may have failed', [
+                'device_id' => $device->id,
+                'mac_address' => $macAddress,
+                'script_error' => $result['error'],
+                'script_output' => $result['output'],
+            ]);
+        }
+
+        return $result['success'];
+    }
+
+    /**
      * Get list of devices currently connected to the access point.
      * 
      * This method queries the network to find all devices currently connected

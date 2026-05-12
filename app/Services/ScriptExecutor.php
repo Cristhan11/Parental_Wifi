@@ -111,6 +111,7 @@ class ScriptExecutor
         'block_device.sh',
         'unblock_device.sh',
         'whitelist_device.sh',
+        'remove_whitelist_accept_rules.sh',
         'get_connected_devices.sh',
         'monitor_traffic.sh',
         'redirect_device_portal.sh',

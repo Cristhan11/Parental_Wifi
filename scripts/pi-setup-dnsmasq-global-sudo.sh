@@ -26,6 +26,7 @@ WEB_USER="${2:-${WEB_USER:-www-data}}"
 
 GLOBAL_SCRIPT="$(readlink -f "$APP_ROOT/scripts/update_dnsmasq_global_blocklist.sh")"
 DHCP_BYPASS_SCRIPT="$(readlink -f "$APP_ROOT/scripts/update_dnsmasq_dhcp_dns_bypass.sh")"
+REMOVE_WHITELIST_SCRIPT="$(readlink -f "$APP_ROOT/scripts/remove_whitelist_accept_rules.sh")"
 
 if [[ "$(id -u)" -ne 0 ]]; then
   echo "Error: run as root, e.g. sudo bash $SCRIPT_PATH" >&2
@@ -42,9 +43,15 @@ if [[ ! -f "$DHCP_BYPASS_SCRIPT" ]]; then
   exit 1
 fi
 
+if [[ ! -f "$REMOVE_WHITELIST_SCRIPT" ]]; then
+  echo "Error: remove_whitelist_accept_rules.sh not found: $REMOVE_WHITELIST_SCRIPT" >&2
+  exit 1
+fi
+
 chmod 0755 "$APP_ROOT/scripts" 2>/dev/null || true
 chmod +x "$GLOBAL_SCRIPT"
 chmod +x "$DHCP_BYPASS_SCRIPT"
+chmod +x "$REMOVE_WHITELIST_SCRIPT"
 
 append_nopasswd_line() {
   local script_path="$1"
@@ -89,6 +96,10 @@ if ! append_nopasswd_line "$GLOBAL_SCRIPT" "Household dnsmasq blocklist (Laravel
 fi
 
 if ! append_nopasswd_line "$DHCP_BYPASS_SCRIPT" "DHCP DNS bypass for parent/guest/whitelisted MACs (Laravel)"; then
+  exit 1
+fi
+
+if ! append_nopasswd_line "$REMOVE_WHITELIST_SCRIPT" "Remove stale whitelist iptables ACCEPT (Laravel NetworkService)"; then
   exit 1
 fi
 
