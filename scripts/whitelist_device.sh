@@ -27,6 +27,12 @@
 # - The script is idempotent (safe to run multiple times)
 # - ACCEPT rules are added at position 1 (checked first, highest priority)
 # - Whitelisted devices bypass time limits, blocks, and all restrictions
+#
+# Nodogsplash / NoDogSplash re-inserts jumps to ndsRTR (INPUT) and ndsNET
+# (FORWARD) at line 1 when it starts or refreshes rules. If that happens after
+# a plain "insert at 1", the whitelist ACCEPT ends up *below* those jumps and
+# never matches — clients still hit the portal chains. We therefore re-assert
+# ordering until the first wlan0 rule in each chain is our MAC ACCEPT.
 ################################################################################
 
 # Set script to exit immediately if any command fails
@@ -188,6 +194,39 @@ add_whitelist_rule() {
 }
 
 ################################################################################
+# Function: ensure_whitelist_before_portal_jump
+#
+# Purpose: NoDogSplash inserts -i wlan0 -j ndsRTR / ndsNET at the top of INPUT
+#          and FORWARD. Our whitelist must be the *first* rule that matches
+#          traffic from this MAC on wlan0, i.e. the first -i wlan0 line in -S
+#          output must be our MAC ACCEPT. Otherwise the device still hits NDS.
+################################################################################
+ensure_whitelist_before_portal_jump() {
+    local chain="$1"
+    local mac="$2"
+    local attempt=0
+    local max_attempts=12
+    local first_wlan
+
+    while [ "$attempt" -lt "$max_attempts" ]; do
+        first_wlan=$(sudo iptables -S "$chain" 2>/dev/null | grep -F -- "-i wlan0" | head -n1 || true)
+        if echo "$first_wlan" | grep -qiF -- "--mac-source ${mac}" && echo "$first_wlan" | grep -q -- "-j ACCEPT"; then
+            echo "Success: $chain: first wlan0 rule is whitelist ACCEPT for $mac" >&2
+            return 0
+        fi
+        remove_accept_rule "$chain" "$mac"
+        if ! sudo iptables -I "$chain" 1 -i wlan0 -m mac --mac-source "$mac" -j ACCEPT; then
+            echo "Error: Failed to re-insert whitelist in $chain" >&2
+            return 1
+        fi
+        attempt=$((attempt + 1))
+        sleep 0.2
+    done
+    echo "Error: After $max_attempts attempts, whitelist is not the first wlan0 rule in $chain (portal may keep winning). Check nodogsplash." >&2
+    return 1
+}
+
+################################################################################
 # Main Script Execution
 ################################################################################
 
@@ -232,6 +271,14 @@ fi
 # Add whitelist rule to FORWARD chain
 if ! add_whitelist_rule "FORWARD" "$NORMALIZED_MAC"; then
     echo "Error: Failed to whitelist device on FORWARD chain" >&2
+    exit 2
+fi
+
+# Re-assert order if nodogsplash inserted ndsRTR/ndsNET back at line 1
+if ! ensure_whitelist_before_portal_jump "INPUT" "$NORMALIZED_MAC"; then
+    exit 2
+fi
+if ! ensure_whitelist_before_portal_jump "FORWARD" "$NORMALIZED_MAC"; then
     exit 2
 fi
 
