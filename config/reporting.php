@@ -65,4 +65,28 @@ return [
 
     'email_dashboard_url' => null,
 
+    /*
+    |--------------------------------------------------------------------------
+    | Auto-detect Tailscale dashboard URL
+    |--------------------------------------------------------------------------
+    |
+    | When the Raspberry Pi is signed in to Tailscale, the reporting emails should
+    | point parents at the Pi's tailnet IPv4 (reachable from outside the home Wi-Fi)
+    | instead of a LAN-only IP. The resolver runs `tailscale ip -4` and caches the
+    | result; on first cold-start it adds <1 s to the digest job.
+    |
+    | REPORTING_DASHBOARD_URL still overrides this (e.g. a MagicDNS hostname).
+    |
+    */
+
+    'tailscale_auto_detect' => filter_var(env('REPORTING_TAILSCALE_AUTO_DETECT', true), FILTER_VALIDATE_BOOLEAN),
+
+    'tailscale_binary' => env('REPORTING_TAILSCALE_BIN', '/usr/bin/tailscale'),
+
+    'tailscale_command_timeout_seconds' => (int) env('REPORTING_TAILSCALE_COMMAND_TIMEOUT_SECONDS', 4),
+
+    'tailscale_dashboard_cache_seconds' => (int) env('REPORTING_TAILSCALE_CACHE_SECONDS', 300),
+
+    'tailscale_dashboard_path' => env('REPORTING_TAILSCALE_DASHBOARD_PATH', '/dashboard'),
+
 ];

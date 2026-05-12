@@ -8,6 +8,7 @@ use App\Models\ReportingRecipient;
 use App\Models\SecurityAuditEvent;
 use App\Services\PiTailscaleAuthLinkService;
 use App\Services\SecurityAuditLogger;
+use App\Services\TailscaleDashboardUrlResolver;
 use App\Support\Auth\ProfileEmailChangeSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -146,6 +147,13 @@ class ProfileController extends Controller
 
         $result = $service->fetchAuthLink($forceReauth, $dashboardEmail, $statusOnly);
         $maskedUrl = $service->maskAuthUrl($result['auth_url']);
+
+        // After any Tailscale state change (logout + new login, or successful action_required URL
+        // issued), the Pi's Tailscale IPv4 may differ from what we cached for reporting emails.
+        // Bust the cache so the next digest re-detects via `tailscale ip -4`.
+        if (! $statusOnly && in_array($result['status'] ?? '', ['action_required', 'already_authenticated'], true)) {
+            app(TailscaleDashboardUrlResolver::class)->forget();
+        }
 
         $auditLogger->record(
             SecurityAuditEvent::EVENT_TAILSCALE_AUTH_LINK_REQUEST,

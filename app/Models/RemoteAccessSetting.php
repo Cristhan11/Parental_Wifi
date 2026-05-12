@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\TailscaleDashboardUrlResolver;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Schema;
 
@@ -18,8 +19,12 @@ class RemoteAccessSetting extends Model
     ];
 
     /**
-     * Resolve {@see config('reporting.email_dashboard_url')} after env: legacy DB row, then
-     * REPORTING_DASHBOARD_URL, then APP_URL + /dashboard, then a last-resort default.
+     * Resolve {@see config('reporting.email_dashboard_url')} with this precedence:
+     *  1. Legacy DB row (`remote_access_settings.reporting_dashboard_url`).
+     *  2. `REPORTING_DASHBOARD_URL` env (e.g. an explicit MagicDNS hostname).
+     *  3. Pi's current Tailscale IPv4 via `tailscale ip -4` (auto-detected, cached) — preferred
+     *     so reporting emails point parents to a URL that works off home Wi-Fi.
+     *  4. `APP_URL` + `/dashboard` (LAN fallback).
      *
      * Called from {@see \App\Providers\AppServiceProvider::boot()}.
      */
@@ -41,6 +46,15 @@ class RemoteAccessSetting extends Model
             return;
         }
 
+        if (config('reporting.tailscale_auto_detect', true)) {
+            $tailscaleUrl = app(TailscaleDashboardUrlResolver::class)->resolve();
+            if (is_string($tailscaleUrl) && $tailscaleUrl !== '') {
+                config(['reporting.email_dashboard_url' => $tailscaleUrl]);
+
+                return;
+            }
+        }
+
         $appUrl = config('app.url');
         if (is_string($appUrl) && $appUrl !== '') {
             config(['reporting.email_dashboard_url' => rtrim($appUrl, '/').'/dashboard']);
@@ -48,7 +62,7 @@ class RemoteAccessSetting extends Model
             return;
         }
 
-        config(['reporting.email_dashboard_url' => 'http://100.102.52.117/dashboard']);
+        config(['reporting.email_dashboard_url' => 'http://localhost/dashboard']);
     }
 
     /**
