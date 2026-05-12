@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\DeviceTimeGrant;
 use App\Models\QuizAttempt;
 use App\Models\VideoCompletion;
+use App\Services\ChildDeviceConnectionRestoreService;
 use App\Services\NetworkService;
 use App\Services\NoDogSplashService;
 use Illuminate\Support\Facades\Log;
@@ -45,6 +46,8 @@ class TimeGrantingService
 
     protected TimeTrackingService $timeTrackingService;
 
+    protected ChildDeviceConnectionRestoreService $childDeviceConnectionRestoreService;
+
     /**
      * Constructor - inject dependencies.
      * 
@@ -58,11 +61,13 @@ class TimeGrantingService
     public function __construct(
         NetworkService $networkService,
         NoDogSplashService $noDogSplashService,
-        TimeTrackingService $timeTrackingService
+        TimeTrackingService $timeTrackingService,
+        ChildDeviceConnectionRestoreService $childDeviceConnectionRestoreService
     ) {
         $this->networkService = $networkService;
         $this->noDogSplashService = $noDogSplashService;
         $this->timeTrackingService = $timeTrackingService;
+        $this->childDeviceConnectionRestoreService = $childDeviceConnectionRestoreService;
     }
 
     /**
@@ -409,6 +414,19 @@ class TimeGrantingService
             $this->applyPortalPresenceSync($device, $source, $portalSync);
             $device->refresh();
         }
+
+        // Child devices that were already `active` never hit unblockDevice(); they can still be
+        // stuck in NoDogSplash Preauthenticated or iptables DROP. Sync network + portal every grant.
+        try {
+            $this->childDeviceConnectionRestoreService->tryRestoreIfHasRemainingTime($device);
+        } catch (\Exception $e) {
+            Log::debug('tryRestoreIfHasRemainingTime after time grant failed (non-fatal)', [
+                'device_id' => $device->id,
+                'mac_address' => $device->mac_address,
+                'error' => $e->getMessage(),
+            ]);
+        }
+        $device->refresh();
 
         // Log the time grant operation for debugging and audit trail
         // This helps track when and why time was granted

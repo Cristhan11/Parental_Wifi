@@ -128,26 +128,21 @@ class CheckTimeExpiration implements ShouldQueue
         // - Returns collection of expired devices
         $expiredDevices = $timeTrackingService->getExpiredDevices();
 
-        // If no devices have expired, nothing to do
-        // Log and exit early to save processing time
         if ($expiredDevices->isEmpty()) {
-            Log::debug('CheckTimeExpiration job completed - no expired devices found');
-            return; // Exit early - no work to do
-        }
+            Log::debug('CheckTimeExpiration: no expired devices (still syncing clients with time below)');
+        } else {
+            // Log how many devices expired (for monitoring and debugging)
+            Log::info('CheckTimeExpiration job found expired devices', [
+                'count' => $expiredDevices->count(),
+            ]);
 
-        // Log how many devices expired (for monitoring and debugging)
-        // This helps us understand how many devices are expiring at once
-        Log::info('CheckTimeExpiration job found expired devices', [
-            'count' => $expiredDevices->count(),
-        ]);
-
-        // Step 2: Process each expired device
-        // Loop through the collection of expired devices
-        // For each device, we need to:
-        // - Update status to 'blocked' in database
-        // - Block at network level (iptables)
-        // - Redirect to portal (NoDogSplash)
-        foreach ($expiredDevices as $device) {
+            // Step 2: Process each expired device
+            // Loop through the collection of expired devices
+            // For each device, we need to:
+            // - Update status to 'blocked' in database
+            // - Block at network level (iptables)
+            // - Redirect to portal (NoDogSplash)
+            foreach ($expiredDevices as $device) {
             // Wrap in try-catch to handle errors gracefully
             // If one device fails, we continue processing other devices
             // This ensures one error doesn't stop the entire job
@@ -243,6 +238,7 @@ class CheckTimeExpiration implements ShouldQueue
                 // Continue to next device (don't stop the job)
                 // The job will retry on next run if needed
                 continue;
+            }
             }
         }
 
