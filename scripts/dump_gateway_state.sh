@@ -48,6 +48,14 @@ echo "========== interfaces (brief) =========="
 ip -br addr 2>/dev/null || true
 
 echo
+echo "========== mangle PREROUTING (connmark / wlan0) =========="
+sudo iptables -t mangle -L PREROUTING -n -v --line-numbers 2>/dev/null | head -25 || true
+
+echo
+echo "========== filter ndsNET =========="
+sudo iptables -L ndsNET -n -v --line-numbers 2>/dev/null || true
+
+echo
 echo "========== iptables-save (full) =========="
 sudo iptables-save 2>/dev/null || true
 
