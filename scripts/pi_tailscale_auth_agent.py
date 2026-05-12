@@ -37,7 +37,11 @@ def _json_response(handler: BaseHTTPRequestHandler, code: int, payload: dict[str
     handler.send_header("Content-Type", "application/json")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
-    handler.wfile.write(body)
+    try:
+        handler.wfile.write(body)
+    except BrokenPipeError:
+        # Client closed the socket early (e.g. browser navigated away); not a server fault.
+        return
 
 
 def _run_tailscale(args: list[str]) -> subprocess.CompletedProcess[str]:
