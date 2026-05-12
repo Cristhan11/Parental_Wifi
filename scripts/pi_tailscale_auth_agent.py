@@ -16,6 +16,8 @@ import os
 import re
 import shutil
 import subprocess
+import sys
+import traceback
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from socketserver import ThreadingMixIn
@@ -121,31 +123,36 @@ def _tailscale_logged_in_identity() -> str | None:
     """
     Return Tailscale login identity string if connected, None if not logged in.
     Return empty string if connected but identity could not be parsed.
+
+    Never raises: timeouts or a missing tailscale binary must not crash the HTTP handler.
     """
-    r = _run_tailscale(["status", "--json"])
-    if r.returncode != 0:
-        return None
-    out = (r.stdout or "").strip()
-    if not out:
-        return None
     try:
-        data = json.loads(r.stdout)
-        if isinstance(data, dict):
-            hint = _login_from_status_json(data)
-            if hint:
-                return hint
-    except json.JSONDecodeError:
-        pass
+        r = _run_tailscale(["status", "--json"])
+        if r.returncode != 0:
+            return None
+        out = (r.stdout or "").strip()
+        if not out:
+            return None
+        try:
+            data = json.loads(r.stdout)
+            if isinstance(data, dict):
+                hint = _login_from_status_json(data)
+                if hint:
+                    return hint
+        except json.JSONDecodeError:
+            pass
 
-    hint = _login_from_status_text(r.stdout or "")
-    if hint:
-        return hint
+        hint = _login_from_status_text(r.stdout or "")
+        if hint:
+            return hint
 
-    r2 = _run_tailscale(["status"])
-    if r2.returncode != 0:
+        r2 = _run_tailscale(["status"])
+        if r2.returncode != 0:
+            return None
+        hint2 = _login_from_status_text(r2.stdout or "")
+        return hint2 if hint2 else ""
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         return None
-    hint2 = _login_from_status_text(r2.stdout or "")
-    return hint2 if hint2 else ""
 
 
 def _identity_matches_dashboard(tailscale_user: str, dashboard: str) -> bool:
@@ -350,15 +357,28 @@ class Handler(BaseHTTPRequestHandler):
             except json.JSONDecodeError:
                 pass
 
-        result = _resolve_auth_link(force_reauth, dashboard_email)
-        if result.get("status") not in STATUS_ALLOWED:
-            result = {
-                "status": "error",
-                "auth_url": None,
-                "expires_at": None,
-                "message": "Internal status validation failed.",
-            }
-        _json_response(self, 200, result)
+        try:
+            result = _resolve_auth_link(force_reauth, dashboard_email)
+            if result.get("status") not in STATUS_ALLOWED:
+                result = {
+                    "status": "error",
+                    "auth_url": None,
+                    "expires_at": None,
+                    "message": "Internal status validation failed.",
+                }
+            _json_response(self, 200, result)
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+            _json_response(
+                self,
+                200,
+                {
+                    "status": "error",
+                    "auth_url": None,
+                    "expires_at": None,
+                    "message": "Pi helper hit an unexpected error. Check journalctl -u pi_tailscale_auth_agent.",
+                },
+            )
 
     def log_message(self, fmt: str, *args: Any) -> None:
         # Prevent leaking command data to stdout logs by default.
