@@ -13,10 +13,13 @@ from __future__ import annotations
 
 import json
 import os
+import queue
 import re
 import shutil
 import subprocess
 import sys
+import threading
+import time
 import traceback
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -174,10 +177,33 @@ def _identity_matches_dashboard(tailscale_user: str, dashboard: str) -> bool:
     return da in google_domains and db in google_domains
 
 
+def _decode_proc_output(value: Any) -> str:
+    """
+    Defensive decoder. `subprocess.run(text=True)` returns str on success, but
+    `subprocess.TimeoutExpired.stdout`/`.stderr` are bytes on Python 3.13. We use
+    this anywhere we touch captured output so a TypeError never crashes the agent.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
 def _request_login_url() -> dict[str, Any]:
-    """Assume Pi is not authenticated; obtain a login.tailscale.com URL."""
+    """
+    Spawn `tailscale login`, stream its merged output, and return as soon as the
+    sign-in URL appears. The CLI is then terminated; `tailscaled` (the daemon)
+    owns the pending sign-in state so the user can still finish in the browser.
+    """
     try:
-        login_res = _run_tailscale(["login"], seconds=LOGIN_TIMEOUT)
+        proc = subprocess.Popen(
+            [TAILSCALE_BIN, "login"],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            bufsize=1,
+        )
     except FileNotFoundError:
         return {
             "status": "unavailable",
@@ -188,29 +214,62 @@ def _request_login_url() -> dict[str, Any]:
                 "to the full path from `which tailscale` on the Pi."
             ),
         }
-    except subprocess.TimeoutExpired as e:
-        combined = (e.stdout or "") + "\n" + (e.stderr or "")
-        auth_url = _extract_auth_url(combined)
-        if auth_url:
-            return {
-                "status": "action_required",
-                "auth_url": auth_url,
-                "expires_at": _iso_now(),
-                "message": "Open this link to finish Tailscale sign-in on the Raspberry Pi.",
-            }
+    except OSError as exc:
         return {
             "status": "unavailable",
             "auth_url": None,
             "expires_at": None,
-            "message": (
-                "Tailscale login did not finish before the command timeout, and no auth URL was "
-                "captured. Increase PI_AGENT_LOGIN_TIMEOUT_SECONDS for pi_tailscale_auth_agent "
-                "(e.g. 180), or run `sudo tailscale login` on the Pi once and try again."
-            ),
+            "message": f"Could not start tailscale login: {exc}.",
         }
 
-    combined = (login_res.stdout or "") + "\n" + (login_res.stderr or "")
-    auth_url = _extract_auth_url(combined)
+    line_queue: queue.Queue[str | None] = queue.Queue()
+
+    def _reader() -> None:
+        try:
+            assert proc.stdout is not None
+            for line in proc.stdout:
+                line_queue.put(_decode_proc_output(line))
+        except Exception:
+            traceback.print_exc(file=sys.stderr)
+        finally:
+            line_queue.put(None)
+
+    thread = threading.Thread(target=_reader, daemon=True)
+    thread.start()
+
+    auth_url: str | None = None
+    captured: list[str] = []
+    deadline = time.monotonic() + max(1, LOGIN_TIMEOUT)
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+            try:
+                line = line_queue.get(timeout=min(0.5, max(0.05, remaining)))
+            except queue.Empty:
+                continue
+            if line is None:
+                break
+            captured.append(line)
+            found = _extract_auth_url(line)
+            if found:
+                auth_url = found
+                break
+    finally:
+        if proc.poll() is None:
+            try:
+                proc.terminate()
+                try:
+                    proc.wait(timeout=3)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+            except (ProcessLookupError, OSError):
+                pass
+
+    if not auth_url:
+        auth_url = _extract_auth_url("".join(captured))
+
     if auth_url:
         return {
             "status": "action_required",
@@ -220,10 +279,14 @@ def _request_login_url() -> dict[str, Any]:
         }
 
     return {
-        "status": "error",
+        "status": "unavailable",
         "auth_url": None,
         "expires_at": None,
-        "message": "Could not extract a Tailscale auth URL from command output.",
+        "message": (
+            "Tailscale login did not print a sign-in URL within the timeout. "
+            "Run `sudo tailscale login` on the Pi to confirm the CLI prints a "
+            "https://login.tailscale.com/... URL, or raise PI_AGENT_LOGIN_TIMEOUT_SECONDS."
+        ),
     }
 
 
