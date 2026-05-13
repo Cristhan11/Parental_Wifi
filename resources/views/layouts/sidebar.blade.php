@@ -220,19 +220,21 @@
     </nav>
 
     <!-- User Section -->
-    <div class="shrink-0 border-t border-gray-200 p-4">
+    <div class="shrink-0 border-t border-gray-200 px-2 py-2">
         <x-dropdown align="left-up" width="48">
             <x-slot name="trigger">
-                <button class="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100 hover:text-black focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-2 transition-colors">
-                    <div class="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center font-semibold text-black">
+                <button type="button"
+                        class="w-full flex items-center gap-2 px-2 py-1.5 rounded-md text-left text-gray-700 hover:bg-gray-100 hover:text-black focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:ring-offset-1 transition-colors min-w-0"
+                        title="{{ Auth::user()->email }} — {{ Auth::user()->accountTypeLabel() }}">
+                    <div class="w-7 h-7 shrink-0 rounded-full bg-yellow-100 flex items-center justify-center text-xs font-semibold text-black">
                         {{ strtoupper(substr(Auth::user()->name, 0, 1)) }}
                     </div>
-                    <div class="flex-1 text-left">
-                        <div class="font-medium">{{ Auth::user()->name }}</div>
-                        <div class="text-xs text-gray-500">{{ Auth::user()->email }}</div>
-                        <div class="text-xs text-gray-400 mt-0.5">{{ Auth::user()->accountTypeLabel() }}</div>
+                    <div class="flex-1 min-w-0">
+                        <div class="text-xs font-medium text-black leading-snug truncate">{{ Auth::user()->name }}</div>
+                        <div class="text-[10px] text-gray-500 leading-snug truncate">{{ Auth::user()->email }}</div>
+                        <div class="text-[10px] text-gray-400 leading-snug truncate">{{ Auth::user()->accountTypeLabel() }}</div>
                     </div>
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-3.5 h-3.5 shrink-0 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
                     </svg>
                 </button>
