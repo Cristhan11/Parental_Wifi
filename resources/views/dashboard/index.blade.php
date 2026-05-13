@@ -42,6 +42,8 @@
                             data-device-id="{{ $data['device']->id }}"
                             data-db-remaining-minutes="{{ $data['db_remaining_minutes'] }}"
                             data-active-session-started-at="{{ $data['active_session_started_at'] ?? '' }}"
+                            data-active-session-billing-anchor-at="{{ $data['active_session_billing_anchor_at'] ?? '' }}"
+                            data-usage-server-render-ms="{{ $timeUsageAnchorMs }}"
                             data-total-usage-seconds="{{ $data['total_seconds'] }}"
                             data-is-whitelisted="{{ $data['is_whitelisted'] ? '1' : '0' }}"
                             data-is-connected="{{ $data['is_connected'] ? '1' : '0' }}"
@@ -644,30 +646,39 @@
 
                     const totalBase = parseInt(row.dataset.totalUsageSeconds || '0', 10) || 0;
                     const activeStart = row.dataset.activeSessionStartedAt || '';
+                    const activeBillingAnchor = row.dataset.activeSessionBillingAnchorAt || '';
                     const hasActive = activeStart.length > 0;
                     const isWhitelisted = row.dataset.isWhitelisted === '1';
                     const isConnected = row.dataset.isConnected === '1';
                     const dbRemMin = parseInt(row.dataset.dbRemainingMinutes || '0', 10) || 0;
                     const fallbackMin = parseInt(row.dataset.remainingMinutesFallback || '0', 10) || 0;
 
-                    let sessionElapsedSec = 0;
-                    if (hasActive) {
-                        const startMs = parseIsoMs(activeStart);
-                        sessionElapsedSec = !Number.isNaN(startMs) ? Math.max(0, Math.floor((now - startMs) / 1000)) : 0;
-                    }
+                    const serverRenderRaw = row.dataset.usageServerRenderMs;
+                    const serverRenderMs = (serverRenderRaw !== undefined && serverRenderRaw !== '')
+                        ? parseInt(serverRenderRaw, 10)
+                        : NaN;
+                    const usageSnapshotMs = !Number.isNaN(serverRenderMs) ? serverRenderMs : t0;
 
                     let usageSec = totalBase;
                     if (hasActive) {
-                        usageSec = totalBase + sessionElapsedSec;
+                        // totalBase already includes active usage through server render; add only the delta since then.
+                        usageSec = totalBase + Math.max(0, Math.floor((now - usageSnapshotMs) / 1000));
                     } else if (isConnected && !isWhitelisted && fallbackMin > 0) {
                         usageSec = totalBase + anchorDeltaSec;
+                    }
+
+                    const billingAnchorIso = activeBillingAnchor || activeStart;
+                    const billingAnchorMs = billingAnchorIso ? parseIsoMs(billingAnchorIso) : NaN;
+                    let unbilledSec = 0;
+                    if (hasActive && !Number.isNaN(billingAnchorMs)) {
+                        unbilledSec = Math.max(0, Math.floor((now - billingAnchorMs) / 1000));
                     }
 
                     let remainingSec = 0;
                     if (isWhitelisted) {
                         remainingSec = 999999;
                     } else if (hasActive) {
-                        remainingSec = Math.max(0, dbRemMin * 60 - sessionElapsedSec);
+                        remainingSec = Math.max(0, dbRemMin * 60 - unbilledSec);
                     } else if (isConnected && fallbackMin > 0) {
                         remainingSec = Math.max(0, fallbackMin * 60 - anchorDeltaSec);
                     } else {
@@ -788,6 +799,7 @@
                             row.dataset.dbRemainingMinutes = '0';
                             row.dataset.remainingMinutesFallback = '0';
                             row.dataset.activeSessionStartedAt = '';
+                            row.dataset.activeSessionBillingAnchorAt = '';
                             row.dataset.usageAnchorMs = String(Date.now());
                             if (typeof window.dashboardSetSessionMeta === 'function') {
                                 window.dashboardSetSessionMeta(row, '');
@@ -810,6 +822,9 @@
                             row.dataset.usageAnchorMs = String(Number.isNaN(ts) ? Date.now() : ts);
                             if (event.active_session_started_at !== undefined) {
                                 row.dataset.activeSessionStartedAt = event.active_session_started_at || '';
+                            }
+                            if (event.active_session_billing_anchor_at !== undefined) {
+                                row.dataset.activeSessionBillingAnchorAt = event.active_session_billing_anchor_at || '';
                             }
                             if (event.is_connected !== undefined) {
                                 row.dataset.isConnected = event.is_connected ? '1' : '0';

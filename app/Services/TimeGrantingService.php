@@ -445,6 +445,7 @@ class TimeGrantingService
             // time has already been updated and (if needed) unblock flow completed.
             $activeSession = $device->activeSession();
             $activeStarted = $activeSession?->started_at?->toIso8601String();
+            $activeBillingAnchor = $activeSession?->billingAnchor()->toIso8601String();
             event(new TimeGranted(
                 userId: $device->user_id,
                 deviceId: $device->id,
@@ -454,6 +455,7 @@ class TimeGrantingService
                 source: $source,
                 isConnected: ! empty($device->ip_address),
                 activeSessionStartedAt: $activeStarted,
+                activeSessionBillingAnchorAt: $activeBillingAnchor,
                 ipAddress: $device->ip_address
             ));
         }

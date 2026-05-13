@@ -105,6 +105,9 @@ class DashboardController extends Controller
                 'active_session_started_at' => $includeActiveUsage
                     ? $activeSession?->started_at?->toIso8601String()
                     : null,
+                'active_session_billing_anchor_at' => $includeActiveUsage && $activeSession
+                    ? $activeSession->billingAnchor()->toIso8601String()
+                    : null,
                 'is_whitelisted' => $device->isWhitelisted(),
             ];
         }
@@ -231,7 +234,8 @@ class DashboardController extends Controller
         }
 
         $poolSeconds = $baseRemaining * 60;
-        $elapsedSeconds = $activeSession->started_at->diffInSeconds(now());
+        $anchor = $activeSession->billingAnchor();
+        $elapsedSeconds = $anchor->diffInSeconds(now());
         $remainingSeconds = max(0, $poolSeconds - $elapsedSeconds);
 
         return max(0, (int) floor($remainingSeconds / 60));

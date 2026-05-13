@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -24,6 +25,7 @@ class DeviceSession extends Model
     protected $fillable = [
         'device_id',
         'started_at',
+        'last_incremental_bill_at',
         'ended_at',
         'duration_seconds',
         'total_bytes_sent',
@@ -39,8 +41,21 @@ class DeviceSession extends Model
     {
         return [
             'started_at' => 'datetime',
+            'last_incremental_bill_at' => 'datetime',
             'ended_at' => 'datetime',
         ];
+    }
+
+    /**
+     * Start of the window used for incremental billing (time not yet written off the pool).
+     *
+     * {@see TimeTrackingService::trackActiveSessions()} advances this after each deduction so
+     * {@see getDurationMinutes()} reflects only unbilled minutes, while {@see $started_at}
+     * stays the true session start for usage totals and {@see calculateDuration()}.
+     */
+    public function billingAnchor(): CarbonInterface
+    {
+        return ($this->last_incremental_bill_at ?? $this->started_at)->copy();
     }
 
     /**
@@ -135,9 +150,9 @@ class DeviceSession extends Model
             return round($this->duration_seconds / 60, 2);
         }
 
-        // If session is still active, calculate from start time to now (sub-minute precision)
+        // Active session: minutes since last incremental bill (or session start).
         if ($this->isActive()) {
-            return round($this->started_at->diffInSeconds(now()) / 60, 2);
+            return round($this->billingAnchor()->diffInSeconds(now()) / 60, 2);
         }
 
         return 0;  // No duration if session hasn't started

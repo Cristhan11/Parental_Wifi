@@ -27,6 +27,7 @@ class TimeGranted implements ShouldBroadcastNow
         public string $source,
         public bool $isConnected = false,
         public ?string $activeSessionStartedAt = null,
+        public ?string $activeSessionBillingAnchorAt = null,
         public ?string $ipAddress = null,
     ) {}
 
@@ -55,6 +56,7 @@ class TimeGranted implements ShouldBroadcastNow
             'source' => $this->source,
             'is_connected' => $this->isConnected,
             'active_session_started_at' => $this->activeSessionStartedAt,
+            'active_session_billing_anchor_at' => $this->activeSessionBillingAnchorAt,
             'ip_address' => $this->ipAddress,
             'timestamp' => now()->toIso8601String(),
         ];

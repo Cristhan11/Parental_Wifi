@@ -346,34 +346,34 @@ class TimeTrackingService
         // device is a relationship, so we can access it directly
         $device = $session->device;
 
+        // Minutes not yet billed by trackActiveSessions() (since last_incremental_bill_at or started_at).
+        // Must be read while the session is still active: after ended_at is set, getDurationMinutes()
+        // uses duration_seconds (full wall clock) and would double-charge already-incremental-billed time.
+        $unbilledMinutes = $session->getDurationMinutes();
+
         // Set end time to now
         // This marks the session as ended
         $session->ended_at = now();
 
-        // Calculate duration and save
-        // calculateDuration() uses started_at and ended_at to calculate duration_seconds
+        // Full wall-clock span for dashboard usage / history (started_at → ended_at).
         $session->calculateDuration();
-
-        // Get duration in minutes (for time deduction)
-        // getDurationMinutes() converts seconds to minutes
-        $durationMinutes = $session->getDurationMinutes();
 
         // Only deduct time if device is NOT whitelisted
         // Whitelisted devices have unrestricted access (no time tracking)
         // Also check duration > 0 to avoid deducting 0 time
-        if (!$device->isWhitelisted() && $durationMinutes > 0) {
+        if (! $device->isWhitelisted() && $unbilledMinutes > 0) {
             // Deduct time from device
             // deductTime() method prevents negative values
             // ceil() rounds up (e.g., 5.1 minutes = 6 minutes) to ensure fair deduction
-            $device->deductTime((int) ceil($durationMinutes));
+            $device->deductTime((int) ceil($unbilledMinutes));
 
             // Log time deduction for debugging and monitoring
             Log::info("Time deducted for device {$device->name}", [
                 'device_id' => $device->id,
                 'device_name' => $device->name,
                 'session_id' => $session->id,
-                'duration_minutes' => $durationMinutes,
-                'minutes_deducted' => (int) ceil($durationMinutes),
+                'duration_minutes' => $unbilledMinutes,
+                'minutes_deducted' => (int) ceil($unbilledMinutes),
                 'remaining_time_minutes' => $device->fresh()->remaining_time_minutes, // fresh() reloads from database
             ]);
         }
@@ -489,7 +489,7 @@ class TimeTrackingService
             }
 
             // Calculate how long this session has been running (in minutes)
-            // getDurationMinutes() calculates from started_at to now() for active sessions
+            // getDurationMinutes() uses last_incremental_bill_at (or started_at) to now for active sessions
             $sessionDurationMinutes = $session->getDurationMinutes();
 
             // Only deduct if session has been running for at least 1 minute
@@ -524,26 +524,10 @@ class TimeTrackingService
                     continue;
                 }
 
-                // BUG FIX: Reset session's started_at to now() after deducting time.
-                // Previously, started_at was never updated, so getDurationMinutes() always
-                // returned the TOTAL duration from the original session start. This meant
-                // each run of trackActiveSessions() would deduct cumulative time instead of
-                // only the incremental time since the last deduction.
-                //
-                // Example of the bug (job runs every 5 minutes):
-                //   Run 1 (t=5min):  duration=5  → deducted 5  (correct)
-                //   Run 2 (t=10min): duration=10 → deducted 10 (should be 5, over-deducted by 5)
-                //   Run 3 (t=15min): duration=15 → deducted 15 (should be 5, over-deducted by 10)
-                //   Total deducted: 30 minutes instead of correct 15 minutes!
-                //
-                // Fix: By resetting started_at to now() after each deduction, the next run
-                // only calculates duration from this reset point, ensuring only the incremental
-                // time is deducted:
-                //   Run 1 (t=5min):  duration=5 → deduct 5 → reset started_at to t=5min
-                //   Run 2 (t=10min): duration=5 → deduct 5 → reset started_at to t=10min
-                //   Run 3 (t=15min): duration=5 → deduct 5 → reset started_at to t=15min
-                //   Total deducted: 15 minutes (correct!)
-                $session->update(['started_at' => now()]);
+                // Advance billing anchor so the next run only bills the new window.
+                // Never move started_at — that would shrink dashboard "today" totals to the
+                // last segment only; see last_incremental_bill_at migration + tests.
+                $session->update(['last_incremental_bill_at' => now()]);
 
                 // Update device's last_seen_at (device is currently active)
                 // This tracks when device was last seen online
