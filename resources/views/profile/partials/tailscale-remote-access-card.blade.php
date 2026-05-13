@@ -288,16 +288,33 @@
                 <p class="font-medium text-gray-900">{{ __('Tailscale on the Pi') }}</p>
                 <button
                     type="button"
-                    class="rounded-md bg-[#FFDE15] px-4 py-2 text-sm font-semibold text-black hover:opacity-90 disabled:opacity-50"
+                    class="rounded-md px-4 py-2 text-sm font-semibold disabled:opacity-50"
+                    :class="!tailscaleStatusLoading && tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true
+                        ? 'border border-green-600 bg-green-50 text-green-900'
+                        : 'bg-[#FFDE15] text-black hover:opacity-90'"
                     @click="fetchTailscaleSignInLink()"
-                    :disabled="tailscaleLoading"
+                    :disabled="tailscaleLoading || (!tailscaleStatusLoading && tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true)"
                 >
-                    <span x-show="!tailscaleLoading">{{ __('Get Tailscale sign-in link') }}</span>
                     <span x-show="tailscaleLoading" style="display: none;">{{ __('Working… this can take up to a minute') }}</span>
+                    <span
+                        x-show="!tailscaleLoading && tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true"
+                        style="display: none;"
+                    >{{ __('Tailscale already set up') }}</span>
+                    <span x-show="!tailscaleLoading && !(tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true)">{{ __('Get Tailscale sign-in link') }}</span>
                 </button>
             </div>
 
-            <p class="mt-3 text-xs text-gray-600">
+            <p
+                class="mt-3 text-xs text-green-800"
+                x-show="!tailscaleStatusLoading && tailscaleStatus && tailscaleStatus.status === 'already_authenticated' && tailscaleStatus.matches_dashboard === true"
+                style="display: none;"
+            >
+                {{ __('Your Pi is signed in to Tailscale with this account. You do not need a sign-in link unless you change your dashboard email.') }}
+            </p>
+            <p
+                class="mt-3 text-xs text-gray-600"
+                x-show="tailscaleStatusLoading || !tailscaleStatus || tailscaleStatus.status !== 'already_authenticated' || tailscaleStatus.matches_dashboard !== true"
+            >
                 {{ __('If the Pi is already signed in with your email, you will see a confirmation instead of a link.') }}
             </p>
 
