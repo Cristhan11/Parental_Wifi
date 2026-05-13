@@ -18,6 +18,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
@@ -760,7 +761,9 @@ class DeviceController extends Controller
      * 3. Normalizes MAC address if changed
      * 4. Updates device in database
      * 5. Syncs network-level blocking if status changed
-     * 6. Redirects with success message
+     * 6. Refreshes network + captive portal when the device should have access (same as quiz/video grants),
+     *    except when the parent is newly setting status to blocked (intentional block must stick).
+     * 7. Redirects with success message
      *
      * @param  UpdateDeviceRequest  $request  Validated form data
      * @param  Device  $device  The device to update (found by ID from URL)
@@ -808,9 +811,29 @@ class DeviceController extends Controller
             }
         }
 
-        // Redirect to accounts view with success message
-        return redirect()->route('accounts.index')
-            ->with('success', 'Device updated successfully!');
+        $fresh = $device->fresh();
+        $intentionalNewBlock = ($oldStatus !== 'blocked' && $fresh->status === 'blocked');
+
+        $session = ['success' => 'Device updated successfully!'];
+
+        if (! $intentionalNewBlock) {
+            try {
+                $this->childDeviceConnectionRestoreService->tryRestoreAfterDeviceProvisioned($fresh);
+            } catch (\Throwable $e) {
+                Log::debug('tryRestoreAfterDeviceProvisioned after device update failed (non-fatal)', [
+                    'device_id' => $fresh->id,
+                    'mac_address' => $fresh->mac_address,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            $afterRestore = $device->fresh();
+            if ($this->clientIpMatchesDevicePresence($request, $afterRestore)) {
+                $session['device_restore_portal_mac'] = $afterRestore->mac_address;
+            }
+        }
+
+        return redirect()->route('accounts.index')->with($session);
     }
 
     /**
