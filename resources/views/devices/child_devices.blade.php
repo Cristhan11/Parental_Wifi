@@ -153,6 +153,14 @@
                                     </div>
                                 </div>
                             </div>
+                            <div id="childBandwidthUnitRow" class="mb-3 hidden flex flex-wrap items-center justify-between gap-2">
+                                <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">BANDWIDTH UNIT</span>
+                                <select id="childBandwidthUnit"
+                                    class="rounded-full border-2 border-gray-300 bg-white text-black px-3 py-1 text-[11px] sm:text-xs font-semibold font-montserrat focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                                    <option value="gb" selected>Gigabytes (GB)</option>
+                                    <option value="mb">Megabytes (MB)</option>
+                                </select>
+                            </div>
                             
                             {{-- Full-width chart (same data source as dashboard usage graph) --}}
                             <div class="relative min-h-[280px] w-full min-w-0 overflow-x-auto sm:min-h-[320px] lg:min-h-[380px]">
@@ -341,6 +349,7 @@
             window.childTimeUsageChartInstance = window.childTimeUsageChartInstance ?? null;
             window.currentChildUsageChartRange = window.currentChildUsageChartRange ?? 'yearly';
             window.currentChildGraphType = window.currentChildGraphType ?? 'usage';
+            window.currentChildBandwidthUnit = window.currentChildBandwidthUnit ?? 'gb';
             window.__childUsageChartRefreshImpl = null;
 
             document.addEventListener('DOMContentLoaded', function() {
@@ -350,6 +359,15 @@
                 const filterButtons = document.querySelectorAll('[data-child-usage-chart-range]');
                 const graphTypeSelect = document.getElementById('childGraphType');
                 const graphTitle = document.getElementById('childGraphTitle');
+                const bandwidthUnitRow = document.getElementById('childBandwidthUnitRow');
+                const bandwidthUnitSelect = document.getElementById('childBandwidthUnit');
+
+                const syncChildBandwidthUnitRow = () => {
+                    const show = window.currentChildGraphType === 'bandwidth';
+                    if (bandwidthUnitRow) {
+                        bandwidthUnitRow.classList.toggle('hidden', !show);
+                    }
+                };
                 const setActiveFilter = (range) => {
                     window.currentChildUsageChartRange = range;
                     filterButtons.forEach((btn) => {
@@ -375,12 +393,16 @@
                 if (graphTypeSelect) {
                     window.currentChildGraphType = graphTypeSelect.value || 'usage';
                 }
+                if (bandwidthUnitSelect) {
+                    window.currentChildBandwidthUnit = bandwidthUnitSelect.value || 'gb';
+                }
 
                 const updateGraphTitle = () => {
                     if (!graphTitle) return;
                     graphTitle.textContent = window.currentChildGraphType === 'bandwidth'
                         ? 'BANDWIDTH CONSUMPTION'
                         : 'TIME USAGE';
+                    syncChildBandwidthUnitRow();
                 };
                 updateGraphTitle();
 
@@ -427,12 +449,20 @@
 
                     const allValues = series.flatMap((s) => Array.isArray(s.values) ? s.values : []);
                     const maxVal = Math.max(...allValues, 0);
+                    const bwUnit = isBandwidth && (payload.unit === 'mb' || payload.unit === 'gb') ? payload.unit : 'gb';
                     const bandwidthDefaultMaxByRange = (() => {
-                        if (payload.range === 'daily') return 20;
-                        if (payload.range === 'weekly') return 120;
-                        if (payload.range === 'monthly') return 500;
-                        if (payload.range === 'yearly') return 2000;
-                        return 120;
+                        if (bwUnit === 'mb') {
+                            if (payload.range === 'daily') return 2500;
+                            if (payload.range === 'weekly') return 15000;
+                            if (payload.range === 'monthly') return 63000;
+                            if (payload.range === 'yearly') return 250000;
+                            return 15000;
+                        }
+                        if (payload.range === 'daily') return 3;
+                        if (payload.range === 'weekly') return 15;
+                        if (payload.range === 'monthly') return 63;
+                        if (payload.range === 'yearly') return 250;
+                        return 15;
                     })();
                     const suggestedMax = maxVal > 0
                         ? maxVal * 1.2
@@ -485,7 +515,8 @@
                                         label: (context) => {
                                             const label = context.dataset?.label ? context.dataset.label + ': ' : '';
                                             if (isBandwidth) {
-                                                return label + context.parsed.y + ' Gbit';
+                                                const u = bwUnit === 'mb' ? ' MB' : ' GB';
+                                                return label + context.parsed.y + u;
                                             }
                                             const unit = payload.unit === 'hours' ? ' hr' : ' min';
                                             return label + context.parsed.y + unit;
@@ -504,7 +535,7 @@
                                     title: {
                                         display: true,
                                         text: isBandwidth
-                                            ? 'Bandwidth (Gbit)'
+                                            ? (bwUnit === 'mb' ? 'Bandwidth (MB)' : 'Bandwidth (GB)')
                                             : (payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)'),
                                         font: { family: 'Montserrat Variable', size: 12, weight: 'bold' },
                                         color: '#000000',
@@ -542,7 +573,12 @@
 
                 const fetchChildChart = async (range) => {
                     const base = window.currentChildGraphType === 'bandwidth' ? bandwidthChartUrlBase : chartUrlBase;
-                    const url = base + (base.includes('?') ? '&' : '?') + 'range=' + encodeURIComponent(range);
+                    const sep = base.includes('?') ? '&' : '?';
+                    let url = base + sep + 'range=' + encodeURIComponent(range);
+                    if (window.currentChildGraphType === 'bandwidth') {
+                        const u = window.currentChildBandwidthUnit || 'gb';
+                        url += '&display_unit=' + encodeURIComponent(u);
+                    }
                     const res = await fetch(url, {
                         method: 'GET',
                         headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -580,6 +616,15 @@
                         window.currentChildGraphType = graphTypeSelect.value || 'usage';
                         updateGraphTitle();
                         window.__childUsageChartRefreshImpl('graph-type-change');
+                    });
+                }
+
+                if (bandwidthUnitSelect) {
+                    bandwidthUnitSelect.addEventListener('change', () => {
+                        window.currentChildBandwidthUnit = bandwidthUnitSelect.value || 'gb';
+                        if (window.currentChildGraphType === 'bandwidth') {
+                            window.__childUsageChartRefreshImpl('bandwidth-unit-change');
+                        }
                     });
                 }
 

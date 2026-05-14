@@ -178,6 +178,14 @@
                         </button>
                     </div>
                 </div>
+                <div id="dashboardBandwidthUnitRow" class="mb-1.5 hidden flex flex-wrap items-center justify-between gap-2 flex-shrink-0">
+                    <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">BANDWIDTH UNIT</span>
+                    <select id="dashboardBandwidthUnit"
+                        class="rounded-full border-2 border-gray-300 bg-white text-black px-3 py-1 text-[11px] sm:text-xs font-semibold font-montserrat focus:outline-none focus:ring-2 focus:ring-yellow-300">
+                        <option value="gb" selected>Gigabytes (GB)</option>
+                        <option value="mb">Megabytes (MB)</option>
+                    </select>
+                </div>
                 {{-- 
                     Chart sizing note:
                     - Chart.js needs a real container height to render correctly.
@@ -275,6 +283,7 @@
             window.usageChartInstance = window.usageChartInstance ?? null;
             window.currentUsageChartRange = window.currentUsageChartRange ?? 'yearly';
             window.currentDashboardGraphType = window.currentDashboardGraphType ?? 'usage';
+            window.currentDashboardBandwidthUnit = window.currentDashboardBandwidthUnit ?? 'gb';
             window.__usageChartRefreshImpl = null;
             window.refreshUsageChart = function (reason) {
                 if (typeof window.__usageChartRefreshImpl === 'function') {
@@ -292,7 +301,16 @@
 
                 const graphTypeSelect = document.getElementById('dashboardGraphType');
                 const graphTitle = document.getElementById('dashboardGraphTitle');
+                const bandwidthUnitRow = document.getElementById('dashboardBandwidthUnitRow');
+                const bandwidthUnitSelect = document.getElementById('dashboardBandwidthUnit');
                 const filterButtons = document.querySelectorAll('[data-usage-chart-range]');
+
+                const syncBandwidthUnitRow = () => {
+                    const show = window.currentDashboardGraphType === 'bandwidth';
+                    if (bandwidthUnitRow) {
+                        bandwidthUnitRow.classList.toggle('hidden', !show);
+                    }
+                };
 
                 const setActiveFilter = (range) => {
                     window.currentUsageChartRange = range;
@@ -319,6 +337,7 @@
                     if (typeof feather !== 'undefined') {
                         feather.replace();
                     }
+                    syncBandwidthUnitRow();
                 };
 
                 const activeBtn = document.querySelector('.js-usage-chart-filter-active[data-usage-chart-range]');
@@ -329,6 +348,9 @@
                 }
                 if (graphTypeSelect) {
                     window.currentDashboardGraphType = graphTypeSelect.value || 'usage';
+                }
+                if (bandwidthUnitSelect) {
+                    window.currentDashboardBandwidthUnit = bandwidthUnitSelect.value || 'gb';
                 }
                 updateGraphTitle();
 
@@ -374,12 +396,20 @@
 
                     const allValues = series.flatMap((s) => Array.isArray(s.values) ? s.values : []);
                     const maxVal = Math.max(...allValues, 0);
+                    const bwUnit = isBandwidth && (payload.unit === 'mb' || payload.unit === 'gb') ? payload.unit : 'gb';
                     const bandwidthDefaultMaxByRange = (() => {
-                        if (payload.range === 'daily') return 20;
-                        if (payload.range === 'weekly') return 120;
-                        if (payload.range === 'monthly') return 500;
-                        if (payload.range === 'yearly') return 2000;
-                        return 120;
+                        if (bwUnit === 'mb') {
+                            if (payload.range === 'daily') return 2500;
+                            if (payload.range === 'weekly') return 15000;
+                            if (payload.range === 'monthly') return 63000;
+                            if (payload.range === 'yearly') return 250000;
+                            return 15000;
+                        }
+                        if (payload.range === 'daily') return 3;
+                        if (payload.range === 'weekly') return 15;
+                        if (payload.range === 'monthly') return 63;
+                        if (payload.range === 'yearly') return 250;
+                        return 15;
                     })();
                     const suggestedMax = maxVal > 0
                         ? maxVal * 1.2
@@ -430,7 +460,8 @@
                                         label: (context) => {
                                             const label = context.dataset?.label ? context.dataset.label + ': ' : '';
                                             if (isBandwidth) {
-                                                return label + context.parsed.y + ' Gbit';
+                                                const u = bwUnit === 'mb' ? ' MB' : ' GB';
+                                                return label + context.parsed.y + u;
                                             }
                                             const unit = payload.unit === 'hours' ? ' hr' : ' min';
                                             return label + context.parsed.y + unit;
@@ -449,7 +480,7 @@
                                     title: {
                                         display: true,
                                         text: isBandwidth
-                                            ? 'Bandwidth (Gbit)'
+                                            ? (bwUnit === 'mb' ? 'Bandwidth (MB)' : 'Bandwidth (GB)')
                                             : (payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)'),
                                         font: { family: 'Montserrat Variable', size: 12, weight: 'bold' },
                                         color: '#000000',
@@ -489,7 +520,11 @@
                     const path = window.currentDashboardGraphType === 'bandwidth'
                         ? '/dashboard/bandwidth-chart'
                         : '/dashboard/usage-chart';
-                    const url = `${path}?range=${encodeURIComponent(range)}`;
+                    let url = `${path}?range=${encodeURIComponent(range)}`;
+                    if (window.currentDashboardGraphType === 'bandwidth') {
+                        const u = window.currentDashboardBandwidthUnit || 'gb';
+                        url += `&display_unit=${encodeURIComponent(u)}`;
+                    }
                     const res = await fetch(url, {
                         method: 'GET',
                         headers: { 'X-Requested-With': 'XMLHttpRequest' },
@@ -529,6 +564,15 @@
                         window.currentDashboardGraphType = graphTypeSelect.value || 'usage';
                         updateGraphTitle();
                         window.__usageChartRefreshImpl('graph-type-change');
+                    });
+                }
+
+                if (bandwidthUnitSelect) {
+                    bandwidthUnitSelect.addEventListener('change', () => {
+                        window.currentDashboardBandwidthUnit = bandwidthUnitSelect.value || 'gb';
+                        if (window.currentDashboardGraphType === 'bandwidth') {
+                            window.__usageChartRefreshImpl('bandwidth-unit-change');
+                        }
                     });
                 }
 

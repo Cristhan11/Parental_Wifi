@@ -323,8 +323,8 @@ class ReportingEmailConfigTest extends TestCase
 
         $this->assertSame('browsing_logs', $payload['bandwidth']['source']);
         $this->assertSame(3145728, $payload['bandwidth']['family_total_bytes']);
-        $this->assertSame('0.025 Gbit', $payload['bandwidth']['family_total_formatted']);
-        $this->assertSame('0.025 Gbit', $payload['devices'][0]['bandwidth']['bytes_total_formatted']);
+        $this->assertSame('0.003146 GB (3 MB)', $payload['bandwidth']['family_total_formatted']);
+        $this->assertSame('0.003146 GB (3 MB)', $payload['devices'][0]['bandwidth']['bytes_total_formatted']);
     }
 
     public function test_digest_payload_uses_live_bandwidth_fallback_when_logs_are_empty(): void
@@ -362,6 +362,6 @@ class ReportingEmailConfigTest extends TestCase
 
         $this->assertSame('live_traffic_fallback', $payload['bandwidth']['source']);
         $this->assertSame(2097152, $payload['bandwidth']['family_total_bytes']);
-        $this->assertSame('0.017 Gbit', $payload['bandwidth']['family_total_formatted']);
+        $this->assertSame('0.002097 GB (2 MB)', $payload['bandwidth']['family_total_formatted']);
     }
 }

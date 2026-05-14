@@ -162,12 +162,47 @@ class DashboardUsageChartTest extends TestCase
         $response->assertOk();
         $data = $response->json();
         $this->assertSame('daily', $data['range']);
-        $this->assertSame('gbit', $data['unit']);
+        $this->assertSame('gb', $data['unit']);
         $this->assertCount(1, $data['series']);
 
         $idx10 = array_search('10', $data['labels'], true);
         $this->assertIsInt($idx10);
-        $this->assertSame(0.0252, (float) $data['series'][0]['values'][$idx10]);
+        $this->assertSame(0.003146, (float) $data['series'][0]['values'][$idx10]);
+    }
+
+    public function test_dashboard_bandwidth_chart_accepts_display_unit_mb(): void
+    {
+        $timezone = (string) (config('app.timezone') ?: 'Asia/Manila');
+        $now = Carbon::create(2026, 3, 25, 10, 30, 0, $timezone);
+        Carbon::setTestNow($now);
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'role' => 'child',
+            'status' => 'active',
+        ]);
+
+        \App\Models\BrowsingLog::create([
+            'device_id' => $device->id,
+            'url' => 'https://example.com',
+            'domain' => 'example.com',
+            'bytes_sent' => 1048576,
+            'bytes_received' => 2097152,
+            'visited_at' => $now->copy()->setTime(10, 15, 0),
+        ]);
+
+        $response = $this->actingAs($user)->getJson(route('dashboard.bandwidth-chart', [
+            'range' => 'daily',
+            'display_unit' => 'mb',
+        ]));
+
+        $response->assertOk();
+        $data = $response->json();
+        $this->assertSame('mb', $data['unit']);
+        $idx10 = array_search('10', $data['labels'], true);
+        $this->assertIsInt($idx10);
+        $this->assertSame(3.146, (float) $data['series'][0]['values'][$idx10]);
     }
 
     public function test_dashboard_bandwidth_chart_uses_live_fallback_when_logs_empty(): void
@@ -202,7 +237,7 @@ class DashboardUsageChartTest extends TestCase
         $data = $response->json();
         $idx10 = array_search('10', $data['labels'], true);
         $this->assertIsInt($idx10);
-        $this->assertSame(0.0252, (float) $data['series'][0]['values'][$idx10]);
+        $this->assertSame(0.003146, (float) $data['series'][0]['values'][$idx10]);
         $this->assertSame((int) $device->id, (int) $data['series'][0]['device_id']);
     }
 }

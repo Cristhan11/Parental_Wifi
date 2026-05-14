@@ -438,10 +438,16 @@ class DeviceController extends Controller
             $range = 'yearly';
         }
 
+        $displayUnit = strtolower((string) $request->query('display_unit', 'gb'));
+        if (! in_array($displayUnit, ['gb', 'mb'], true)) {
+            $displayUnit = 'gb';
+        }
+
         $payload = $this->bandwidthUsageService->buildChartPayload(
             $request->user(),
             $range,
-            (int) $device->id
+            (int) $device->id,
+            $displayUnit
         );
 
         return response()->json($payload);

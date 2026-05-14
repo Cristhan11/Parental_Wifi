@@ -123,7 +123,7 @@ class ChildDeviceUsageChartTest extends TestCase
 
         $idx10 = array_search('10', $data['labels'], true);
         $this->assertIsInt($idx10);
-        $this->assertSame(0.0084, (float) $data['series'][0]['values'][$idx10]);
+        $this->assertSame(0.001049, (float) $data['series'][0]['values'][$idx10]);
     }
 
     public function test_other_user_cannot_view_bandwidth_chart(): void

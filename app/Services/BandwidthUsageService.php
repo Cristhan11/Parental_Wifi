@@ -11,17 +11,19 @@ use Illuminate\Support\Facades\Log;
 
 class BandwidthUsageService
 {
-    private const BITS_PER_BYTE = 8;
+    /** Decimal gigabyte = 10^9 bytes (chart + digest, matches “100 GB = 100,000 MB”). */
+    private const DECIMAL_GIGABYTE = 1000000000;
 
-    /** SI gigabit = 10^9 bits (same unit as dashboard bandwidth chart). */
-    private const GIGABIT = 1000000000;
+    /** Decimal megabyte = 10^6 bytes. */
+    private const DECIMAL_MEGABYTE = 1000000;
 
     public function __construct(
         private readonly NetworkService $networkService
     ) {}
 
-    public function buildChartPayload(User $parent, string $range, ?int $onlyDeviceId = null): array
+    public function buildChartPayload(User $parent, string $range, ?int $onlyDeviceId = null, string $displayUnit = 'gb'): array
     {
+        $displayUnit = strtolower($displayUnit) === 'mb' ? 'mb' : 'gb';
         $range = strtolower($range);
         $timezone = (string) (config('app.timezone') ?: 'UTC');
         $now = Carbon::now($timezone);
@@ -43,7 +45,7 @@ class BandwidthUsageService
         if ($devices->isEmpty()) {
             return [
                 'range' => $range,
-                'unit' => 'gbit',
+                'unit' => $displayUnit,
                 'labels' => $labels,
                 'series' => [],
             ];
@@ -108,6 +110,9 @@ class BandwidthUsageService
             }
         }
 
+        $divisor = $displayUnit === 'mb' ? self::DECIMAL_MEGABYTE : self::DECIMAL_GIGABYTE;
+        $decimals = $displayUnit === 'mb' ? 3 : 6;
+
         $series = [];
         foreach ($devices as $device) {
             $bytes = $bytesByDevice[(int) $device->id] ?? [];
@@ -115,7 +120,7 @@ class BandwidthUsageService
                 'device_id' => (int) $device->id,
                 'device_name' => (string) $device->name,
                 'values' => array_map(
-                    static fn (int $value): float => round(($value * self::BITS_PER_BYTE) / self::GIGABIT, 4),
+                    static fn (int $value): float => round($value / $divisor, $decimals),
                     $bytes
                 ),
             ];
@@ -123,7 +128,7 @@ class BandwidthUsageService
 
         return [
             'range' => $range,
-            'unit' => 'gbit',
+            'unit' => $displayUnit,
             'labels' => $labels,
             'series' => $series,
         ];
@@ -175,7 +180,7 @@ class BandwidthUsageService
                 'device_id' => (int) $device->id,
                 'device_name' => (string) $device->name,
                 'bytes_total' => $bytesTotal,
-                'bytes_total_formatted' => $this->formatGigabits($bytesTotal),
+                'bytes_total_formatted' => $this->formatBandwidthGbAndMb($bytesTotal),
             ];
         }
 
@@ -187,23 +192,35 @@ class BandwidthUsageService
         return [
             'source' => $source,
             'family_total_bytes' => $familyTotalBytes,
-            'family_total_formatted' => $this->formatGigabits($familyTotalBytes),
+            'family_total_formatted' => $this->formatBandwidthGbAndMb($familyTotalBytes),
             'top_bandwidth_devices' => array_slice($perDevice, 0, 5),
             'per_device' => $perDevice,
         ];
     }
 
-    private function formatGigabits(int $bytes): string
+    /**
+     * Human-readable total data: decimal GB and whole MB (SI), e.g. "100 GB (100,000 MB)" or "0.0031 GB (3 MB)".
+     */
+    public function formatBandwidthGbAndMb(int $bytes): string
     {
-        $gigabits = ($bytes * self::BITS_PER_BYTE) / self::GIGABIT;
-        if ($gigabits <= 0) {
-            return '0 Gbit';
+        if ($bytes <= 0) {
+            return '0 GB (0 MB)';
         }
 
-        $formatted = number_format($gigabits, 3, '.', '');
-        $formatted = rtrim(rtrim($formatted, '0'), '.');
+        $gb = $bytes / self::DECIMAL_GIGABYTE;
+        $mbWhole = (int) round($bytes / self::DECIMAL_MEGABYTE);
 
-        return $formatted.' Gbit';
+        if ($gb >= 100) {
+            $gbStr = number_format($gb, 2, '.', ',');
+        } elseif ($gb >= 1) {
+            $gbStr = rtrim(rtrim(number_format($gb, 4, '.', ''), '0'), '.');
+        } else {
+            $gbStr = rtrim(rtrim(number_format($gb, 6, '.', ''), '0'), '.');
+        }
+
+        $mbStr = number_format($mbWhole, 0, '.', ',');
+
+        return $gbStr.' GB ('.$mbStr.' MB)';
     }
 
     /**

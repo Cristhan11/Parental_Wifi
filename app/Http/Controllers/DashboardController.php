@@ -213,12 +213,14 @@ class DashboardController extends Controller
     {
         $validated = $request->validate([
             'range' => ['nullable', 'in:daily,weekly,monthly,yearly'],
+            'display_unit' => ['nullable', 'in:gb,mb'],
         ]);
 
         $range = $validated['range'] ?? 'yearly';
+        $displayUnit = $validated['display_unit'] ?? 'gb';
 
         return response()->json(
-            $this->bandwidthUsageService->buildChartPayload($request->user(), $range)
+            $this->bandwidthUsageService->buildChartPayload($request->user(), $range, null, $displayUnit)
         );
     }
 

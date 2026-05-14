@@ -120,7 +120,7 @@ class ReportingDigestService
 
                 $device['bandwidth'] = [
                     'bytes_total' => (int) ($matched['bytes_total'] ?? 0),
-                    'bytes_total_formatted' => (string) ($matched['bytes_total_formatted'] ?? '0 Gbit'),
+                    'bytes_total_formatted' => (string) ($matched['bytes_total_formatted'] ?? '0 GB (0 MB)'),
                 ];
 
                 return $device;
