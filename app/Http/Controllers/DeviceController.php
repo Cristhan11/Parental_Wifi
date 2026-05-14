@@ -7,6 +7,8 @@ use App\Http\Requests\UpdateDeviceRequest;
 use App\Models\Device;
 use App\Models\DeviceRegistrationRequest;
 use App\Models\Quiz;
+use App\Support\AuditRequestSummary;
+use App\Support\DeviceAuditSummary;
 use App\Services\BandwidthUsageService;
 use App\Services\ChildDeviceConnectionRestoreService;
 use App\Services\DeviceService;
@@ -610,6 +612,8 @@ class DeviceController extends Controller
             $session['device_restore_portal_mac'] = $device->mac_address;
         }
 
+        AuditRequestSummary::set($request, 'Added "'.$device->name.'"');
+
         return redirect()->route('accounts.index')->with($session);
     }
 
@@ -785,6 +789,17 @@ class DeviceController extends Controller
         // Get validated form data
         $validated = $request->validated();
 
+        $beforeSnapshot = $device->only([
+            'name',
+            'mac_address',
+            'role',
+            'status',
+            'remaining_time_minutes',
+            'total_time_allocated',
+            'preferred_quiz_id',
+            'preferred_video_id',
+        ]);
+
         // Store old status to check if it changed
         // If status changes, we need to update network-level blocking
         $oldStatus = $device->status;
@@ -847,6 +862,9 @@ class DeviceController extends Controller
             }
         }
 
+        $device->refresh();
+        AuditRequestSummary::set($request, DeviceAuditSummary::describeFullDeviceEdit($beforeSnapshot, $device));
+
         return redirect()->route('accounts.index')->with($session);
     }
 
@@ -871,10 +889,12 @@ class DeviceController extends Controller
      * Usage:
      * User clicks delete button, this method removes the device.
      */
-    public function destroy(Device $device): RedirectResponse
+    public function destroy(Request $request, Device $device): RedirectResponse
     {
         // Check authorization - does user own this device?
         $this->authorize('delete', $device);
+
+        AuditRequestSummary::set($request, 'Removed "'.$device->name.'"');
 
         // Unblock device at network level before deletion
         // This removes iptables rules so device can access internet again
@@ -949,6 +969,20 @@ class DeviceController extends Controller
             }
         }
 
+        $human = match ($newStatus) {
+            'blocked' => 'blocked',
+            'active' => 'normal (timed)',
+            'whitelisted' => 'unlimited',
+            default => (string) $newStatus,
+        };
+        $dn = $device->fresh()->name;
+        AuditRequestSummary::set(
+            $request,
+            $oldStatus !== $newStatus
+                ? 'Internet set to '.$human.' for '.$dn
+                : 'Confirmed internet setting for '.$dn
+        );
+
         // Return JSON response for AJAX requests
         if ($request->expectsJson()) {
             return response()->json([
@@ -996,7 +1030,10 @@ class DeviceController extends Controller
             'total_time_allocated' => 'nullable|integer|min:0|max:9999',
         ]);
 
-        $previousRemainingMinutes = (int) ($device->remaining_time_minutes ?? 0);
+        $oldRemaining = (int) ($device->remaining_time_minutes ?? 0);
+        $oldTotal = (int) ($device->total_time_allocated ?? 0);
+        $previousRemainingMinutes = $oldRemaining;
+
         $newRemainingMinutes = (int) $request->input('remaining_time_minutes', $previousRemainingMinutes);
 
         // Update time allocation
@@ -1007,6 +1044,20 @@ class DeviceController extends Controller
 
         if ($newRemainingMinutes !== $previousRemainingMinutes && ! $device->fresh()->isWhitelisted()) {
             $device->resetActiveSessionBillingAnchorToNow();
+        }
+
+        $device->refresh();
+        $dn = $device->name;
+        $nRem = (int) $device->remaining_time_minutes;
+        $nTot = (int) $device->total_time_allocated;
+        if ($nRem !== $oldRemaining && $nTot !== $oldTotal) {
+            AuditRequestSummary::set($request, 'Set time left to '.$nRem.' min, allowance to '.$nTot.' min for '.$dn);
+        } elseif ($nRem !== $oldRemaining) {
+            AuditRequestSummary::set($request, 'Set time left to '.$nRem.' min for '.$dn);
+        } elseif ($nTot !== $oldTotal) {
+            AuditRequestSummary::set($request, 'Set allowance to '.$nTot.' min for '.$dn);
+        } else {
+            AuditRequestSummary::set($request, 'Confirmed time settings for '.$dn);
         }
 
         // Return JSON response for AJAX requests
@@ -1226,6 +1277,8 @@ class DeviceController extends Controller
         // Update the device role
         $device->role = $request->input('role');
         $device->save();
+
+        AuditRequestSummary::set($request, 'Role set to '.$request->input('role').' for '.$device->name);
 
         // Redirect back with success message
         return redirect()->route('accounts.index')

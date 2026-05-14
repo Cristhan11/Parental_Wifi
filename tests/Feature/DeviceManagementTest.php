@@ -856,6 +856,8 @@ class DeviceManagementTest extends TestCase
             'name' => 'Family iPad',
             'role' => 'child',
             'status' => 'active',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 120,
         ]);
 
         $this->actingAs($user)->put(route('accounts.update', $device), [
@@ -874,15 +876,15 @@ class DeviceManagementTest extends TestCase
             ->first();
 
         $this->assertNotNull($audit);
-        $this->assertSame('Family iPad', data_get($audit->metadata, 'device_name'));
+        $this->assertStringContainsString('Set time left to 90 min', (string) data_get($audit->metadata, 'parent_summary'));
 
         $response = $this->actingAs($user)->get(route('logs.index', [
             'stream' => 'parent_admin_changes',
         ]));
 
         $response->assertOk();
-        $response->assertSee('Saved device details for Family iPad', false);
-        $response->assertSee('From your home network', false);
+        $response->assertSee('Set time left to 90 min for Family iPad', false);
+        $response->assertSee(' · Home', false);
         $response->assertDontSee('Sensitive action:', false);
         $response->assertDontSee('accounts.update', false);
 

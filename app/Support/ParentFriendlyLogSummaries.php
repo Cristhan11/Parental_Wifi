@@ -10,13 +10,13 @@ use App\Models\SecurityAuditEvent;
 final class ParentFriendlyLogSummaries
 {
     /**
-     * Append where the request came from, without implying the parent should interpret raw IPs on home traffic.
+     * Short network context (full IP only when not home).
      */
     public static function appendSecurityAccessContext(string $baseSummary, SecurityAuditEvent $event): string
     {
         $suffix = $event->is_remote
-            ? ' — Outside your home network (connection address '.$event->ip_address.')'
-            : ' — From your home network';
+            ? ' · Away ('.$event->ip_address.')'
+            : ' · Home';
 
         return $baseSummary.$suffix;
     }
@@ -28,6 +28,10 @@ final class ParentFriendlyLogSummaries
      */
     public static function sensitiveActionSummary(?string $routeName, array $metadata): string
     {
+        if (isset($metadata['parent_summary']) && is_string($metadata['parent_summary']) && $metadata['parent_summary'] !== '') {
+            return $metadata['parent_summary'];
+        }
+
         $route = $routeName ?? '';
         $deviceName = isset($metadata['device_name']) && is_string($metadata['device_name'])
             ? $metadata['device_name']
@@ -46,22 +50,22 @@ final class ParentFriendlyLogSummaries
             : (isset($metadata['flagged_domain']) && is_string($metadata['flagged_domain'])
                 ? $metadata['flagged_domain']
                 : null);
-        $forDomain = $domain !== null ? ' — '.$domain : '';
+        $forDomain = $domain !== null ? ' · '.$domain : '';
 
         $quizTitle = isset($metadata['quiz_title']) && is_string($metadata['quiz_title'])
             ? $metadata['quiz_title']
             : null;
-        $forQuiz = $quizTitle !== null ? ' — '.$quizTitle : '';
+        $forQuiz = $quizTitle !== null ? ' · '.$quizTitle : '';
 
         $videoTitle = isset($metadata['video_title']) && is_string($metadata['video_title'])
             ? $metadata['video_title']
             : null;
-        $forVideo = $videoTitle !== null ? ' — '.$videoTitle : '';
+        $forVideo = $videoTitle !== null ? ' · '.$videoTitle : '';
 
         $recipient = isset($metadata['recipient_email']) && is_string($metadata['recipient_email'])
             ? $metadata['recipient_email']
             : null;
-        $forRecipient = $recipient !== null ? ' — '.$recipient : '';
+        $forRecipient = $recipient !== null ? ' · '.$recipient : '';
 
         $scheduleDay = isset($metadata['schedule_day']) && is_string($metadata['schedule_day'])
             ? $metadata['schedule_day']
@@ -70,78 +74,76 @@ final class ParentFriendlyLogSummaries
             ? $metadata['schedule_device_name']
             : null;
         $forSchedule = ($scheduleDevice !== null || $scheduleDay !== null)
-            ? ' — '.trim(($scheduleDevice ?? 'Device').($scheduleDay !== null ? ', '.$scheduleDay : ''))
+            ? ' · '.trim(($scheduleDevice ?? 'Device').($scheduleDay !== null ? ', '.$scheduleDay : ''))
             : '';
 
         return match ($route) {
-            'accounts.update' => 'Saved device details'.$forDevice.' (such as display name, daily screen time, Wi-Fi address, assigned quizzes or videos, or other device options)',
-            'accounts.status.update' => 'Changed how internet access works'.$forDevice.' (normal time-limited access, fully blocked, or unlimited)',
-            'accounts.time.update' => 'Adjusted screen time or time remaining'.$forDevice,
-            'accounts.role.update' => 'Changed whether this device is treated as a child, parent, or guest'.$forDevice,
-            'accounts.store' => 'Added a new device to your household',
-            'accounts.destroy' => 'Removed a device from your household'.$forDevice,
-            'accounts.registration-requests.approve' => 'Approved a device that asked to join your network',
-            'accounts.registration-requests.reject' => 'Declined a device registration request',
+            'accounts.update' => 'Saved device settings'.$forDevice,
+            'accounts.status.update' => 'Changed internet access'.$forDevice,
+            'accounts.time.update' => 'Adjusted screen time'.$forDevice,
+            'accounts.role.update' => 'Changed device role'.$forDevice,
+            'accounts.store' => 'Added a device',
+            'accounts.destroy' => 'Removed a device'.$forDevice,
+            'accounts.registration-requests.approve' => 'Approved a device request',
+            'accounts.registration-requests.reject' => 'Declined a device request',
 
-            'profile.update' => 'Updated your profile (name or email)',
-            'profile.destroy' => 'Started account deletion from profile settings',
-            'profile.email-change.send-code' => 'Requested a code to change your sign-in email',
-            'profile.email-change.verify-code' => 'Confirmed a new sign-in email with the verification code',
-            'profile.tailscale.auth-link' => 'Requested a secure remote-access (Tailscale) sign-in link',
+            'profile.update' => 'Updated your profile',
+            'profile.destroy' => 'Started account deletion',
+            'profile.email-change.send-code' => 'Requested email change code',
+            'profile.email-change.verify-code' => 'Verified new email',
+            'profile.tailscale.auth-link' => 'Requested Tailscale access link',
 
-            'owner.onboarding.update' => 'Saved household owner setup answers',
-            'password.force-change.update' => 'Set a new password after the app required an update',
-            'verification.verify' => 'Verified your email address with the code from your inbox',
+            'owner.onboarding.update' => 'Saved owner onboarding',
+            'password.force-change.update' => 'Updated required password',
+            'verification.verify' => 'Verified your email',
 
-            'quizzes.store' => 'Created a new quiz'.$forQuiz,
-            'quizzes.update' => 'Updated an existing quiz'.$forQuiz,
+            'quizzes.store' => 'Added a quiz'.$forQuiz,
+            'quizzes.update' => 'Updated a quiz'.$forQuiz,
             'quizzes.destroy' => 'Deleted a quiz'.$forQuiz,
-            'quizzes.import.process' => 'Imported quizzes from a file',
-            'quizzes.import.pending.process' => 'Finished importing quizzes you started earlier',
-            'quizzes.random-mode.update' => 'Changed random-quiz mode settings',
+            'quizzes.import.process' => 'Imported quizzes from file',
+            'quizzes.import.pending.process' => 'Finished quiz import',
+            'quizzes.random-mode.update' => 'Updated random-quiz settings',
 
-            'videos.store' => 'Added a new learning video'.$forVideo,
-            'videos.update' => 'Updated a learning video'.$forVideo,
-            'videos.destroy' => 'Removed a learning video'.$forVideo,
+            'videos.store' => 'Added a video'.$forVideo,
+            'videos.update' => 'Updated a video'.$forVideo,
+            'videos.destroy' => 'Deleted a video'.$forVideo,
 
-            'blocked-websites.store' => 'Added a site or app to the blocked list'.$forDomain,
-            'blocked-websites.update' => 'Edited a blocked site or app rule'.$forDomain,
-            'blocked-websites.destroy' => 'Removed something from the blocked list'.$forDomain,
-            'blocked-websites.suggest-domains' => 'Asked the app to suggest related domains to block'.$forDomain,
-            'blocked-websites.bulk-import' => 'Imported many blocked sites or apps at once',
+            'blocked-websites.store' => 'Blocked a site/app'.$forDomain,
+            'blocked-websites.update' => 'Edited a block rule'.$forDomain,
+            'blocked-websites.destroy' => 'Removed a block'.$forDomain,
+            'blocked-websites.suggest-domains' => 'Suggested related domains'.$forDomain,
+            'blocked-websites.bulk-import' => 'Bulk-imported blocks',
 
-            'flagged-websites.store' => 'Added a site to the watch list (flagged)'.$forDomain,
-            'flagged-websites.update' => 'Edited a watch-list (flagged) site'.$forDomain,
-            'flagged-websites.destroy' => 'Removed a site from the watch list'.$forDomain,
+            'flagged-websites.store' => 'Flagged a site'.$forDomain,
+            'flagged-websites.update' => 'Edited a flagged site'.$forDomain,
+            'flagged-websites.destroy' => 'Removed a flag'.$forDomain,
 
-            'schedules.store' => 'Added an internet time rule'.$forSchedule,
-            'schedules.update' => 'Changed an internet time rule'.$forSchedule,
-            'schedules.destroy' => 'Deleted an internet time rule'.$forSchedule,
+            'schedules.store' => 'Added a schedule'.$forSchedule,
+            'schedules.update' => 'Updated a schedule'.$forSchedule,
+            'schedules.destroy' => 'Deleted a schedule'.$forSchedule,
 
-            'reports.preferences.update' => 'Updated email report preferences (what to include and how often)',
-            'reports.recipients.bulk-save' => 'Saved several report email addresses at once',
-            'reports.recipients.store' => 'Added an email address for report copies'.$forRecipient,
-            'reports.recipients.update' => 'Changed a report email address or its on/off setting'.$forRecipient,
-            'reports.recipients.destroy' => 'Removed a report email address'.$forRecipient,
-            'reports.send-test-digest' => 'Sent a test copy of your email report',
+            'reports.preferences.update' => 'Updated report preferences',
+            'reports.recipients.bulk-save' => 'Saved report emails',
+            'reports.recipients.store' => 'Added report email'.$forRecipient,
+            'reports.recipients.update' => 'Updated report email'.$forRecipient,
+            'reports.recipients.destroy' => 'Removed report email'.$forRecipient,
+            'reports.send-test-digest' => 'Sent test report email',
 
-            'admin.password-reset-requests.fulfill' => 'Admin: reset a parent password from a support request',
-            'admin.parents.update' => 'Admin: edited a parent account'.$forParent,
-            'admin.parents.destroy' => 'Admin: removed a parent account'.$forParent,
-            'admin.parents.approve' => 'Admin: approved a new parent registration'.$forParent,
-            'admin.parents.reject' => 'Admin: rejected a parent registration'.$forParent,
-            'admin.parents.promote' => 'Admin: promoted a parent to household operator'.$forParent,
-            'admin.parents.demote' => 'Admin: moved a household operator back to standard parent'.$forParent,
-            'admin.parents.reset-password-default' => 'Admin: set a parent password back to the default'.$forParent,
+            'admin.password-reset-requests.fulfill' => 'Admin reset parent password',
+            'admin.parents.update' => 'Admin edited parent'.$forParent,
+            'admin.parents.destroy' => 'Admin removed parent'.$forParent,
+            'admin.parents.approve' => 'Admin approved parent'.$forParent,
+            'admin.parents.reject' => 'Admin rejected parent'.$forParent,
+            'admin.parents.promote' => 'Admin promoted parent'.$forParent,
+            'admin.parents.demote' => 'Admin demoted parent'.$forParent,
+            'admin.parents.reset-password-default' => 'Admin reset parent password'.$forParent,
 
-            default => $route !== ''
-                ? 'Saved an important change in the app (older entries may not list the exact screen)'
-                : 'Saved an important change in the app',
+            default => 'Saved a dashboard change',
         };
     }
 
     public static function deviceRowUpdatedSummary(string $deviceName): string
     {
-        return 'Saved or synced details for '.$deviceName.' (for example name, screen time, Wi-Fi address, assigned learning, or internet access type—either you edited them or the system updated them).';
+        return 'Synced '.$deviceName.' (automatic update)';
     }
 }

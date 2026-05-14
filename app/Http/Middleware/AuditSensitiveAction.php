@@ -11,6 +11,7 @@ use App\Models\ReportingRecipient;
 use App\Models\User;
 use App\Models\Video;
 use App\Services\SecurityAuditLogger;
+use App\Support\AuditRequestSummary;
 use Closure;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Request;
@@ -54,10 +55,17 @@ class AuditSensitiveAction
             return $response;
         }
 
-        $this->logger->recordSensitiveAction($request, array_merge(
+        $metadata = array_merge(
             ['method' => $request->method()],
             $this->subjectMetadataFromRoute($request),
-        ));
+        );
+
+        $parentSummary = $request->attributes->get(AuditRequestSummary::ATTRIBUTE);
+        if (is_string($parentSummary) && $parentSummary !== '') {
+            $metadata['parent_summary'] = $parentSummary;
+        }
+
+        $this->logger->recordSensitiveAction($request, $metadata);
 
         return $response;
     }
