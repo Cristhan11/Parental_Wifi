@@ -792,9 +792,18 @@ class DeviceController extends Controller
         // Normalize MAC address to standard format
         $validated['mac_address'] = $this->deviceService->normalizeMacAddress($validated['mac_address']);
 
+        $previousRemainingMinutes = (int) ($device->remaining_time_minutes ?? 0);
+
         // Update device in database
         // update() saves changes to database
         $device->update($validated);
+
+        if (array_key_exists('remaining_time_minutes', $validated) && ! $device->isWhitelisted()) {
+            $newRemainingMinutes = (int) $validated['remaining_time_minutes'];
+            if ($newRemainingMinutes !== $previousRemainingMinutes) {
+                $device->resetActiveSessionBillingAnchorToNow();
+            }
+        }
 
         // Sync network-level blocking if status changed
         // This ensures database status matches network status
@@ -987,11 +996,18 @@ class DeviceController extends Controller
             'total_time_allocated' => 'nullable|integer|min:0|max:9999',
         ]);
 
+        $previousRemainingMinutes = (int) ($device->remaining_time_minutes ?? 0);
+        $newRemainingMinutes = (int) $request->input('remaining_time_minutes', $previousRemainingMinutes);
+
         // Update time allocation
         $device->update([
             'remaining_time_minutes' => $request->input('remaining_time_minutes', $device->remaining_time_minutes),
             'total_time_allocated' => $request->input('total_time_allocated', $device->total_time_allocated),
         ]);
+
+        if ($newRemainingMinutes !== $previousRemainingMinutes && ! $device->fresh()->isWhitelisted()) {
+            $device->resetActiveSessionBillingAnchorToNow();
+        }
 
         // Return JSON response for AJAX requests
         if ($request->expectsJson()) {

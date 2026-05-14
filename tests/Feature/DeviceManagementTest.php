@@ -3,10 +3,13 @@
 namespace Tests\Feature;
 
 use App\Models\Device;
+use App\Models\DeviceSession;
 use App\Models\Quiz;
+use App\Models\SecurityAuditEvent;
 use App\Models\User;
 use App\Models\Video;
 use App\Services\NetworkService;
+use Carbon\Carbon;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -402,6 +405,98 @@ class DeviceManagementTest extends TestCase
         ]);
     }
 
+    public function test_updating_remaining_time_resets_session_billing_anchor_for_dashboard(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-14 22:00:00'));
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'name' => 'Child Tablet',
+            'role' => 'child',
+            'status' => 'active',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 120,
+        ]);
+
+        DeviceSession::create([
+            'device_id' => $device->id,
+            'started_at' => now()->subMinutes(15),
+            'ended_at' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('45 min remaining');
+
+        $updateData = [
+            'name' => $device->name,
+            'mac_address' => $device->mac_address,
+            'role' => 'child',
+            'status' => 'active',
+            'remaining_time_minutes' => 20,
+            'total_time_allocated' => 120,
+        ];
+
+        $this->actingAs($user)
+            ->put(route('accounts.update', $device), $updateData)
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('20 min remaining');
+
+        Carbon::setTestNow();
+    }
+
+    public function test_updating_device_without_changing_remaining_time_does_not_reset_billing_anchor(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-14 22:00:00'));
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'name' => 'Child Tablet',
+            'role' => 'child',
+            'status' => 'active',
+            'remaining_time_minutes' => 20,
+            'total_time_allocated' => 60,
+        ]);
+
+        DeviceSession::create([
+            'device_id' => $device->id,
+            'started_at' => now()->subMinutes(15),
+            'ended_at' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('5 min remaining');
+
+        $updateData = [
+            'name' => 'Renamed Tablet',
+            'mac_address' => $device->mac_address,
+            'role' => 'child',
+            'status' => 'active',
+            'remaining_time_minutes' => 20,
+            'total_time_allocated' => 60,
+        ];
+
+        $this->actingAs($user)
+            ->put(route('accounts.update', $device), $updateData)
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('5 min remaining');
+
+        Carbon::setTestNow();
+    }
+
     /**
      * Test that MAC address can be kept the same when updating.
      */
@@ -746,5 +841,51 @@ class DeviceManagementTest extends TestCase
 
         $response = $this->get(route('accounts.create'));
         $response->assertRedirect(route('login'));
+    }
+
+    /**
+     * Parent/Admin Changes log stream should describe device saves in plain language (not raw route names).
+     */
+    public function test_parent_logs_stream_shows_plain_language_for_device_edit(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-14 15:00:00'));
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'name' => 'Family iPad',
+            'role' => 'child',
+            'status' => 'active',
+        ]);
+
+        $this->actingAs($user)->put(route('accounts.update', $device), [
+            'name' => 'Family iPad',
+            'mac_address' => $device->mac_address,
+            'role' => 'child',
+            'status' => 'active',
+            'remaining_time_minutes' => 90,
+            'total_time_allocated' => 120,
+        ])->assertRedirect(route('accounts.index'));
+
+        $audit = SecurityAuditEvent::query()
+            ->where('event', SecurityAuditEvent::EVENT_SENSITIVE_ACTION)
+            ->where('route_name', 'accounts.update')
+            ->latest('id')
+            ->first();
+
+        $this->assertNotNull($audit);
+        $this->assertSame('Family iPad', data_get($audit->metadata, 'device_name'));
+
+        $response = $this->actingAs($user)->get(route('logs.index', [
+            'stream' => 'parent_admin_changes',
+        ]));
+
+        $response->assertOk();
+        $response->assertSee('Saved device details for Family iPad', false);
+        $response->assertSee('From your home network', false);
+        $response->assertDontSee('Sensitive action:', false);
+        $response->assertDontSee('accounts.update', false);
+
+        Carbon::setTestNow();
     }
 }

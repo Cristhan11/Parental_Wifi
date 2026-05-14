@@ -14,6 +14,7 @@ use App\Models\ReportingPreference;
 use App\Models\ReportingRecipientEvent;
 use App\Models\SecurityAuditEvent;
 use App\Models\User;
+use App\Support\ParentFriendlyLogSummaries;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -763,7 +764,7 @@ class LogsController extends Controller
                     'device_id' => $item->id,
                     'device_name' => $item->name,
                     'target' => $item->role,
-                    'summary' => "Device updated: {$item->name}",
+                    'summary' => ParentFriendlyLogSummaries::deviceRowUpdatedSummary($item->name),
                 ];
             }
 
@@ -879,35 +880,116 @@ class LogsController extends Controller
                     SecurityAuditEvent::EVENT_LOGOUT => 'info',
                     default => 'info',
                 };
-                $source = $e->is_remote ? 'remote' : 'local';
+                $metadata = is_array($e->metadata) ? $e->metadata : [];
+                $auditDeviceId = isset($metadata['device_id']) && is_numeric($metadata['device_id'])
+                    ? (int) $metadata['device_id']
+                    : null;
+                $auditDeviceName = isset($metadata['device_name']) && is_string($metadata['device_name']) && $metadata['device_name'] !== ''
+                    ? $metadata['device_name']
+                    : null;
+
                 $summary = match ($e->event) {
                     SecurityAuditEvent::EVENT_LOGIN_SUCCESS => 'Login succeeded',
                     SecurityAuditEvent::EVENT_LOGIN_FAILURE => 'Login failed'
                         .($e->attempted_identifier ? ' ('.$e->attempted_identifier.')' : ''),
                     SecurityAuditEvent::EVENT_LOGOUT => 'Logout',
                     SecurityAuditEvent::EVENT_LOCKOUT => 'Login temporarily locked (too many attempts)',
-                    SecurityAuditEvent::EVENT_SENSITIVE_ACTION => 'Sensitive action: '.($e->route_name ?? 'unknown'),
+                    SecurityAuditEvent::EVENT_SENSITIVE_ACTION => ParentFriendlyLogSummaries::sensitiveActionSummary(
+                        $e->route_name,
+                        $metadata
+                    ),
                     SecurityAuditEvent::EVENT_PASSWORD_CHANGED => 'Password changed',
-                    default => $e->event,
+                    SecurityAuditEvent::EVENT_TAILSCALE_AUTH_LINK_REQUEST => 'Requested a secure remote-access (Tailscale) link',
+                    default => is_string($e->event) ? $e->event : 'Security event recorded',
                 };
-                $summary .= ' · IP '.$e->ip_address.' · '.$source;
+                $summary = ParentFriendlyLogSummaries::appendSecurityAccessContext($summary, $e);
 
-                return [
+                $row = [
                     'id' => 'security-'.$e->id,
                     'timestamp' => Carbon::parse($e->created_at),
                     'stream' => 'parent_admin_changes',
                     'event_type' => 'security-access',
                     'status' => $status,
                     'role' => $actorRole,
-                    'device_id' => null,
-                    'device_name' => 'Security',
+                    'device_id' => $auditDeviceId,
+                    'device_name' => $auditDeviceName ?? 'Security',
                     'target' => $e->ip_address,
                     'summary' => $summary,
                 ];
+
+                if ($e->event === SecurityAuditEvent::EVENT_SENSITIVE_ACTION) {
+                    $row['_audit_route'] = $e->route_name;
+                }
+
+                return $row;
             }));
         }
 
-        return $entries;
+        $entries = $this->dedupeParentAdminDeviceRowsShadowedByAudit($entries);
+
+        return $entries->map(fn (array $row): array => $this->withoutInternalLogKeys($row))->values();
+    }
+
+    /**
+     * @param  array<string, mixed>  $row
+     * @return array<string, mixed>
+     */
+    private function withoutInternalLogKeys(array $row): array
+    {
+        unset($row['_audit_route']);
+
+        return $row;
+    }
+
+    /**
+     * When a device row and a security audit row describe the same dashboard save, keep the clearer audit line only.
+     */
+    private function dedupeParentAdminDeviceRowsShadowedByAudit(Collection $entries): Collection
+    {
+        $markers = [];
+        foreach ($entries as $row) {
+            $route = $row['_audit_route'] ?? null;
+            if (! is_string($route) || ! in_array($route, [
+                'accounts.update',
+                'accounts.status.update',
+                'accounts.time.update',
+                'accounts.role.update',
+            ], true)) {
+                continue;
+            }
+            $deviceId = $row['device_id'] ?? null;
+            if (! is_int($deviceId)) {
+                continue;
+            }
+            $ts = $row['timestamp'] ?? null;
+            if (! $ts instanceof Carbon) {
+                continue;
+            }
+            $markers[] = ['device_id' => $deviceId, 'ts' => $ts];
+        }
+
+        if ($markers === []) {
+            return $entries;
+        }
+
+        return $entries->reject(function (array $row) use ($markers): bool {
+            $id = $row['id'] ?? '';
+            if (! is_string($id) || ! str_starts_with($id, 'device-update-')) {
+                return false;
+            }
+            $deviceId = $row['device_id'] ?? null;
+            $ts = $row['timestamp'] ?? null;
+            if (! is_int($deviceId) || ! $ts instanceof Carbon) {
+                return false;
+            }
+            foreach ($markers as $m) {
+                if ($m['device_id'] === $deviceId && abs($ts->diffInSeconds($m['ts'])) <= 3) {
+                    return true;
+                }
+            }
+
+            return false;
+        })->values();
     }
 
     private function applySharedFilters(

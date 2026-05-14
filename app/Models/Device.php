@@ -275,6 +275,20 @@ class Device extends Model
     }
 
     /**
+     * Move the incremental billing anchor to now so the full {@see $remaining_time_minutes}
+     * pool applies from this moment (used after a parent manually edits remaining time).
+     */
+    public function resetActiveSessionBillingAnchorToNow(): void
+    {
+        $session = $this->activeSession();
+        if ($session === null) {
+            return;
+        }
+
+        $session->update(['last_incremental_bill_at' => now()]);
+    }
+
+    /**
      * Check if device has remaining internet time.
      *
      * Returns true if remaining_time_minutes > 0, false otherwise
