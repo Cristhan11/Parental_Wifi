@@ -76,9 +76,8 @@ Artisan::command('network:parse-logs {--lines= : Process at most this many lines
  * How It Works:
  * 1. Scheduler runs every minute (via crontab)
  * 2. Laravel checks if CheckTimeExpiration job is due (every 2 minutes)
- * 3. If due, dispatches the job to the queue
- * 4. Queue worker processes the job
- * 5. Job finds expired devices and blocks/redirects them
+ * 3. If due, runs the job synchronously via Bus::dispatchSync (no queue worker required)
+ * 4. Job finds expired devices and blocks/redirects them
  *
  * What the Job Does:
  * - Finds all devices whose time has expired (remaining_time_minutes <= 0)
@@ -98,10 +97,11 @@ Artisan::command('network:parse-logs {--lines= : Process at most this many lines
  * - Or dispatch job directly: php artisan queue:work
  * - Check logs: storage/logs/laravel.log
  */
-Schedule::job(new CheckTimeExpiration)
-    ->everyTwoMinutes() // Run every 2 minutes
-    ->name('check-time-expiration') // Name for logging and monitoring
-    ->withoutOverlapping(); // Prevent multiple instances running at once
+Schedule::call(function () {
+    Bus::dispatchSync(new CheckTimeExpiration);
+})->everyTwoMinutes()
+    ->name('check-time-expiration')
+    ->withoutOverlapping();
 
 /**
  * Schedule TrackActiveSessions Job
@@ -119,9 +119,8 @@ Schedule::job(new CheckTimeExpiration)
  * How It Works:
  * 1. Scheduler runs every minute (via crontab)
  * 2. Laravel checks if TrackActiveSessions job is due (every 5 minutes)
- * 3. If due, dispatches the job to the queue
- * 4. Queue worker processes the job
- * 5. Job calls TimeTrackingService::trackActiveSessions() to deduct time
+ * 3. If due, runs the job synchronously via Bus::dispatchSync (no queue worker required)
+ * 4. Job calls TimeTrackingService::trackActiveSessions() to deduct time
  *
  * What the Job Does:
  * - Finds all active sessions (sessions that haven't ended)
@@ -140,10 +139,11 @@ Schedule::job(new CheckTimeExpiration)
  * - Or dispatch job directly: TrackActiveSessions::dispatch()
  * - Check logs: storage/logs/laravel.log
  */
-Schedule::job(new TrackActiveSessions)
-    ->everyFiveMinutes() // Run every 5 minutes
-    ->name('track-active-sessions') // Name for logging and monitoring
-    ->withoutOverlapping(); // Prevent multiple instances running at once
+Schedule::call(function () {
+    Bus::dispatchSync(new TrackActiveSessions);
+})->everyFiveMinutes()
+    ->name('track-active-sessions')
+    ->withoutOverlapping();
 
 /**
  * Schedule MonitorDeviceConnections Job
@@ -161,9 +161,8 @@ Schedule::job(new TrackActiveSessions)
  * How It Works:
  * 1. Scheduler runs every minute (via crontab)
  * 2. Laravel checks if MonitorDeviceConnections job is due (every 2 minutes)
- * 3. If due, dispatches the job to the queue
- * 4. Queue worker processes the job
- * 5. Job gets connected devices from network and compares with database
+ * 3. If due, runs the job synchronously via Bus::dispatchSync (no queue worker required)
+ * 4. Job gets connected devices from network and compares with database
  *
  * What the Job Does:
  * - Gets list of currently connected devices from network (via NetworkService)
@@ -182,10 +181,11 @@ Schedule::job(new TrackActiveSessions)
  * - Or dispatch job directly: MonitorDeviceConnections::dispatch()
  * - Check logs: storage/logs/laravel.log
  */
-Schedule::job(new MonitorDeviceConnections)
-    ->everyTwoMinutes() // Run every 2 minutes
-    ->name('monitor-device-connections') // Name for logging and monitoring
-    ->withoutOverlapping(); // Prevent multiple instances running at once
+Schedule::call(function () {
+    Bus::dispatchSync(new MonitorDeviceConnections);
+})->everyTwoMinutes()
+    ->name('monitor-device-connections')
+    ->withoutOverlapping();
 
 /**
  * Schedule EnforceSchedules Job
@@ -202,9 +202,8 @@ Schedule::job(new MonitorDeviceConnections)
  * How It Works:
  * 1. Scheduler runs every minute (via crontab)
  * 2. Laravel checks if EnforceSchedules job is due (every 1 minute)
- * 3. If due, dispatches the job to the queue
- * 4. Queue worker processes the job
- * 5. Job checks current day and time, finds active schedules, and enforces rules
+ * 3. If due, runs the job synchronously via Bus::dispatchSync (no queue worker required)
+ * 4. Job checks current day and time, finds active schedules, and enforces rules
  *
  * What the Job Does:
  * - Gets current day of week and time
@@ -224,10 +223,11 @@ Schedule::job(new MonitorDeviceConnections)
  * - Or dispatch job directly: EnforceSchedules::dispatch()
  * - Check logs: storage/logs/laravel.log
  */
-Schedule::job(new EnforceSchedules)
-    ->everyMinute() // Run every 1 minute (precise schedule enforcement)
-    ->name('enforce-schedules') // Name for logging and monitoring
-    ->withoutOverlapping(); // Prevent multiple instances running at once
+Schedule::call(function () {
+    Bus::dispatchSync(new EnforceSchedules);
+})->everyMinute()
+    ->name('enforce-schedules')
+    ->withoutOverlapping();
 
 /**
  * Schedule ParseNetworkLogs Job
@@ -245,9 +245,8 @@ Schedule::job(new EnforceSchedules)
  * How It Works:
  * 1. Scheduler runs every minute (via crontab)
  * 2. Laravel checks if ParseNetworkLogs job is due (every 10 minutes)
- * 3. If due, dispatches the job to the queue
- * 4. Queue worker processes the job
- * 5. Job reads log file, parses entries, and creates BrowsingLog records
+ * 3. If due, runs the job synchronously via Bus::dispatchSync (no queue worker required)
+ * 4. Job reads log file, parses entries, and creates BrowsingLog records
  *
  * What the Job Does:
  * - Reads network log files (tcpdump or iptables logs)
@@ -271,10 +270,11 @@ Schedule::job(new EnforceSchedules)
  * - Log file path: config('network.log_path', '/var/log/tcpdump/network.log')
  * - Set in .env: NETWORK_LOG_PATH=/var/log/tcpdump/network.log
  */
-Schedule::job(new ParseNetworkLogs)
-    ->everyTenMinutes() // Run every 10 minutes
-    ->name('parse-network-logs') // Name for logging and monitoring
-    ->withoutOverlapping(); // Prevent multiple instances running at once
+Schedule::call(function () {
+    Bus::dispatchSync(new ParseNetworkLogs);
+})->everyTenMinutes()
+    ->name('parse-network-logs')
+    ->withoutOverlapping();
 
 /**
  * Reporting digest schedules (locked scope).
@@ -302,7 +302,8 @@ Schedule::command('reporting:send-digest monthly')
  *
  * Debounced applies cover normal UX; this job recovers drift if a script failed mid-flight.
  */
-Schedule::job(new ReconcileDnsmasqPolicyJob)
-    ->hourly()
+Schedule::call(function () {
+    Bus::dispatchSync(new ReconcileDnsmasqPolicyJob);
+})->hourly()
     ->name('reconcile-dnsmasq-policy')
     ->withoutOverlapping();

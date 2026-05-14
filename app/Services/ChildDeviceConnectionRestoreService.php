@@ -42,7 +42,7 @@ class ChildDeviceConnectionRestoreService
             }
 
             try {
-                $this->noDogSplashService->allowDeviceThrough($device);
+                $this->allowDeviceThroughWithRetries($device);
             } catch (\Exception $e) {
                 Log::debug('allowDeviceThrough after whitelist provision failed (non-fatal)', [
                     'device_id' => $device->id,
@@ -101,7 +101,7 @@ class ChildDeviceConnectionRestoreService
         }
 
         try {
-            $authenticated = $this->noDogSplashService->allowDeviceThrough($device);
+            $authenticated = $this->allowDeviceThroughWithRetries($device);
             if ($authenticated) {
                 Log::debug('Authenticated device with time remaining (immediate restore)', [
                     'device_id' => $device->id,
@@ -140,5 +140,43 @@ class ChildDeviceConnectionRestoreService
                 'mac_address' => $device->mac_address,
             ]);
         }
+    }
+
+    /**
+     * ndsctl auth only works once the client appears in NoDogSplash's client list; after
+     * registration approval there can be a short race. Retry a few times before giving up.
+     */
+    private function allowDeviceThroughWithRetries(Device $device, int $maxAttempts = 6, int $sleepSeconds = 2): bool
+    {
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $device->refresh();
+
+            try {
+                if ($this->noDogSplashService->allowDeviceThrough($device)) {
+                    if ($attempt > 1) {
+                        Log::info('NoDogSplash allowDeviceThrough succeeded after retry', [
+                            'device_id' => $device->id,
+                            'mac_address' => $device->mac_address,
+                            'attempt' => $attempt,
+                        ]);
+                    }
+
+                    return true;
+                }
+            } catch (\Exception $e) {
+                Log::debug('allowDeviceThrough attempt failed', [
+                    'device_id' => $device->id ?? null,
+                    'mac_address' => $device->mac_address ?? null,
+                    'attempt' => $attempt,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
+            if ($attempt < $maxAttempts) {
+                sleep($sleepSeconds);
+            }
+        }
+
+        return false;
     }
 }
