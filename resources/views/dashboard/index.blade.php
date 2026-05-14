@@ -157,7 +157,7 @@
                     <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">FILTER</span>
                     <div class="flex flex-wrap gap-2 justify-end">
                         <button type="button"
-                            class="js-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                            class="js-usage-chart-filter js-usage-chart-filter-active inline-flex items-center justify-center rounded-full border-2 border-[#FFDE15] bg-[#FFDE15] text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFC107] transition"
                             data-usage-chart-range="daily">
                             Daily
                         </button>
@@ -172,7 +172,7 @@
                             Monthly
                         </button>
                         <button type="button"
-                            class="js-usage-chart-filter js-usage-chart-filter-active inline-flex items-center justify-center rounded-full border-2 border-[#FFDE15] bg-[#FFDE15] text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFC107] transition"
+                            class="js-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
                             data-usage-chart-range="yearly">
                             Yearly
                         </button>
@@ -281,7 +281,7 @@
             'use strict';
 
             window.usageChartInstance = window.usageChartInstance ?? null;
-            window.currentUsageChartRange = window.currentUsageChartRange ?? 'yearly';
+            window.currentUsageChartRange = window.currentUsageChartRange ?? 'daily';
             window.currentDashboardGraphType = window.currentDashboardGraphType ?? 'usage';
             window.currentDashboardBandwidthUnit = window.currentDashboardBandwidthUnit ?? 'gb';
             window.__usageChartRefreshImpl = null;
@@ -344,7 +344,7 @@
                 if (activeBtn) {
                     setActiveFilter(activeBtn.dataset.usageChartRange);
                 } else {
-                    setActiveFilter('yearly');
+                    setActiveFilter('daily');
                 }
                 if (graphTypeSelect) {
                     window.currentDashboardGraphType = graphTypeSelect.value || 'usage';
@@ -563,7 +563,7 @@
                     if (refreshInFlight) return;
                     refreshInFlight = true;
                     try {
-                        const range = window.currentUsageChartRange || 'yearly';
+                        const range = window.currentUsageChartRange || 'daily';
                         const payload = await fetchChart(range);
                         renderChart(payload);
                     } catch (e) {

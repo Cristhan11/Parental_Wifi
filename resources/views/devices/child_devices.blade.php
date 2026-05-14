@@ -131,7 +131,7 @@
                                     <span class="text-[11px] sm:text-xs font-semibold text-gray-600 font-montserrat">FILTER</span>
                                     <div class="flex flex-wrap gap-2 justify-start sm:justify-end">
                                         <button type="button"
-                                            class="js-child-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
+                                            class="js-child-usage-chart-filter js-child-usage-chart-filter-active inline-flex items-center justify-center rounded-full border-2 border-[#FFDE15] bg-[#FFDE15] text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFC107] transition"
                                             data-child-usage-chart-range="daily">
                                             Daily
                                         </button>
@@ -146,7 +146,7 @@
                                             Monthly
                                         </button>
                                         <button type="button"
-                                            class="js-child-usage-chart-filter js-child-usage-chart-filter-active inline-flex items-center justify-center rounded-full border-2 border-[#FFDE15] bg-[#FFDE15] text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFC107] transition"
+                                            class="js-child-usage-chart-filter inline-flex items-center justify-center rounded-full border-2 border-gray-300 bg-white text-black px-2.5 py-1 text-[11px] sm:text-xs font-semibold font-montserrat hover:border-[#FFDE15] transition"
                                             data-child-usage-chart-range="yearly">
                                             Yearly
                                         </button>
@@ -347,10 +347,12 @@
             const bandwidthChartUrlBase = @json(route('child_devices.bandwidth-chart', $device));
 
             window.childTimeUsageChartInstance = window.childTimeUsageChartInstance ?? null;
-            window.currentChildUsageChartRange = window.currentChildUsageChartRange ?? 'yearly';
+            window.currentChildUsageChartRange = window.currentChildUsageChartRange ?? 'daily';
             window.currentChildGraphType = window.currentChildGraphType ?? 'usage';
             window.currentChildBandwidthUnit = window.currentChildBandwidthUnit ?? 'gb';
             window.__childUsageChartRefreshImpl = null;
+
+            const CHILD_CHART_LS = 'parental_wifi.child_devices.chart.';
 
             document.addEventListener('DOMContentLoaded', function() {
                 const ctx = document.getElementById('timeUsageChart');
@@ -361,6 +363,20 @@
                 const graphTitle = document.getElementById('childGraphTitle');
                 const bandwidthUnitRow = document.getElementById('childBandwidthUnitRow');
                 const bandwidthUnitSelect = document.getElementById('childBandwidthUnit');
+
+                const readChartPref = (key, fallback) => {
+                    try {
+                        const v = localStorage.getItem(CHILD_CHART_LS + key);
+                        return v !== null && v !== '' ? v : fallback;
+                    } catch (e) {
+                        return fallback;
+                    }
+                };
+                const writeChartPref = (key, value) => {
+                    try {
+                        localStorage.setItem(CHILD_CHART_LS + key, value);
+                    } catch (e) { /* ignore */ }
+                };
 
                 const syncChildBandwidthUnitRow = () => {
                     const show = window.currentChildGraphType === 'bandwidth';
@@ -383,18 +399,20 @@
                     });
                 };
 
-                const activeBtn = document.querySelector('.js-child-usage-chart-filter-active[data-child-usage-chart-range]');
-                if (activeBtn) {
-                    setActiveFilter(activeBtn.dataset.childUsageChartRange);
-                } else {
-                    setActiveFilter('yearly');
-                }
+                const savedRange = readChartPref('range', 'daily');
+                const savedGraphType = readChartPref('graph_type', 'usage');
+                const savedBandwidthUnit = readChartPref('bandwidth_unit', 'gb');
+
+                setActiveFilter(savedRange);
+                window.currentChildUsageChartRange = savedRange;
 
                 if (graphTypeSelect) {
-                    window.currentChildGraphType = graphTypeSelect.value || 'usage';
+                    graphTypeSelect.value = ['usage', 'bandwidth'].includes(savedGraphType) ? savedGraphType : 'usage';
+                    window.currentChildGraphType = graphTypeSelect.value;
                 }
                 if (bandwidthUnitSelect) {
-                    window.currentChildBandwidthUnit = bandwidthUnitSelect.value || 'gb';
+                    bandwidthUnitSelect.value = ['gb', 'mb'].includes(savedBandwidthUnit) ? savedBandwidthUnit : 'gb';
+                    window.currentChildBandwidthUnit = bandwidthUnitSelect.value;
                 }
 
                 const updateGraphTitle = () => {
@@ -488,15 +506,32 @@
                     const datasets = buildDatasets(series, isBandwidth, hardCapApplies ? hardCap : null);
 
                     const useDailyMbBandwidthTicks = isBandwidth && payload.range === 'daily' && bwUnit === 'mb';
+                    const peakForAxis = hardCapApplies && hardCap !== null ? Math.min(maxVal, hardCap) : maxVal;
+                    const paddedPeak = peakForAxis > 0 ? peakForAxis * 1.15 : 0;
+                    const childDailyMbYMax = useDailyMbBandwidthTicks
+                        ? Math.min(2500, Math.max(100, Math.ceil(Math.max(paddedPeak, peakForAxis, 50) / 10) * 10))
+                        : null;
+
                     const yExtent = dailyFixedMax !== null
                         ? { max: dailyFixedMax }
                         : (maxByRangeInChartUnit !== null
                             ? { max: maxByRangeInChartUnit }
-                            : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax }));
+                            : (useDailyMbBandwidthTicks && childDailyMbYMax !== null
+                                ? { max: childDailyMbYMax }
+                                : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax })));
 
                     const afterBuildTicksDailyMbBandwidth = (scale) => {
                         const cap = Number(scale.max);
-                        const step = 250;
+                        let step = 10;
+                        if (cap > 300) {
+                            step = 25;
+                        }
+                        if (cap > 800) {
+                            step = 50;
+                        }
+                        if (cap > 2000) {
+                            step = 250;
+                        }
                         const values = [];
                         for (let t = 0; t < cap - 1e-9; t += step) {
                             values.push(t);
@@ -617,7 +652,7 @@
                     if (refreshInFlight) return;
                     refreshInFlight = true;
                     try {
-                        const range = window.currentChildUsageChartRange || 'yearly';
+                        const range = window.currentChildUsageChartRange || 'daily';
                         const payload = await fetchChildChart(range);
                         renderChart(payload);
                     } catch (e) {
@@ -629,13 +664,16 @@
 
                 filterButtons.forEach((btn) => {
                     btn.addEventListener('click', () => {
-                        setActiveFilter(btn.dataset.childUsageChartRange);
+                        const range = btn.dataset.childUsageChartRange;
+                        setActiveFilter(range);
+                        writeChartPref('range', range);
                         window.__childUsageChartRefreshImpl('filter-change');
                     });
                 });
                 if (graphTypeSelect) {
                     graphTypeSelect.addEventListener('change', () => {
                         window.currentChildGraphType = graphTypeSelect.value || 'usage';
+                        writeChartPref('graph_type', window.currentChildGraphType);
                         updateGraphTitle();
                         window.__childUsageChartRefreshImpl('graph-type-change');
                     });
@@ -644,6 +682,7 @@
                 if (bandwidthUnitSelect) {
                     bandwidthUnitSelect.addEventListener('change', () => {
                         window.currentChildBandwidthUnit = bandwidthUnitSelect.value || 'gb';
+                        writeChartPref('bandwidth_unit', window.currentChildBandwidthUnit);
                         if (window.currentChildGraphType === 'bandwidth') {
                             window.__childUsageChartRefreshImpl('bandwidth-unit-change');
                         }
