@@ -7,6 +7,7 @@ use App\Models\Device;
 use App\Models\User;
 use Carbon\Carbon;
 use Carbon\CarbonInterface;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class BandwidthUsageService
@@ -93,20 +94,78 @@ class BandwidthUsageService
             ->flatten()
             ->every(static fn (int $value) => $value === 0);
 
-        if ($allZero) {
-            $liveBytesByMac = $this->getLiveTrafficBytesByMac();
-            if ($liveBytesByMac !== []) {
-                $currentBucketIndex = $this->findCurrentBucketIndex($bucketStarts, $now);
-                if ($currentBucketIndex !== null) {
-                    foreach ($devices as $device) {
-                        $normalizedMac = $this->normalizeMac((string) $device->mac_address);
-                        if ($normalizedMac === null || ! isset($liveBytesByMac[$normalizedMac])) {
-                            continue;
-                        }
+        $liveBytesByMac = $this->getLiveTrafficBytesByMac();
+        $currentBucketIndex = $this->findCurrentBucketIndex($bucketStarts, $now);
 
-                        $bytesByDevice[(int) $device->id][$currentBucketIndex] = (int) $liveBytesByMac[$normalizedMac];
+        /*
+         * Live iptables counters are cumulative and only read at request time. The previous
+         * implementation placed them solely in the *current* hour bucket, so after the clock
+         * moved on (or the device was blocked by a schedule), that hour fell back to zero
+         * whenever BrowsingLog had no rows yet. We persist the highest live reading seen per
+         * device per calendar day and hour so the daily chart still reflects usage until logs
+         * are parsed into BrowsingLog.
+         */
+        if ($range === 'daily') {
+            $dateKey = $now->toDateString();
+
+            if ($currentBucketIndex !== null && $liveBytesByMac !== []) {
+                foreach ($devices as $device) {
+                    $normalizedMac = $this->normalizeMac((string) $device->mac_address);
+                    if ($normalizedMac === null || ! isset($liveBytesByMac[$normalizedMac])) {
+                        continue;
+                    }
+
+                    $live = (int) $liveBytesByMac[$normalizedMac];
+                    if ($live <= 0) {
+                        continue;
+                    }
+
+                    $cacheKey = $this->liveDailyPeakCacheKey((int) $device->id, $dateKey);
+                    /** @var array<string, int> $peaks */
+                    $peaks = Cache::get($cacheKey, []);
+                    if (! is_array($peaks)) {
+                        $peaks = [];
+                    }
+
+                    $hourKey = (string) $currentBucketIndex;
+                    $peaks[$hourKey] = max((int) ($peaks[$hourKey] ?? 0), $live);
+                    Cache::put($cacheKey, $peaks, $now->copy()->addDays(2));
+                }
+            }
+
+            foreach ($devices as $device) {
+                $cacheKey = $this->liveDailyPeakCacheKey((int) $device->id, $dateKey);
+                /** @var array<string, int> $peaks */
+                $peaks = Cache::get($cacheKey, []);
+                if (! is_array($peaks)) {
+                    continue;
+                }
+
+                $deviceId = (int) $device->id;
+                foreach ($peaks as $hourKey => $peakBytes) {
+                    $hour = (int) $hourKey;
+                    if ($hour < 0 || $hour >= count($buckets)) {
+                        continue;
+                    }
+
+                    $pb = (int) $peakBytes;
+                    if ($pb <= 0) {
+                        continue;
+                    }
+
+                    if (($bytesByDevice[$deviceId][$hour] ?? 0) === 0) {
+                        $bytesByDevice[$deviceId][$hour] = $pb;
                     }
                 }
+            }
+        } elseif ($allZero && $liveBytesByMac !== [] && $currentBucketIndex !== null) {
+            foreach ($devices as $device) {
+                $normalizedMac = $this->normalizeMac((string) $device->mac_address);
+                if ($normalizedMac === null || ! isset($liveBytesByMac[$normalizedMac])) {
+                    continue;
+                }
+
+                $bytesByDevice[(int) $device->id][$currentBucketIndex] = (int) $liveBytesByMac[$normalizedMac];
             }
         }
 
@@ -261,6 +320,11 @@ class BandwidthUsageService
         }
 
         return $normalized;
+    }
+
+    private function liveDailyPeakCacheKey(int $deviceId, string $date): string
+    {
+        return 'bandwidth_usage:daily_live_peak:'.$deviceId.':'.$date;
     }
 
     /**

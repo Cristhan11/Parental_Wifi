@@ -436,8 +436,8 @@
                     }
                 };
 
-                const MB_DAILY_BANDWIDTH_CAPS = [10, 20, 50, 100, 300, 500, 1000, 1500, 2000, 2500];
-                const GB_DAILY_BANDWIDTH_CAPS = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10];
+                const MB_DAILY_BANDWIDTH_CAPS = [10, 20, 50, 100, 500, 1000, 1500, 2000, 2500];
+                const GB_DAILY_BANDWIDTH_CAPS = [0.5, 1, 2, 4, 8, 16, 32, 64];
 
                 const pickDailyMbBandwidthCap = (peak) => {
                     const padded = peak > 0 ? peak * 1.12 : 0;
@@ -457,7 +457,7 @@
                             return t;
                         }
                     }
-                    return 10;
+                    return GB_DAILY_BANDWIDTH_CAPS[GB_DAILY_BANDWIDTH_CAPS.length - 1];
                 };
 
                 const buildDatasets = (series, isBandwidth, clampMax = null) => {
@@ -500,7 +500,7 @@
                             if (payload.range === 'yearly') return 250000;
                             return 15000;
                         }
-                        if (payload.range === 'daily') return 10;
+                        if (payload.range === 'daily') return 64;
                         if (payload.range === 'weekly') return 15;
                         if (payload.range === 'monthly') return 63;
                         if (payload.range === 'yearly') return 250;
@@ -548,60 +548,41 @@
 
                     const afterBuildTicksDailyMbBandwidth = (scale) => {
                         const cap = Number(scale.max);
-                        let step = 2;
-                        if (cap > 10) {
-                            step = 5;
+                        const ticks = [0];
+                        for (const m of MB_DAILY_BANDWIDTH_CAPS) {
+                            if (m < cap - 1e-6) {
+                                ticks.push(m);
+                            }
                         }
-                        if (cap > 20) {
-                            step = 10;
+                        if (ticks[ticks.length - 1] !== cap) {
+                            if (cap > 500) {
+                                let t = 500;
+                                while (t < cap - 1e-6) {
+                                    t += 250;
+                                    ticks.push(Math.min(t, cap));
+                                }
+                                if (ticks[ticks.length - 1] !== cap) {
+                                    ticks.push(cap);
+                                }
+                            } else {
+                                ticks.push(cap);
+                            }
                         }
-                        if (cap > 50) {
-                            step = 20;
-                        }
-                        if (cap > 100) {
-                            step = 50;
-                        }
-                        if (cap > 300) {
-                            step = 100;
-                        }
-                        if (cap > 500) {
-                            step = 250;
-                        }
-                        const values = [];
-                        const n = Math.ceil(cap / step - 1e-9);
-                        for (let i = 0; i <= n; i++) {
-                            const t = Math.min(cap, Math.round(i * step * 100) / 100);
-                            values.push(t);
-                        }
-                        if (values[values.length - 1] !== cap) {
-                            values.push(cap);
-                        }
-                        scale.ticks = values.map((value) => ({ value }));
+                        scale.ticks = ticks.map((value) => ({ value }));
                     };
 
                     const afterBuildTicksDailyGbBandwidth = (scale) => {
                         const cap = Number(scale.max);
-                        let step = 0.1;
-                        if (cap > 1) {
-                            step = 0.25;
+                        const ticks = [0];
+                        for (const g of GB_DAILY_BANDWIDTH_CAPS) {
+                            if (g < cap - 1e-6) {
+                                ticks.push(g);
+                            }
                         }
-                        if (cap > 2) {
-                            step = 0.5;
+                        if (ticks[ticks.length - 1] !== cap) {
+                            ticks.push(cap);
                         }
-                        if (cap > 5) {
-                            step = 1;
-                        }
-                        const values = [];
-                        const n = Math.round(cap / step);
-                        for (let i = 0; i <= n; i++) {
-                            const raw = i * step;
-                            const t = Math.min(cap, Math.round(raw * 1000) / 1000);
-                            values.push(t);
-                        }
-                        if (values.length === 0 || Math.abs(values[values.length - 1] - cap) > 1e-6) {
-                            values.push(cap);
-                        }
-                        scale.ticks = values.map((value) => ({ value }));
+                        scale.ticks = ticks.map((value) => ({ value }));
                     };
 
                     const yScaleConfig = {
