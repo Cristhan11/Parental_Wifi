@@ -112,50 +112,27 @@ normalize_mac_address() {
 ################################################################################
 get_traffic_for_mac() {
     local mac="$1"
-    local bytes_sent=0
-    local bytes_received=0
-    
-    # Get iptables FORWARD chain statistics
-    # -L FORWARD = List FORWARD chain rules
-    # -v = Verbose (show byte and packet counts)
-    # -n = Numeric (don't resolve IPs to hostnames)
-    # -x = Exact byte counts (not abbreviated)
-    # grep "$mac" = Search for lines containing the MAC address
-    # awk '{print $2}' = Extract second field (bytes sent)
-    # head -1 = Take first match only
-    
-    # Get bytes sent (outgoing traffic from device)
-    # This is traffic going FROM device TO internet
-    local sent_line=$(sudo iptables -L FORWARD -v -n -x 2>/dev/null | grep "$mac" | grep -i "out" | head -1)
-    if [ -n "$sent_line" ]; then
-        # Extract byte count (2nd field in verbose output)
-        bytes_sent=$(echo "$sent_line" | awk '{print $2}')
-        # If empty or not a number, default to 0
-        if ! [[ "$bytes_sent" =~ ^[0-9]+$ ]]; then
-            bytes_sent=0
-        fi
-    fi
-    
-    # Get bytes received (incoming traffic to device)
-    # This is traffic going FROM internet TO device
-    local received_line=$(sudo iptables -L FORWARD -v -n -x 2>/dev/null | grep "$mac" | grep -i "in" | head -1)
-    if [ -n "$received_line" ]; then
-        # Extract byte count
-        bytes_received=$(echo "$received_line" | awk '{print $2}')
-        # If empty or not a number, default to 0
-        if ! [[ "$bytes_received" =~ ^[0-9]+$ ]]; then
-            bytes_received=0
-        fi
-    fi
-    
-    # Alternative method: Use /proc/net/dev and correlate via IP
-    # This is more reliable but requires IP-to-MAC mapping
-    # For now, we use iptables method above
-    # Future enhancement: Parse /proc/net/dev and use ARP table for MAC mapping
-    
-    # Output JSON object
-    # mac_address matches NetworkService::getTrafficStats() (also accepts legacy "mac")
-    echo "{\"mac_address\":\"$mac\",\"bytes_sent\":$bytes_sent,\"bytes_received\":$bytes_received}"
+    local total_bytes=0
+    local chain
+
+    # Sum byte counters on filter rules that reference this MAC (case-insensitive).
+    # Check FORWARD (through-traffic) and INPUT (to-Pi); whitelist_device.sh installs both.
+    for chain in FORWARD INPUT; do
+        while IFS= read -r line; do
+            [ -z "$line" ] && continue
+            if ! echo "$line" | grep -qi "$mac"; then
+                continue
+            fi
+            local b
+            b=$(echo "$line" | awk '{print $2}')
+            if [[ "$b" =~ ^[0-9]+$ ]]; then
+                total_bytes=$((total_bytes + b))
+            fi
+        done < <(sudo iptables -L "$chain" -v -n -x 2>/dev/null || true)
+    done
+
+    # NetworkService adds bytes_sent + bytes_received; combined total in bytes_received is enough.
+    echo "{\"mac_address\":\"$mac\",\"bytes_sent\":0,\"bytes_received\":$total_bytes}"
 }
 
 ################################################################################
@@ -183,10 +160,14 @@ get_all_devices_traffic() {
             continue
         fi
         
-        # Extract MAC address (5th field)
-        mac_address=$(echo "$line" | awk '{print $5}')
-        
-        # Skip if MAC address is empty
+        # MAC follows "lladdr" (field position varies: with "dev wlan0" MAC is $5, without it MAC is $3)
+        mac_address=$(echo "$line" | awk '{
+            for (i = 1; i <= NF; i++) {
+                if ($i == "lladdr" && i + 1 <= NF) { print $(i + 1); exit }
+            }
+        }')
+
+        # Skip if no lladdr (e.g. "192.168.x.x FAILED" only)
         if [ -z "$mac_address" ]; then
             continue
         fi
