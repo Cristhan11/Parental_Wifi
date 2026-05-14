@@ -436,6 +436,30 @@
                     }
                 };
 
+                const MB_DAILY_BANDWIDTH_CAPS = [10, 20, 50, 100, 300, 500, 1000, 1500, 2000, 2500];
+                const GB_DAILY_BANDWIDTH_CAPS = [0.5, 1, 1.5, 2, 2.5, 3, 4, 5, 6, 7, 8, 9, 10];
+
+                const pickDailyMbBandwidthCap = (peak) => {
+                    const padded = peak > 0 ? peak * 1.12 : 0;
+                    const need = Math.max(10, Math.ceil(padded));
+                    for (const t of MB_DAILY_BANDWIDTH_CAPS) {
+                        if (t >= need) {
+                            return t;
+                        }
+                    }
+                    return MB_DAILY_BANDWIDTH_CAPS[MB_DAILY_BANDWIDTH_CAPS.length - 1];
+                };
+
+                const pickDailyGbBandwidthCap = (peak) => {
+                    const need = peak > 0 ? Math.max(0.5, peak * 1.12) : 0.5;
+                    for (const t of GB_DAILY_BANDWIDTH_CAPS) {
+                        if (t + 1e-9 >= need) {
+                            return t;
+                        }
+                    }
+                    return 10;
+                };
+
                 const buildDatasets = (series, isBandwidth, clampMax = null) => {
                     return series.map((item, idx) => {
                         const borderColor = makeBorderColor(idx);
@@ -476,7 +500,7 @@
                             if (payload.range === 'yearly') return 250000;
                             return 15000;
                         }
-                        if (payload.range === 'daily') return 3;
+                        if (payload.range === 'daily') return 10;
                         if (payload.range === 'weekly') return 15;
                         if (payload.range === 'monthly') return 63;
                         if (payload.range === 'yearly') return 250;
@@ -506,37 +530,77 @@
                     const datasets = buildDatasets(series, isBandwidth, hardCapApplies ? hardCap : null);
 
                     const useDailyMbBandwidthTicks = isBandwidth && payload.range === 'daily' && bwUnit === 'mb';
+                    const useDailyGbBandwidthTicks = isBandwidth && payload.range === 'daily' && bwUnit === 'gb';
                     const peakForAxis = hardCapApplies && hardCap !== null ? Math.min(maxVal, hardCap) : maxVal;
-                    const paddedPeak = peakForAxis > 0 ? peakForAxis * 1.15 : 0;
-                    const childDailyMbYMax = useDailyMbBandwidthTicks
-                        ? Math.min(2500, Math.max(100, Math.ceil(Math.max(paddedPeak, peakForAxis, 50) / 10) * 10))
-                        : null;
+
+                    const dailyMbBandwidthCap = useDailyMbBandwidthTicks ? pickDailyMbBandwidthCap(peakForAxis) : null;
+                    const dailyGbBandwidthCap = useDailyGbBandwidthTicks ? pickDailyGbBandwidthCap(peakForAxis) : null;
 
                     const yExtent = dailyFixedMax !== null
                         ? { max: dailyFixedMax }
                         : (maxByRangeInChartUnit !== null
                             ? { max: maxByRangeInChartUnit }
-                            : (useDailyMbBandwidthTicks && childDailyMbYMax !== null
-                                ? { max: childDailyMbYMax }
-                                : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax })));
+                            : (useDailyMbBandwidthTicks && dailyMbBandwidthCap !== null
+                                ? { max: dailyMbBandwidthCap }
+                                : (useDailyGbBandwidthTicks && dailyGbBandwidthCap !== null
+                                    ? { max: dailyGbBandwidthCap }
+                                    : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax }))));
 
                     const afterBuildTicksDailyMbBandwidth = (scale) => {
                         const cap = Number(scale.max);
-                        let step = 10;
-                        if (cap > 300) {
-                            step = 25;
+                        let step = 2;
+                        if (cap > 10) {
+                            step = 5;
                         }
-                        if (cap > 800) {
+                        if (cap > 20) {
+                            step = 10;
+                        }
+                        if (cap > 50) {
+                            step = 20;
+                        }
+                        if (cap > 100) {
                             step = 50;
                         }
-                        if (cap > 2000) {
+                        if (cap > 300) {
+                            step = 100;
+                        }
+                        if (cap > 500) {
                             step = 250;
                         }
                         const values = [];
-                        for (let t = 0; t < cap - 1e-9; t += step) {
+                        const n = Math.ceil(cap / step - 1e-9);
+                        for (let i = 0; i <= n; i++) {
+                            const t = Math.min(cap, Math.round(i * step * 100) / 100);
                             values.push(t);
                         }
-                        values.push(cap);
+                        if (values[values.length - 1] !== cap) {
+                            values.push(cap);
+                        }
+                        scale.ticks = values.map((value) => ({ value }));
+                    };
+
+                    const afterBuildTicksDailyGbBandwidth = (scale) => {
+                        const cap = Number(scale.max);
+                        let step = 0.1;
+                        if (cap > 1) {
+                            step = 0.25;
+                        }
+                        if (cap > 2) {
+                            step = 0.5;
+                        }
+                        if (cap > 5) {
+                            step = 1;
+                        }
+                        const values = [];
+                        const n = Math.round(cap / step);
+                        for (let i = 0; i <= n; i++) {
+                            const raw = i * step;
+                            const t = Math.min(cap, Math.round(raw * 1000) / 1000);
+                            values.push(t);
+                        }
+                        if (values.length === 0 || Math.abs(values[values.length - 1] - cap) > 1e-6) {
+                            values.push(cap);
+                        }
                         scale.ticks = values.map((value) => ({ value }));
                     };
 
@@ -554,7 +618,7 @@
                         },
                         ticks: {
                             font: { size: 12, weight: 'bold', family: 'Montserrat Variable' },
-                            ...(dailyFixedMax !== null && !useDailyMbBandwidthTicks ? { stepSize: 10 } : {}),
+                            ...(dailyFixedMax !== null && !useDailyMbBandwidthTicks && !useDailyGbBandwidthTicks ? { stepSize: 10 } : {}),
                             callback: (value) => {
                                 const v = Number(value);
                                 if (hardCapApplies && hardCap !== null && v === hardCap) {
@@ -562,6 +626,13 @@
                                 }
                                 if (useDailyMbBandwidthTicks) {
                                     return Number.isInteger(v) ? String(v) : String(Math.round(v));
+                                }
+                                if (useDailyGbBandwidthTicks) {
+                                    const r = Math.round(v * 1000) / 1000;
+                                    if (Math.abs(r - Math.round(r)) < 1e-5) {
+                                        return String(Math.round(r));
+                                    }
+                                    return String(r);
                                 }
                                 return value;
                             },
@@ -572,6 +643,8 @@
                     };
                     if (useDailyMbBandwidthTicks) {
                         yScaleConfig.afterBuildTicks = afterBuildTicksDailyMbBandwidth;
+                    } else if (useDailyGbBandwidthTicks) {
+                        yScaleConfig.afterBuildTicks = afterBuildTicksDailyGbBandwidth;
                     }
 
                     window.childTimeUsageChartInstance = new Chart(ctx, {
