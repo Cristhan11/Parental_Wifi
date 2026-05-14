@@ -283,24 +283,46 @@ class ParseNetworkLogs implements ShouldQueue
                     continue; // Continue with next entry
                 }
 
-                // Step 6: Check if browsing log already exists (avoid duplicates)
-                // We check if a BrowsingLog with same URL and timestamp already exists
-                // This prevents duplicate entries if job runs multiple times
-                $existingLog = BrowsingLog::where('device_id', $device->id)
+                // Step 6: Exact replay guard (same log line if the job runs twice)
+                $exactReplay = BrowsingLog::where('device_id', $device->id)
                     ->where('url', $parsedEntry['url'])
                     ->where('visited_at', $parsedEntry['visited_at'])
+                    ->exists();
+
+                if ($exactReplay) {
+                    $entriesSkipped++;
+
+                    continue;
+                }
+
+                // Step 7: De-duplicate noisy traffic (many DNS hits per second for the same host).
+                // One row per device + domain + calendar minute; extra hits increment visit_count and bytes.
+                $visitedAt = $parsedEntry['visited_at'];
+                $minuteStart = $visitedAt->copy()->startOfMinute();
+                $minuteEnd = $visitedAt->copy()->endOfMinute();
+
+                $existingLog = BrowsingLog::where('device_id', $device->id)
+                    ->where('domain', $parsedEntry['domain'])
+                    ->whereBetween('visited_at', [$minuteStart, $minuteEnd])
                     ->first();
 
                 if ($existingLog) {
-                    // Log already exists, skip it
+                    $existingLog->increment('visit_count');
+                    $bytesSent = (int) ($parsedEntry['bytes_sent'] ?? 0);
+                    $bytesReceived = (int) ($parsedEntry['bytes_received'] ?? 0);
+                    if ($bytesSent !== 0) {
+                        $existingLog->increment('bytes_sent', $bytesSent);
+                    }
+                    if ($bytesReceived !== 0) {
+                        $existingLog->increment('bytes_received', $bytesReceived);
+                    }
+
                     $entriesSkipped++;
 
-                    continue; // Continue with next entry
+                    continue;
                 }
 
-                // Step 7: Create BrowsingLog record
-                // We store the browsing history in the database
-                // This allows parents to review browsing history through the dashboard
+                // Step 8: Create BrowsingLog record
                 BrowsingLog::create([
                     'device_id' => $device->id,
                     'url' => $parsedEntry['url'],
@@ -310,6 +332,7 @@ class ParseNetworkLogs implements ShouldQueue
                     'bytes_sent' => $parsedEntry['bytes_sent'] ?? 0,
                     'bytes_received' => $parsedEntry['bytes_received'] ?? 0,
                     'visited_at' => $parsedEntry['visited_at'],
+                    'visit_count' => 1,
                 ]);
 
                 // If this hostname is blocked for the device, log AccessAttempt → BlockedWebsiteAccessed → email/Echo.

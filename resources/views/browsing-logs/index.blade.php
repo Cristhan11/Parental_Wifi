@@ -7,7 +7,7 @@
     
     What are Browsing Logs?
     - A browsing log is a record of every website a child device visits
-    - Contains: URL, domain, timestamp, bandwidth usage, and device information
+    - Contains: URL, domain, timestamp, visit count (rolled up per minute), and device information
     - Logs are created automatically (no manual entry needed)
     - Parents can view these logs to monitor their children's internet activity
     
@@ -15,7 +15,7 @@
     - Header: Yellow bar with "BROWSING LOGS" title and back button
     - Info Banner: Explains what browsing logs are and how they're collected
     - Filters: Device dropdown, date range picker, search input
-    - Table: Displays browsing logs with device, URL, domain, visited at, bandwidth
+    - Table: Displays browsing logs with device, URL, domain, visited at, visit count (minute rollups)
     - Pagination: Links to navigate through multiple pages of results
 --}}
 <x-app-layout>
@@ -63,7 +63,7 @@
                         <li>The list below is filtered to <strong>one child</strong>. Use the <strong>Device</strong> filter to pick another child or <strong>All devices</strong>.</li>
                     @endif
                     <li>This page lists websites your children opened on their devices.</li>
-                    <li>Each row shows the site, when it was visited, and which device it was.</li>
+                    <li>Each row is one site per minute per device; <strong>Visits</strong> counts repeated lookups in that minute.</li>
                     <li>Use dates and <strong>Search</strong> to look up a day or a site name, then tap <strong>Filter</strong>.</li>
                     <li>New visits can take a short moment before they show up here.</li>
                 </ul>
@@ -124,8 +124,7 @@
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">URL</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Domain</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visited At</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Bandwidth</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">User Agent</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Visits</th>
                                     </tr>
                                 </thead>
                                 <tbody class="bg-white divide-y divide-gray-200">
@@ -133,7 +132,7 @@
                                         <tr>
                                             {{-- Device Name: Shows which device visited this site --}}
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                                                {{ $log->device->name }}
+                                                {{ $log->device_name }}
                                             </td>
                                             {{-- URL: Clickable link to the visited website (truncated if too long) --}}
                                             <td class="px-6 py-4 text-sm text-gray-900">
@@ -147,15 +146,10 @@
                                             </td>
                                             {{-- Visited At: Formatted timestamp showing when the site was visited --}}
                                             <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {{ $log->visited_at->format('M d, Y H:i') }}
+                                                {{ \Illuminate\Support\Carbon::parse($log->visited_at)->format('M d, Y H:i') }}
                                             </td>
-                                            {{-- Bandwidth: Total data transferred (formatted as KB/MB/GB) --}}
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                                {{ $log->getTotalBandwidthFormatted() }}
-                                            </td>
-                                            {{-- User Agent: Browser/device information (truncated if too long) --}}
-                                            <td class="px-6 py-4 text-sm text-gray-500" title="{{ $log->user_agent }}">
-                                                {{ $log->user_agent ? Str::limit($log->user_agent, 40) : '-' }}
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600 tabular-nums">
+                                                {{ (int) $log->visit_count }}
                                             </td>
                                         </tr>
                                     @endforeach

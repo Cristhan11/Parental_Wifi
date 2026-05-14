@@ -29,6 +29,7 @@ class BrowsingLog extends Model
         'bytes_sent',
         'bytes_received',
         'visited_at',
+        'visit_count',
     ];
 
     /**
