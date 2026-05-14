@@ -441,12 +441,12 @@
 
                     const afterBuildTicksDailyMbBandwidth = (scale) => {
                         const cap = Number(scale.max);
-                        const candidates = [0, 10, 20, 50, 100, 1000, 1500, 2000, 2500];
-                        let values = candidates.filter((t) => t <= cap + 1e-9);
-                        const top = values.length ? values[values.length - 1] : 0;
-                        if (cap > top + 1e-6) {
-                            values.push(cap);
+                        const step = 250;
+                        const values = [];
+                        for (let t = 0; t < cap - 1e-9; t += step) {
+                            values.push(t);
                         }
+                        values.push(cap);
                         scale.ticks = values.map((value) => ({ value }));
                     };
 
@@ -471,10 +471,7 @@
                                     return '>' + hardCap;
                                 }
                                 if (useDailyMbBandwidthTicks) {
-                                    if (v > 2500 + 1e-6) {
-                                        return (Number.isInteger(v) ? v : Math.round(v)) + '+';
-                                    }
-                                    return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+                                    return Number.isInteger(v) ? String(v) : String(Math.round(v));
                                 }
                                 return value;
                             },

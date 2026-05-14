@@ -22,7 +22,7 @@
 # Output Format (JSON):
 # [
 #   {
-#     "mac": "AA:BB:CC:DD:EE:FF",
+#     "mac_address": "AA:BB:CC:DD:EE:FF",
 #     "bytes_sent": 1048576,
 #     "bytes_received": 2097152
 #   },
@@ -154,7 +154,8 @@ get_traffic_for_mac() {
     # Future enhancement: Parse /proc/net/dev and use ARP table for MAC mapping
     
     # Output JSON object
-    echo "{\"mac\":\"$mac\",\"bytes_sent\":$bytes_sent,\"bytes_received\":$bytes_received}"
+    # mac_address matches NetworkService::getTrafficStats() (also accepts legacy "mac")
+    echo "{\"mac_address\":\"$mac\",\"bytes_sent\":$bytes_sent,\"bytes_received\":$bytes_received}"
 }
 
 ################################################################################
