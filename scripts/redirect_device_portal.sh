@@ -143,6 +143,10 @@ find_device_token() {
     while IFS= read -r line; do
         # Check if this is a client_id line (start of new client block)
         if [[ "$line" =~ ^client_id= ]]; then
+            if [ "$in_client_block" = true ] && [ "$current_mac" = "$mac_lower" ] && [ -n "$token" ]; then
+                echo "$token"
+                return 0
+            fi
             in_client_block=true
             current_mac=""
             token=""
@@ -202,6 +206,10 @@ get_device_state() {
     
     while IFS= read -r line; do
         if [[ "$line" =~ ^client_id= ]]; then
+            if [ "$in_client_block" = true ] && [ "$current_mac" = "$mac_lower" ] && [ -n "$state" ]; then
+                echo "$state"
+                return 0
+            fi
             in_client_block=true
             current_mac=""
             state=""

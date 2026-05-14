@@ -114,6 +114,15 @@ check_device_state() {
     while IFS= read -r line; do
         # Check if this is a client_id line (start of new client block)
         if [[ "$line" =~ ^client_id= ]]; then
+            if [ "$in_client_block" = true ] && [ "$current_mac" = "$mac_lower" ] && [ -n "$state" ]; then
+                if [ "$state" = "Preauthenticated" ]; then
+                    echo "redirected" >&2
+                    return 0
+                else
+                    echo "not_redirected" >&2
+                    return 1
+                fi
+            fi
             in_client_block=true
             current_mac=""
             state=""
@@ -121,8 +130,9 @@ check_device_state() {
             # Extract MAC address (remove "mac=" prefix)
             current_mac=$(echo "$line" | sed 's/^mac=//' | tr '[:upper:]' '[:lower:]')
         elif [[ "$line" =~ ^state= ]]; then
-            # Extract state (remove "state=" prefix)
-            state=$(echo "$line" | sed 's/^state=//')
+            if [ "$current_mac" = "$mac_lower" ]; then
+                state=$(echo "$line" | sed 's/^state=//')
+            fi
         elif [ -z "$line" ]; then
             # Empty line - end of client block, check if we found our device
             if [ "$in_client_block" = true ] && [ "$current_mac" = "$mac_lower" ]; then
