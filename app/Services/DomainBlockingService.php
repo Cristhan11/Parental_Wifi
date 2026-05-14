@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\BlockedWebsite;
 use App\Models\Device;
 use App\Models\User;
+use App\Support\BlockedAppRelatedDomains;
 use Illuminate\Support\Facades\Log;
 
 /**
@@ -70,176 +71,6 @@ class DomainBlockingService
      * - Allows easy swapping of implementations if needed
      */
     protected ScriptExecutor $scriptExecutor;
-
-    /**
-     * Predefined mappings of apps to their related domains.
-     *
-     * When a parent blocks an app (e.g., Facebook), we need to know all domains
-     * that the app uses. This array stores common apps and their related domains.
-     *
-     * Why Predefined Mappings?
-     * - Apps use multiple domains that parents may not know about
-     * - Example: Facebook uses api.facebook.com, graph.facebook.com, m.facebook.com, etc.
-     * - Parents shouldn't have to manually find and add all domains
-     * - System automatically suggests all related domains when blocking an app
-     *
-     * How It Works:
-     * - When parent blocks "Facebook" as an app, system looks up 'facebook.com' in this array
-     * - Returns all related domains that should also be blocked
-     * - Parent can review and modify the list before saving
-     *
-     * Adding New Apps:
-     * - Add entry with main domain as key
-     * - Value is array of related domains
-     * - Keep domains in lowercase for consistency
-     *
-     * @var array<string, array<string>>
-     */
-    protected array $appDomainMappings = [
-        // Facebook family — browsers hit the apex; apps use separate roots (fbcdn.net, facebook.net, etc.)
-        'facebook.com' => [
-            'api.facebook.com',
-            'graph.facebook.com',
-            'm.facebook.com',
-            'connect.facebook.com',
-            'www.facebook.com',
-            'static.xx.fbcdn.net',
-            'fbcdn.net',
-            'video.xx.fbcdn.net',
-            'scontent.xx.fbcdn.net',
-            'edge-mqtt.facebook.com',
-            'b-api.facebook.com',
-            'b-graph.facebook.com',
-            'star.c10r.facebook.com',
-            'fbpigeon.com',              // Facebook fallback domain
-            'graph.fbpigeon.com',        // Graph API fallback
-            'lookaside.facebook.com',    // Facebook CDN
-            'lookaside-fallback.facebook.com', // CDN fallback
-            'mobile.facebook.com',       // Mobile site
-            'web.facebook.com',          // Web interface
-            'web-fallback.facebook.com', // Web fallback
-            'z-m-gateway.facebook.com',  // Mobile gateway
-            'gateway.facebook.com',      // API gateway
-            'gateway-fallback.facebook.com', // Gateway fallback
-            'mobile-fallback.facebook.com', // Mobile fallback
-            'm-fallback.facebook.com',   // Mobile fallback
-            'graph-fallback.facebook.com', // Graph fallback
-            'b-graph-fallback.facebook.com', // B-graph fallback
-            'edge-mqtt-fallback.facebook.com', // MQTT fallback
-            'chat-e2ee-mini.facebook.com', // Chat encryption
-            'chat-e2ee-mini-fallback.facebook.com', // Chat fallback
-            'external.xx.fbcdn.net',     // External CDN
-            'static-fallback.xx.fbcdn.net', // Static CDN fallback
-            'scontent-fallback.xx.fbcdn.net', // Content CDN fallback
-            'traffic-nts-ip-assoc.xy.fbcdn.net', // Traffic association
-            'facebook.net',              // CDN / metrics / app plumbing (not *.facebook.com)
-            'fb.watch',                  // short links / reels
-            'fbsbx.com',                 // uploads / attachments
-            'graph-video.facebook.com',
-            'rupload.facebook.com',      // video upload / playback edge
-            'sonar.facebook.com',
-            'edge-star.facebook.com',
-            'edge-stun.facebook.com',
-        ],
-        'instagram.com' => [
-            'api.instagram.com',
-            'i.instagram.com',
-            'www.instagram.com',
-            'graph.instagram.com',
-            'scontent.xx.fbcdn.net',   // shared CDN with Facebook/Instagram
-            'cdninstagram.com',        // image/video CDN
-            'instagram.net',
-            'edge-chat.instagram.com',
-            'mqtt-mini.instagram.com',
-            'gateway.instagram.com',
-            'b.i.instagram.com',
-            'igcdn.com',
-            'graph.facebook.com',      // IG app uses Meta graph
-            'b-graph.facebook.com',
-            'facebook.net',
-            'fbcdn.net',
-        ],
-        'whatsapp.com' => [
-            'web.whatsapp.com',
-            'api.whatsapp.com',
-            'mmg.whatsapp.net',
-            'static.whatsapp.net',
-        ],
-
-        // TikTok — mobile API traffic often uses tiktokv.com / byteoversea.com, not *.tiktok.com
-        'tiktok.com' => [
-            'api.tiktok.com',
-            'www.tiktok.com',
-            'm.tiktok.com',
-            'v.tiktok.com',
-            't.tiktok.com',
-            'log.tiktok.com',
-            'mon.tiktok.com',
-            'webcast.tiktok.com',
-            'tiktokv.com',
-            'tiktokv.us',
-            'tiktokcdn.com',
-            'tiktokcdn-us.com',
-            'ttlivecdn.com',
-            'ttproxy.com',
-            'byteoversea.com',
-            'byteoversea.net',
-            'muscdn.com',
-            'v16.muscdn.com',
-            'p16-sign-va.tiktokcdn.com',
-            'p16-va.tiktokcdn.com',
-            'ttwstatic.com',
-            'snssdk.com',              // ByteDance SDK endpoints (may affect other apps using it)
-            'bytedapm.com',
-            'ibyteimg.com',
-            'isnssdk.com',
-        ],
-
-        // YouTube / Google video delivery — streams use *.googlevideo.com; player uses gstatic/ggpht
-        'youtube.com' => [
-            'www.youtube.com',
-            'm.youtube.com',
-            'youtubei.googleapis.com',
-            'youtube.googleapis.com',
-            'googlevideo.com',
-            'ytimg.com',
-            'i.ytimg.com',
-            's.ytimg.com',
-            'ggpht.com',
-            'yt3.ggpht.com',
-            'lh3.googleusercontent.com',
-            'youtu.be',
-            'youtube-nocookie.com',
-            'youtubekids.com',
-        ],
-
-        // Twitter / X
-        'twitter.com' => [
-            'api.twitter.com',
-            'mobile.twitter.com',
-            't.co',
-            'twimg.com',
-            'pbs.twimg.com',
-            'video.twimg.com',
-        ],
-
-        // Snapchat
-        'snapchat.com' => [
-            'api.snapchat.com',
-            'app.snapchat.com',
-            'www.snapchat.com',
-            'sc-cdn.net',
-            'sc-prod.net',
-        ],
-
-        // Discord
-        'discord.com' => [
-            'api.discord.com',
-            'cdn.discordapp.com',
-            'media.discordapp.net',
-            'gateway.discord.gg',
-        ],
-    ];
 
     /**
      * Common websites/apps shown as quick picks in the block form.
@@ -309,20 +140,16 @@ class DomainBlockingService
      */
     public function detectRelatedDomains(string $domain, ?string $appName = null): array
     {
-        // Normalize domain to lowercase for lookup
-        $domain = strtolower(trim($domain));
-
-        // Remove www. prefix if present (www.facebook.com -> facebook.com)
-        $domain = preg_replace('/^www\./', '', $domain);
-
-        // Look up domain in predefined mappings
-        if (isset($this->appDomainMappings[$domain])) {
-            return $this->appDomainMappings[$domain];
+        $related = BlockedAppRelatedDomains::lookup($domain);
+        if ($related !== []) {
+            return $related;
         }
 
-        // If not found, return empty array (parent can add manually)
-        Log::info("No related domains found for domain: {$domain}", [
-            'domain' => $domain,
+        $normalized = strtolower(trim($domain));
+        $normalized = (string) preg_replace('/^www\./', '', $normalized);
+
+        Log::info("No related domains found for domain: {$normalized}", [
+            'domain' => $normalized,
             'app_name' => $appName,
         ]);
 

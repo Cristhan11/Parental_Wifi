@@ -130,7 +130,7 @@
                                                 @endif
                                             </td>
                                             <td class="px-6 py-4 text-sm text-gray-500">
-                                                {{ $blockedWebsite->reason ? Str::limit($blockedWebsite->reason, 30) : '-' }}
+                                                {{ $blockedWebsite->reason ? \Illuminate\Support\Str::limit($blockedWebsite->reason, 30) : '-' }}
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 <a href="{{ route('blocked-websites.edit', $blockedWebsite) }}" class="text-yellow-600 hover:text-yellow-900 mr-3">Edit</a>

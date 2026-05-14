@@ -2,7 +2,7 @@
 
 namespace App\Models;
 
-use App\Services\DomainBlockingService;
+use App\Support\BlockedAppRelatedDomains;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
@@ -133,18 +133,11 @@ class BlockedWebsite extends Model
         // Predefined lists evolve as CDNs change; merging at resolve time avoids stale DB-only lists.
         if ($this->isAppBlock()) {
             $stored = is_array($this->related_domains) ? $this->related_domains : [];
-
-            $detected = [];
-            try {
-                $detected = app(DomainBlockingService::class)->detectRelatedDomains((string) $this->domain);
-            } catch (\Throwable) {
-                $detected = [];
-            }
-
+            $detected = BlockedAppRelatedDomains::lookup((string) $this->domain);
             $domains = array_merge($domains, $detected, $stored);
         }
 
-        return array_values(array_unique($domains));
+        return array_values(array_unique(array_filter(array_map('strval', $domains))));
     }
 
     /**
