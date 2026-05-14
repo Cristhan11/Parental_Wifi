@@ -59,7 +59,7 @@ class DashboardController extends Controller
                 ->whereIn('device_id', $deviceIds)
                 ->whereNull('ended_at')
                 ->orderByDesc('started_at')
-                ->get(['id', 'device_id', 'started_at'])
+                ->get(['id', 'device_id', 'started_at', 'last_incremental_bill_at'])
                 ->unique('device_id')
                 ->keyBy('device_id')
                 ->all();
