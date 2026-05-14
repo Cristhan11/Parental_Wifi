@@ -863,7 +863,7 @@ class DeviceController extends Controller
         }
 
         $device->refresh();
-        AuditRequestSummary::set($request, DeviceAuditSummary::describeFullDeviceEdit($beforeSnapshot, $device));
+        AuditRequestSummary::set($request, DeviceAuditSummary::describeFullEdit($beforeSnapshot, $device));
 
         return redirect()->route('accounts.index')->with($session);
     }
