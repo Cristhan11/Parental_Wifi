@@ -815,7 +815,7 @@ class DeviceController extends Controller
 
         if (array_key_exists('remaining_time_minutes', $validated) && ! $device->isWhitelisted()) {
             $newRemainingMinutes = (int) $validated['remaining_time_minutes'];
-            if ($newRemainingMinutes !== $previousRemainingMinutes) {
+            if ($newRemainingMinutes !== $previousRemainingMinutes || $device->hasUnbilledActiveSessionTime()) {
                 $device->resetActiveSessionBillingAnchorToNow();
             }
         }
@@ -1042,8 +1042,10 @@ class DeviceController extends Controller
             'total_time_allocated' => $request->input('total_time_allocated', $device->total_time_allocated),
         ]);
 
-        if ($newRemainingMinutes !== $previousRemainingMinutes && ! $device->fresh()->isWhitelisted()) {
-            $device->resetActiveSessionBillingAnchorToNow();
+        $freshDevice = $device->fresh();
+        if (! $freshDevice->isWhitelisted() && $request->has('remaining_time_minutes')
+            && ($newRemainingMinutes !== $previousRemainingMinutes || $freshDevice->hasUnbilledActiveSessionTime())) {
+            $freshDevice->resetActiveSessionBillingAnchorToNow();
         }
 
         $device->refresh();

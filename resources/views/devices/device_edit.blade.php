@@ -2,7 +2,7 @@
     Device Management: Edit Device Form
     
     This view displays a form for editing an existing device.
-    Form includes fields for: name, MAC address, status, time allocation.
+    Form includes fields for: name, MAC address, status, remaining time (child devices).
     Also shows device statistics (connection status, sessions, logs).
     
     Design Reference: Similar to create, but with additional statistics
@@ -51,7 +51,7 @@
                     <li>Update the <strong>name</strong>, <strong>Wi‑Fi address (MAC)</strong>, <strong>role</strong>, and <strong>status</strong> when something changes for this device.</li>
                     <li><strong>Active</strong>: normal rules apply (schedules and time limits for children, and so on).</li>
                     <li><strong>Blocked</strong>: this device cannot use the internet. <strong>Whitelisted</strong>: treated as trusted, without the usual child limits.</li>
-                    <li><strong>Remaining time</strong> and <strong>Total time</strong> are in minutes and matter most for child-style devices—adjust them here, then tap <strong>Update device</strong>.</li>
+                    <li><strong>Remaining time</strong> is in minutes and matters most for child-style devices—set it here, then tap <strong>Update device</strong>.</li>
                     <li>Red input border or an asterisk (*) in the label means required. Fill it in until it turns green.</li>
                 </ul>
             </x-collapsible-instructions>
@@ -173,25 +173,14 @@
                             @enderror
                         </div>
 
-                        {{-- Time Allocation --}}
-                        <div class="grid grid-cols-2 gap-4 mb-6">
-                            <div>
-                                <label for="remaining_time_minutes" class="block text-sm font-medium text-gray-700 mb-2">Remaining Time (minutes)</label>
-                                <input type="number" name="remaining_time_minutes" id="remaining_time_minutes" value="{{ old('remaining_time_minutes', $device->remaining_time_minutes) }}" min="0" max="9999"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
-                                @error('remaining_time_minutes')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
-
-                            <div>
-                                <label for="total_time_allocated" class="block text-sm font-medium text-gray-700 mb-2">Total Time Allocated (minutes)</label>
-                                <input type="number" name="total_time_allocated" id="total_time_allocated" value="{{ old('total_time_allocated', $device->total_time_allocated) }}" min="0" max="9999"
-                                    class="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
-                                @error('total_time_allocated')
-                                    <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
-                                @enderror
-                            </div>
+                        {{-- Remaining time (parents adjust quota here; total_time_allocated stays in DB for grants/reporting) --}}
+                        <div class="mb-6">
+                            <label for="remaining_time_minutes" class="block text-sm font-medium text-gray-700 mb-2">Remaining Time (minutes)</label>
+                            <input type="number" name="remaining_time_minutes" id="remaining_time_minutes" value="{{ old('remaining_time_minutes', $device->remaining_time_minutes) }}" min="0" max="9999"
+                                class="w-full max-w-md px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-yellow-500 focus:border-yellow-500">
+                            @error('remaining_time_minutes')
+                                <p class="mt-1 text-sm text-red-600">{{ $message }}</p>
+                            @enderror
                         </div>
 
                         {{-- Additional Statistics --}}

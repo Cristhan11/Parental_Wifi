@@ -289,6 +289,20 @@ class Device extends Model
     }
 
     /**
+     * Whether the open session has any elapsed time since {@see DeviceSession::billingAnchor()}
+     * that the dashboard counts against the pool (parent may re-save the same DB minutes to realign).
+     */
+    public function hasUnbilledActiveSessionTime(): bool
+    {
+        $session = $this->activeSession();
+        if ($session === null) {
+            return false;
+        }
+
+        return $session->billingAnchor()->diffInSeconds(now()) > 0;
+    }
+
+    /**
      * Check if device has remaining internet time.
      *
      * Returns true if remaining_time_minutes > 0, false otherwise

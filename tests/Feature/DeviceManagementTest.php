@@ -451,7 +451,7 @@ class DeviceManagementTest extends TestCase
         Carbon::setTestNow();
     }
 
-    public function test_updating_device_without_changing_remaining_time_does_not_reset_billing_anchor(): void
+    public function test_re_saving_same_remaining_resets_anchor_when_session_has_unbilled_time(): void
     {
         Carbon::setTestNow(Carbon::parse('2026-05-14 22:00:00'));
 
@@ -492,7 +492,51 @@ class DeviceManagementTest extends TestCase
         $this->actingAs($user)
             ->get(route('dashboard'))
             ->assertOk()
-            ->assertSee('5 min remaining');
+            ->assertSee('20 min remaining');
+
+        Carbon::setTestNow();
+    }
+
+    public function test_saving_same_db_remaining_as_form_syncs_dashboard_when_pool_was_reduced_by_active_session(): void
+    {
+        Carbon::setTestNow(Carbon::parse('2026-05-15 00:20:00'));
+
+        $user = User::factory()->create();
+        $device = Device::factory()->create([
+            'user_id' => $user->id,
+            'name' => 'Child Basilio',
+            'role' => 'child',
+            'status' => 'active',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 59,
+        ]);
+
+        DeviceSession::create([
+            'device_id' => $device->id,
+            'started_at' => now()->subMinutes(15),
+            'ended_at' => null,
+        ]);
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('45 min remaining');
+
+        $this->actingAs($user)
+            ->put(route('accounts.update', $device), [
+                'name' => $device->name,
+                'mac_address' => $device->mac_address,
+                'role' => 'child',
+                'status' => 'active',
+                'remaining_time_minutes' => 60,
+                'total_time_allocated' => 59,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->actingAs($user)
+            ->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('60 min remaining');
 
         Carbon::setTestNow();
     }
