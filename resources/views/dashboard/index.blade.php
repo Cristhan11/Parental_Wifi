@@ -40,6 +40,7 @@
                         <div
                             class="js-dashboard-time-row flex items-center justify-between p-2 sm:p-3 rounded-lg border-2 border-gray-100 hover:border-[#FFDE15] transition-all"
                             data-device-id="{{ $data['device']->id }}"
+                            data-admin-status="{{ $data['device']->status }}"
                             data-db-remaining-minutes="{{ $data['db_remaining_minutes'] }}"
                             data-active-session-started-at="{{ $data['active_session_started_at'] ?? '' }}"
                             data-active-session-billing-anchor-at="{{ $data['active_session_billing_anchor_at'] ?? '' }}"
@@ -57,7 +58,14 @@
                                 <div class="min-w-0">
                                     <p class="font-bold text-black font-montserrat text-xs sm:text-sm truncate">{{ $index + 1 }}. {{ $data['device']->name }}</p>
                                     <span class="js-device-connection-status block">
-                                        @if($data['is_connected'])
+                                        @if(($data['device']->status ?? '') === 'blocked')
+                                            <span class="text-xs font-semibold text-red-600 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is blocked by parent">
+                                                <span class="w-2 h-2 bg-red-500 rounded-full"></span> Blocked
+                                                @if($data['is_connected'])
+                                                    <span class="text-[10px] font-normal text-gray-500">(still on Wi‑Fi)</span>
+                                                @endif
+                                            </span>
+                                        @elseif($data['is_connected'])
                                             <span class="text-xs font-semibold text-green-600 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is connected">
                                                 <span class="w-2 h-2 bg-green-500 rounded-full"></span> Connected
                                             </span>
@@ -742,6 +750,12 @@
                 if (!wrap) {
                     return;
                 }
+                const admin = row.dataset.adminStatus || '';
+                if (admin === 'blocked') {
+                    const onWifi = isConnected ? ' <span class="text-[10px] font-normal text-gray-500">(still on Wi‑Fi)</span>' : '';
+                    wrap.innerHTML = '<span class="text-xs font-semibold text-red-600 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is blocked by parent"><span class="w-2 h-2 bg-red-500 rounded-full"></span> Blocked' + onWifi + '</span>';
+                    return;
+                }
                 if (isConnected) {
                     wrap.innerHTML = '<span class="text-xs font-semibold text-green-600 flex items-center gap-1.5 mt-1 font-montserrat" aria-label="Device is connected"><span class="w-2 h-2 bg-green-500 rounded-full"></span> Connected</span>';
                 } else {
@@ -1005,6 +1019,7 @@
                         addNotification(`Time expired for ${event.device_name}. Device redirected to portal.`, 'danger');
                         const row = document.querySelector('.js-dashboard-time-row[data-device-id="' + event.device_id + '"]');
                         if (row) {
+                            row.dataset.adminStatus = 'blocked';
                             row.dataset.dbRemainingMinutes = '0';
                             row.dataset.remainingMinutesFallback = '0';
                             row.dataset.activeSessionStartedAt = '';

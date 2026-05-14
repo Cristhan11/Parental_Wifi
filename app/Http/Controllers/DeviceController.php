@@ -13,6 +13,7 @@ use App\Services\BandwidthUsageService;
 use App\Services\ChildDeviceConnectionRestoreService;
 use App\Services\DeviceService;
 use App\Services\NetworkService;
+use App\Services\NoDogSplashService;
 use App\Services\TimeTrackingService;
 use App\Services\UsageChartService;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
@@ -111,6 +112,8 @@ class DeviceController extends Controller
 
     protected ChildDeviceConnectionRestoreService $childDeviceConnectionRestoreService;
 
+    protected NoDogSplashService $noDogSplashService;
+
     /**
      * Constructor - Called automatically when controller is created.
      *
@@ -123,6 +126,7 @@ class DeviceController extends Controller
      * @param  UsageChartService  $usageChartService  Per-device / dashboard usage chart payload
      * @param  BandwidthUsageService  $bandwidthUsageService  Per-device bandwidth chart payload
      * @param  ChildDeviceConnectionRestoreService  $childDeviceConnectionRestoreService  Captive unblock + nds auth after provisioning
+     * @param  NoDogSplashService  $noDogSplashService  Captive portal redirect when a device is blocked
      */
     public function __construct(
         DeviceService $deviceService,
@@ -130,7 +134,8 @@ class DeviceController extends Controller
         TimeTrackingService $timeTrackingService,
         UsageChartService $usageChartService,
         BandwidthUsageService $bandwidthUsageService,
-        ChildDeviceConnectionRestoreService $childDeviceConnectionRestoreService
+        ChildDeviceConnectionRestoreService $childDeviceConnectionRestoreService,
+        NoDogSplashService $noDogSplashService
     ) {
         $this->deviceService = $deviceService;
         $this->networkService = $networkService;
@@ -138,6 +143,7 @@ class DeviceController extends Controller
         $this->usageChartService = $usageChartService;
         $this->bandwidthUsageService = $bandwidthUsageService;
         $this->childDeviceConnectionRestoreService = $childDeviceConnectionRestoreService;
+        $this->noDogSplashService = $noDogSplashService;
     }
 
     /**
@@ -826,12 +832,8 @@ class DeviceController extends Controller
             if ($oldStatus === 'whitelisted' && $device->status !== 'whitelisted') {
                 $this->networkService->removeWhitelistAcceptRules($device->fresh());
             }
-            // If status changed to 'blocked', block at network level
-            if ($device->status === 'blocked') {
-                $this->networkService->blockDevice($device);
-            }
             // If status changed to 'active', unblock at network level
-            elseif ($device->status === 'active') {
+            if ($device->status === 'active') {
                 $this->networkService->unblockDevice($device);
             }
             // If status changed to 'whitelisted', whitelist at network level
@@ -839,6 +841,11 @@ class DeviceController extends Controller
                 $this->networkService->whitelistDevice($device);
             }
         }
+
+        // Whenever the row is "blocked", re-apply firewall + portal (same as time-expiry job).
+        // Parents often save blocked+0 time without a status *transition* (already blocked),
+        // and NoDogSplash may still show the client as authenticated until we redirect again.
+        $this->enforceBlockedDeviceOnGateway($device);
 
         $fresh = $device->fresh();
         $intentionalNewBlock = ($oldStatus !== 'blocked' && $fresh->status === 'blocked');
@@ -866,6 +873,43 @@ class DeviceController extends Controller
         AuditRequestSummary::set($request, DeviceAuditSummary::describeFullEdit($beforeSnapshot, $device));
 
         return redirect()->route('accounts.index')->with($session);
+    }
+
+    /**
+     * When a device is administratively blocked, mirror {@see CheckTimeExpiration}: close open
+     * usage sessions, apply iptables DROP for the MAC, and push the client back through the portal.
+     */
+    private function enforceBlockedDeviceOnGateway(Device $device): void
+    {
+        $fresh = $device->fresh();
+        if ($fresh === null || $fresh->status !== 'blocked') {
+            return;
+        }
+
+        foreach ($fresh->sessions()->whereNull('ended_at')->get() as $openSession) {
+            try {
+                $this->timeTrackingService->closeOpenSessionWhenInternetTimeExpired($openSession);
+            } catch (\Throwable $e) {
+                Log::debug('closeOpenSessionWhenInternetTimeExpired during parental block failed (non-fatal)', [
+                    'device_id' => $fresh->id,
+                    'session_id' => $openSession->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $sync = $fresh->fresh();
+        $this->networkService->blockDevice($sync);
+
+        try {
+            $this->noDogSplashService->redirectDeviceToPortal($sync->fresh());
+        } catch (\Throwable $e) {
+            Log::debug('redirectDeviceToPortal during parental block failed (non-fatal)', [
+                'device_id' => $sync->id,
+                'mac_address' => $sync->mac_address,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -960,14 +1004,14 @@ class DeviceController extends Controller
             if ($oldStatus === 'whitelisted' && $newStatus !== 'whitelisted') {
                 $this->networkService->removeWhitelistAcceptRules($device->fresh());
             }
-            if ($newStatus === 'blocked') {
-                $this->networkService->blockDevice($device);
-            } elseif ($newStatus === 'active') {
+            if ($newStatus === 'active') {
                 $this->networkService->unblockDevice($device);
             } elseif ($newStatus === 'whitelisted') {
                 $this->networkService->whitelistDevice($device);
             }
         }
+
+        $this->enforceBlockedDeviceOnGateway($device);
 
         $human = match ($newStatus) {
             'blocked' => 'blocked',
