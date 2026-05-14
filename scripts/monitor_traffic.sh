@@ -14,8 +14,9 @@
 #
 # What This Script Does:
 # 1. Optionally filters by MAC address (if provided)
-# 2. Gets traffic statistics from iptables FORWARD chain
-# 3. Correlates traffic with MAC addresses via ARP table
+# 2. Correlates traffic with MAC addresses via ARP on wlan0 (all-devices mode)
+# 3. Sums iptables byte counters on rules referencing each MAC (filter FORWARD/INPUT,
+#    or if zero: mangle ndsOUT/ndsIN + filter ndsNET/ndsAUT/ndsRTR for NoDogSplash)
 # 4. Outputs results as JSON array
 # 5. Handles devices with no traffic (returns 0 bytes)
 #
@@ -37,8 +38,8 @@
 # Important Notes:
 # - Outputs JSON to stdout (for easy parsing in PHP)
 # - Error messages go to stderr (don't interfere with JSON output)
-# - Uses wlan0 interface specifically
-# - Traffic statistics are from iptables FORWARD chain (internet traffic)
+# - Uses wlan0 for neighbour discovery (all-devices mode)
+# - Per-MAC totals prefer filter FORWARD/INPUT; if zero, uses NoDogSplash-related chains
 # - If MAC address provided, returns only that device's stats
 # - If no MAC provided, returns stats for all devices
 ################################################################################
@@ -87,6 +88,33 @@ normalize_mac_address() {
 }
 
 ################################################################################
+# Function: sum_bytes_for_mac_in_chain
+#
+# Input:   iptables table, chain name, MAC address (any case)
+# Output:  integer byte sum printed to stdout (rules whose line contains the MAC)
+################################################################################
+sum_bytes_for_mac_in_chain() {
+    local table="$1"
+    local chain="$2"
+    local mac="$3"
+    local sum=0
+
+    while IFS= read -r line; do
+        [ -z "$line" ] && continue
+        if ! echo "$line" | grep -qi "$mac"; then
+            continue
+        fi
+        local b
+        b=$(echo "$line" | awk '{print $2}')
+        if [[ "$b" =~ ^[0-9]+$ ]]; then
+            sum=$((sum + b))
+        fi
+    done < <(sudo iptables -t "$table" -L "$chain" -v -n -x 2>/dev/null || true)
+
+    echo "$sum"
+}
+
+################################################################################
 # Function: get_traffic_for_mac
 # 
 # Purpose: Get traffic statistics for a specific MAC address
@@ -95,41 +123,42 @@ normalize_mac_address() {
 # Output:  JSON object with bytes_sent and bytes_received
 #
 # What This Function Does:
-# - Gets traffic statistics from iptables FORWARD chain
-# - FORWARD chain handles traffic being forwarded through the Pi (internet traffic)
-# - Matches rules by MAC address
-# - Extracts byte counts from iptables verbose output
+# - Sums iptables byte counters on rules that reference the MAC (case-insensitive)
+# - Checks filter: FORWARD, INPUT (whitelist / block style rules)
+# - If those chains show 0 bytes for this MAC, also checks NoDogSplash-related chains:
+#   mangle: ndsOUT, ndsIN; filter: ndsNET, ndsAUT, ndsRTR (child traffic often only hits ndsOUT)
 #
-# How iptables Traffic Statistics Work:
-# - iptables tracks bytes and packets for each rule
-# - -L -v -n -x = List rules with verbose output, numeric, exact byte counts
-# - Output includes bytes and packets for each rule
-# - We search for rules matching our MAC address
-#
-# Note: This method works if iptables rules exist for the device.
-#       If no rules exist, device may still have traffic but we can't track it.
-#       In that case, we return 0 bytes.
+# Double-counting: if FORWARD/INPUT already account for this MAC, mangle/nds* counters are skipped.
 ################################################################################
 get_traffic_for_mac() {
     local mac="$1"
     local total_bytes=0
+    local filter_main=0
+    local nds_bytes=0
     local chain
+    local part
 
-    # Sum byte counters on filter rules that reference this MAC (case-insensitive).
-    # Check FORWARD (through-traffic) and INPUT (to-Pi); whitelist_device.sh installs both.
     for chain in FORWARD INPUT; do
-        while IFS= read -r line; do
-            [ -z "$line" ] && continue
-            if ! echo "$line" | grep -qi "$mac"; then
-                continue
-            fi
-            local b
-            b=$(echo "$line" | awk '{print $2}')
-            if [[ "$b" =~ ^[0-9]+$ ]]; then
-                total_bytes=$((total_bytes + b))
-            fi
-        done < <(sudo iptables -L "$chain" -v -n -x 2>/dev/null || true)
+        part=$(sum_bytes_for_mac_in_chain "filter" "$chain" "$mac")
+        part=${part:-0}
+        filter_main=$((filter_main + part))
     done
+
+    if [ "$filter_main" -gt 0 ]; then
+        total_bytes=$filter_main
+    else
+        for chain in ndsOUT ndsIN; do
+            part=$(sum_bytes_for_mac_in_chain "mangle" "$chain" "$mac")
+            part=${part:-0}
+            nds_bytes=$((nds_bytes + part))
+        done
+        for chain in ndsNET ndsAUT ndsRTR; do
+            part=$(sum_bytes_for_mac_in_chain "filter" "$chain" "$mac")
+            part=${part:-0}
+            nds_bytes=$((nds_bytes + part))
+        done
+        total_bytes=$nds_bytes
+    fi
 
     # NetworkService adds bytes_sent + bytes_received; combined total in bytes_received is enough.
     echo "{\"mac_address\":\"$mac\",\"bytes_sent\":0,\"bytes_received\":$total_bytes}"
