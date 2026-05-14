@@ -1,16 +1,28 @@
 #!/bin/bash
 ################################################################################
 # Dump Pi gateway state for Parental WiFi / OpenNDS / dnsmasq troubleshooting.
-# Run on the Raspberry Pi: sudo bash scripts/dump_gateway_state.sh
+# Run on the Raspberry Pi:
+#   sudo bash scripts/dump_gateway_state.sh
+#   sudo bash scripts/dump_gateway_state.sh e6:6a:8f:19:be:b1   # optional MAC: extra greps
 #
 # Writes one text file under /tmp (path printed at end).
 ################################################################################
 set -euo pipefail
 
+MAC_ARG="${1:-}"
+# normalize optional MAC for grep (colon form, case-insensitive)
+MAC_GREP=""
+if [ -n "$MAC_ARG" ]; then
+    MAC_GREP=$(echo "$MAC_ARG" | tr '[:upper:]' '[:lower:]' | tr '-' ':')
+fi
+
 OUT=$(mktemp /tmp/parental-wifi-gateway-dump-XXXXXX.txt)
 exec > >(tee -a "$OUT") 2>&1
 
 echo "========== $(date -Is) parental_wifi gateway dump =========="
+if [ -n "$MAC_GREP" ]; then
+    echo "Optional MAC filter: $MAC_GREP"
+fi
 echo
 
 echo "========== hostname / uname =========="
@@ -54,6 +66,28 @@ sudo iptables -t mangle -L PREROUTING -n -v --line-numbers 2>/dev/null | head -2
 echo
 echo "========== filter ndsNET =========="
 sudo iptables -L ndsNET -n -v --line-numbers 2>/dev/null || true
+
+echo
+echo "========== filter FORWARD (first 25 rules, packet counts) =========="
+sudo iptables -L FORWARD -n -v --line-numbers 2>/dev/null | head -40 || true
+
+echo
+echo "========== filter FORWARD (raw -S, first 30) =========="
+sudo iptables -S FORWARD 2>/dev/null | head -30 || true
+
+echo
+echo "========== filter INPUT (raw -S, first 20) =========="
+sudo iptables -S INPUT 2>/dev/null | head -20 || true
+
+echo
+echo "========== ip neigh (wlan0) =========="
+ip neigh show dev wlan0 2>/dev/null || true
+
+if [ -n "$MAC_GREP" ]; then
+    echo
+    echo "========== iptables-save lines matching MAC ($MAC_GREP) =========="
+    sudo iptables-save 2>/dev/null | grep -i "$MAC_GREP" || echo "(no matches)"
+fi
 
 echo
 echo "========== iptables-save (full) =========="
