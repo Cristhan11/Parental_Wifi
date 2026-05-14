@@ -432,6 +432,61 @@
                     const showLegend = series.length > 0 && series.length <= 6;
                     const datasets = buildDatasets(series, isBandwidth, hardCapApplies ? hardCap : null);
 
+                    const useDailyMbBandwidthTicks = isBandwidth && payload.range === 'daily' && bwUnit === 'mb';
+                    const yExtent = dailyFixedMax !== null
+                        ? { max: dailyFixedMax }
+                        : (maxByRangeInChartUnit !== null
+                            ? { max: maxByRangeInChartUnit }
+                            : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax }));
+
+                    const afterBuildTicksDailyMbBandwidth = (scale) => {
+                        const cap = Number(scale.max);
+                        const candidates = [0, 10, 20, 50, 100, 1000, 1500, 2000, 2500];
+                        let values = candidates.filter((t) => t <= cap + 1e-9);
+                        const top = values.length ? values[values.length - 1] : 0;
+                        if (cap > top + 1e-6) {
+                            values.push(cap);
+                        }
+                        scale.ticks = values.map((value) => ({ value }));
+                    };
+
+                    const yScaleConfig = {
+                        beginAtZero: true,
+                        ...yExtent,
+                        title: {
+                            display: true,
+                            text: isBandwidth
+                                ? (bwUnit === 'mb' ? 'Bandwidth (MB)' : 'Bandwidth (GB)')
+                                : (payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)'),
+                            font: { family: 'Montserrat Variable', size: 12, weight: 'bold' },
+                            color: '#000000',
+                            padding: { top: 6, bottom: 6 }
+                        },
+                        ticks: {
+                            font: { size: 12, weight: 'bold', family: 'Montserrat Variable' },
+                            ...(dailyFixedMax !== null && !useDailyMbBandwidthTicks ? { stepSize: 10 } : {}),
+                            callback: (value) => {
+                                const v = Number(value);
+                                if (hardCapApplies && hardCap !== null && v === hardCap) {
+                                    return '>' + hardCap;
+                                }
+                                if (useDailyMbBandwidthTicks) {
+                                    if (v > 2500 + 1e-6) {
+                                        return (Number.isInteger(v) ? v : Math.round(v)) + '+';
+                                    }
+                                    return Number.isInteger(v) ? String(v) : String(Math.round(v * 100) / 100);
+                                }
+                                return value;
+                            },
+                            color: '#000000',
+                            padding: 8
+                        },
+                        grid: { color: 'rgba(0, 0, 0, 0.1)', lineWidth: 1.3 }
+                    };
+                    if (useDailyMbBandwidthTicks) {
+                        yScaleConfig.afterBuildTicks = afterBuildTicksDailyMbBandwidth;
+                    }
+
                     window.usageChartInstance = new Chart(ctx, {
                         type: 'line',
                         data: { labels, datasets },
@@ -470,37 +525,7 @@
                                 }
                             },
                             scales: {
-                                y: {
-                                    beginAtZero: true,
-                                    ...(dailyFixedMax !== null
-                                        ? { max: dailyFixedMax }
-                                        : (maxByRangeInChartUnit !== null
-                                            ? { max: maxByRangeInChartUnit }
-                                            : (isBandwidth && hardCapApplies ? { max: hardCap } : { suggestedMax }))),
-                                    title: {
-                                        display: true,
-                                        text: isBandwidth
-                                            ? (bwUnit === 'mb' ? 'Bandwidth (MB)' : 'Bandwidth (GB)')
-                                            : (payload.unit === 'hours' ? 'Time Spent (hours)' : 'Time Spent (minutes)'),
-                                        font: { family: 'Montserrat Variable', size: 12, weight: 'bold' },
-                                        color: '#000000',
-                                        padding: { top: 6, bottom: 6 }
-                                    },
-                                    ticks: {
-                                        font: { size: 12, weight: 'bold', family: 'Montserrat Variable' },
-                                        ...(dailyFixedMax !== null ? { stepSize: 10 } : {}),
-                                        callback: (value) => {
-                                            const v = Number(value);
-                                            if (hardCapApplies && hardCap !== null && v === hardCap) {
-                                                return '>' + hardCap;
-                                            }
-                                            return value;
-                                        },
-                                        color: '#000000',
-                                        padding: 8
-                                    },
-                                    grid: { color: 'rgba(0, 0, 0, 0.1)', lineWidth: 1.3 }
-                                },
+                                y: yScaleConfig,
                                 x: {
                                     ticks: {
                                         font: { size: 11, weight: 'bold', family: 'Montserrat Variable' },
