@@ -2,19 +2,20 @@
 
 namespace App\Models;
 
+use App\Services\DomainBlockingService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * Blocked Website Model
- * 
+ *
  * Stores websites blocked for all of a parent's child devices (household-wide list per user).
  * Supports three types of blocking:
  * - URL-level: Block specific URLs (e.g., https://facebook.com/page)
  * - Domain-level: Block entire domain + subdomains (e.g., facebook.com blocks *.facebook.com)
  * - App-level: Block app with all related domains (e.g., Facebook app blocks facebook.com, api.facebook.com, etc.)
- * 
+ *
  * What is Domain/App-Level Blocking?
  * - Mobile apps (like Facebook, Instagram, TikTok) don't just use one domain
  * - They make API calls to multiple domains (e.g., api.facebook.com, graph.facebook.com)
@@ -43,11 +44,11 @@ class BlockedWebsite extends Model
 
     /**
      * Get the attributes that should be cast.
-     * 
+     *
      * Casts ensure that:
      * - block_subdomains is always a boolean (not string "1" or "0")
      * - related_domains is automatically converted to/from JSON array
-     * 
+     *
      * @return array<string, string>
      */
     protected function casts(): array
@@ -68,12 +69,12 @@ class BlockedWebsite extends Model
 
     /**
      * Check if this is a domain-level block.
-     * 
+     *
      * Domain-level blocking blocks the entire domain (and optionally subdomains).
      * Example: Blocking "facebook.com" as domain will block all requests to facebook.com
-     * 
+     *
      * @return bool True if block_type is 'domain'
-     * 
+     *
      * Usage Example:
      * $blocked = BlockedWebsite::find(1);
      * if ($blocked->isDomainBlock()) {
@@ -87,12 +88,12 @@ class BlockedWebsite extends Model
 
     /**
      * Check if this is an app-level block.
-     * 
+     *
      * App-level blocking blocks an app with all its related domains.
      * Example: Blocking "Facebook" as app will block facebook.com, api.facebook.com, graph.facebook.com, etc.
-     * 
+     *
      * @return bool True if block_type is 'app'
-     * 
+     *
      * Usage Example:
      * $blocked = BlockedWebsite::find(1);
      * if ($blocked->isAppBlock()) {
@@ -107,16 +108,16 @@ class BlockedWebsite extends Model
 
     /**
      * Get all domains that should be blocked for this blocked website.
-     * 
+     *
      * Returns an array of all domains that need to be blocked:
      * - For URL blocks: Returns array with just the domain
      * - For domain blocks: Returns array with just the domain
      * - For app blocks: Returns array with main domain + all related domains
-     * 
+     *
      * This is used by DomainBlockingService to generate dnsmasq config.
-     * 
+     *
      * @return array<string> Array of domain names to block
-     * 
+     *
      * Usage Example:
      * $blocked = BlockedWebsite::find(1);
      * $domains = $blocked->getDomainsToBlock();
@@ -127,19 +128,28 @@ class BlockedWebsite extends Model
     public function getDomainsToBlock(): array
     {
         $domains = [$this->domain];  // Always include the main domain
-        
-        // If this is an app block, include all related domains
-        if ($this->isAppBlock() && is_array($this->related_domains)) {
-            $domains = array_merge($domains, $this->related_domains);
+
+        // App blocks: union latest predefined endpoints with stored extras (Pi-captured / manual).
+        // Predefined lists evolve as CDNs change; merging at resolve time avoids stale DB-only lists.
+        if ($this->isAppBlock()) {
+            $stored = is_array($this->related_domains) ? $this->related_domains : [];
+
+            $detected = [];
+            try {
+                $detected = app(DomainBlockingService::class)->detectRelatedDomains((string) $this->domain);
+            } catch (\Throwable) {
+                $detected = [];
+            }
+
+            $domains = array_merge($domains, $detected, $stored);
         }
-        
-        // Remove duplicates and return
-        return array_unique($domains);
+
+        return array_values(array_unique($domains));
     }
 
     /**
      * Check if subdomains should be blocked.
-     * 
+     *
      * When block_subdomains is true, the system will block all subdomains of the domain.
      * Example: If domain is "facebook.com" and block_subdomains is true, it blocks:
      * - facebook.com
@@ -147,11 +157,11 @@ class BlockedWebsite extends Model
      * - m.facebook.com
      * - api.facebook.com
      * - *.facebook.com (all subdomains)
-     * 
+     *
      * This is used by DomainBlockingService to generate wildcard dnsmasq rules.
-     * 
+     *
      * @return bool True if subdomains should be blocked
-     * 
+     *
      * Usage Example:
      * $blocked = BlockedWebsite::find(1);
      * if ($blocked->shouldBlockSubdomains()) {
@@ -163,4 +173,3 @@ class BlockedWebsite extends Model
         return $this->block_subdomains === true;
     }
 }
-

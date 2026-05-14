@@ -96,7 +96,7 @@ class DomainBlockingService
      * @var array<string, array<string>>
      */
     protected array $appDomainMappings = [
-        // Facebook family
+        // Facebook family — browsers hit the apex; apps use separate roots (fbcdn.net, facebook.net, etc.)
         'facebook.com' => [
             'api.facebook.com',
             'graph.facebook.com',
@@ -132,6 +132,14 @@ class DomainBlockingService
             'static-fallback.xx.fbcdn.net', // Static CDN fallback
             'scontent-fallback.xx.fbcdn.net', // Content CDN fallback
             'traffic-nts-ip-assoc.xy.fbcdn.net', // Traffic association
+            'facebook.net',              // CDN / metrics / app plumbing (not *.facebook.com)
+            'fb.watch',                  // short links / reels
+            'fbsbx.com',                 // uploads / attachments
+            'graph-video.facebook.com',
+            'rupload.facebook.com',      // video upload / playback edge
+            'sonar.facebook.com',
+            'edge-star.facebook.com',
+            'edge-stun.facebook.com',
         ],
         'instagram.com' => [
             'api.instagram.com',
@@ -140,6 +148,16 @@ class DomainBlockingService
             'graph.instagram.com',
             'scontent.xx.fbcdn.net',   // shared CDN with Facebook/Instagram
             'cdninstagram.com',        // image/video CDN
+            'instagram.net',
+            'edge-chat.instagram.com',
+            'mqtt-mini.instagram.com',
+            'gateway.instagram.com',
+            'b.i.instagram.com',
+            'igcdn.com',
+            'graph.facebook.com',      // IG app uses Meta graph
+            'b-graph.facebook.com',
+            'facebook.net',
+            'fbcdn.net',
         ],
         'whatsapp.com' => [
             'web.whatsapp.com',
@@ -148,28 +166,51 @@ class DomainBlockingService
             'static.whatsapp.net',
         ],
 
-        // TikTok
+        // TikTok — mobile API traffic often uses tiktokv.com / byteoversea.com, not *.tiktok.com
         'tiktok.com' => [
             'api.tiktok.com',
             'www.tiktok.com',
             'm.tiktok.com',
+            'v.tiktok.com',
+            't.tiktok.com',
             'log.tiktok.com',
             'mon.tiktok.com',
+            'webcast.tiktok.com',
+            'tiktokv.com',
+            'tiktokv.us',
+            'tiktokcdn.com',
+            'tiktokcdn-us.com',
+            'ttlivecdn.com',
+            'ttproxy.com',
+            'byteoversea.com',
+            'byteoversea.net',
+            'muscdn.com',
             'v16.muscdn.com',
             'p16-sign-va.tiktokcdn.com',
             'p16-va.tiktokcdn.com',
-            'tiktokcdn.com',
+            'ttwstatic.com',
+            'snssdk.com',              // ByteDance SDK endpoints (may affect other apps using it)
+            'bytedapm.com',
+            'ibyteimg.com',
+            'isnssdk.com',
         ],
 
-        // YouTube / Google video delivery
+        // YouTube / Google video delivery — streams use *.googlevideo.com; player uses gstatic/ggpht
         'youtube.com' => [
             'www.youtube.com',
             'm.youtube.com',
-            'i.ytimg.com',
-            'yt3.ggpht.com',
+            'youtubei.googleapis.com',
+            'youtube.googleapis.com',
             'googlevideo.com',
             'ytimg.com',
-            'youtubei.googleapis.com',
+            'i.ytimg.com',
+            's.ytimg.com',
+            'ggpht.com',
+            'yt3.ggpht.com',
+            'lh3.googleusercontent.com',
+            'youtu.be',
+            'youtube-nocookie.com',
+            'youtubekids.com',
         ],
 
         // Twitter / X

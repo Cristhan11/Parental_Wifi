@@ -118,9 +118,12 @@ class BlockedWebsiteController extends Controller
         $validated = $request->validated();
         $validated['user_id'] = Auth::id();
 
-        // Detect related domains automatically
+        // Detect related domains automatically and merge with any extras from the form
+        // (same as update): parents may add Pi-captured hosts; do not discard them on create.
         if ($validated['block_type'] === 'app' && isset($validated['domain'])) {
-            $validated['related_domains'] = $this->domainBlockingService->detectRelatedDomains($validated['domain']);
+            $relatedDomains = $this->domainBlockingService->detectRelatedDomains($validated['domain']);
+            $userRelatedDomains = $validated['related_domains'] ?? [];
+            $validated['related_domains'] = array_values(array_unique(array_merge($relatedDomains, $userRelatedDomains)));
         }
 
         // Always block subdomains for stronger app/domain enforcement.
