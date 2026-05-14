@@ -914,17 +914,89 @@
 
                 };
 
+                const syncTimeUsageRowForDevice = (deviceId, patch) => {
+                    const row = document.querySelector('.js-dashboard-time-row[data-device-id="' + deviceId + '"]');
+                    if (!row) {
+                        return;
+                    }
+                    if (patch.isConnected !== undefined) {
+                        row.dataset.isConnected = patch.isConnected ? '1' : '0';
+                        if (typeof window.dashboardSetConnectionUi === 'function') {
+                            window.dashboardSetConnectionUi(row, !!patch.isConnected);
+                        }
+                    }
+                    if (patch.activeSessionStartedAt !== undefined) {
+                        row.dataset.activeSessionStartedAt = patch.activeSessionStartedAt || '';
+                    }
+                    if (patch.activeSessionBillingAnchorAt !== undefined) {
+                        row.dataset.activeSessionBillingAnchorAt = patch.activeSessionBillingAnchorAt || '';
+                    }
+                    if (patch.usageSnapshotMs !== undefined) {
+                        row.dataset.usageServerRenderMs = String(patch.usageSnapshotMs);
+                        row.dataset.usageAnchorMs = String(patch.usageSnapshotMs);
+                    }
+                    if (Object.prototype.hasOwnProperty.call(patch, 'remainingMinutesFallback')) {
+                        row.dataset.remainingMinutesFallback = String(patch.remainingMinutesFallback);
+                    }
+                    if (Object.prototype.hasOwnProperty.call(patch, 'dbRemainingMinutes')) {
+                        row.dataset.dbRemainingMinutes = String(patch.dbRemainingMinutes);
+                    }
+                    const sessionIso = row.dataset.activeSessionStartedAt || '';
+                    if (typeof window.dashboardSetSessionMeta === 'function') {
+                        window.dashboardSetSessionMeta(row, sessionIso);
+                    }
+                };
+
                 // Listen to backend broadcast aliases and map them to human-friendly alerts.
                 // These aliases are defined in app/Events/* via broadcastAs().
                 window.Echo.private(`user.${userId}`)
                     .listen('.device.connected', (event) => {
                         addNotification(`${event.device_name} connected (${event.ip_address ?? 'unknown IP'})`, 'success');
+                        const started = event.active_session_started_at || '';
+                        const billing = event.active_session_billing_anchor_at || started;
+                        const billingMs = billing ? Date.parse(billing) : NaN;
+                        const fallbackMs = event.timestamp ? Date.parse(event.timestamp) : NaN;
+                        const usageSnapshotMs = !Number.isNaN(billingMs)
+                            ? billingMs
+                            : (!Number.isNaN(fallbackMs) ? fallbackMs : Date.now());
+                        const connectPatch = {
+                            isConnected: true,
+                            activeSessionStartedAt: started,
+                            activeSessionBillingAnchorAt: billing,
+                            usageSnapshotMs,
+                        };
+                        if (event.remaining_minutes != null) {
+                            connectPatch.remainingMinutesFallback = event.remaining_minutes;
+                        }
+                        if (event.db_remaining_minutes != null) {
+                            connectPatch.dbRemainingMinutes = event.db_remaining_minutes;
+                        }
+                        syncTimeUsageRowForDevice(event.device_id, connectPatch);
+                        if (typeof window.tickDashboardTimeRows === 'function') {
+                            window.tickDashboardTimeRows();
+                        }
                         if (typeof window.refreshUsageChart === 'function') {
                             window.refreshUsageChart('device.connected');
                         }
                     })
                     .listen('.device.disconnected', (event) => {
                         addNotification(`${event.device_name} disconnected`, 'warning');
+                        const disconnectPatch = {
+                            isConnected: false,
+                            activeSessionStartedAt: '',
+                            activeSessionBillingAnchorAt: '',
+                            usageSnapshotMs: Date.now(),
+                        };
+                        if (event.remaining_minutes != null) {
+                            disconnectPatch.remainingMinutesFallback = event.remaining_minutes;
+                        }
+                        if (event.db_remaining_minutes != null) {
+                            disconnectPatch.dbRemainingMinutes = event.db_remaining_minutes;
+                        }
+                        syncTimeUsageRowForDevice(event.device_id, disconnectPatch);
+                        if (typeof window.tickDashboardTimeRows === 'function') {
+                            window.tickDashboardTimeRows();
+                        }
                         if (typeof window.refreshUsageChart === 'function') {
                             window.refreshUsageChart('device.disconnected');
                         }

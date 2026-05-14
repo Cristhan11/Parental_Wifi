@@ -24,7 +24,11 @@ class DeviceConnected implements ShouldBroadcastNow
         public int $deviceId,
         public string $deviceName,
         public string $macAddress,
-        public ?string $ipAddress
+        public ?string $ipAddress,
+        public ?string $activeSessionStartedAt = null,
+        public ?string $activeSessionBillingAnchorAt = null,
+        public ?int $remainingMinutes = null,
+        public ?int $dbRemainingMinutes = null,
     ) {}
 
     // Send only to the owning parent via a private user channel.
@@ -49,6 +53,10 @@ class DeviceConnected implements ShouldBroadcastNow
             'device_name' => $this->deviceName,
             'mac_address' => $this->macAddress,
             'ip_address' => $this->ipAddress,
+            'active_session_started_at' => $this->activeSessionStartedAt,
+            'active_session_billing_anchor_at' => $this->activeSessionBillingAnchorAt,
+            'remaining_minutes' => $this->remainingMinutes,
+            'db_remaining_minutes' => $this->dbRemainingMinutes,
             'timestamp' => now()->toIso8601String(),
         ];
     }

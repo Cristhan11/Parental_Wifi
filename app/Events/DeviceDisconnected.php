@@ -22,7 +22,9 @@ class DeviceDisconnected implements ShouldBroadcastNow
         public int $userId,
         public int $deviceId,
         public string $deviceName,
-        public string $macAddress
+        public string $macAddress,
+        public ?int $remainingMinutes = null,
+        public ?int $dbRemainingMinutes = null,
     ) {}
 
     // Restrict event stream to the parent who owns the device.
@@ -46,6 +48,8 @@ class DeviceDisconnected implements ShouldBroadcastNow
             'device_id' => $this->deviceId,
             'device_name' => $this->deviceName,
             'mac_address' => $this->macAddress,
+            'remaining_minutes' => $this->remainingMinutes,
+            'db_remaining_minutes' => $this->dbRemainingMinutes,
             'timestamp' => now()->toIso8601String(),
         ];
     }

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Events\DeviceConnected;
 use App\Events\DeviceDisconnected;
 use App\Models\Device;
+use App\Models\DeviceSession;
 use App\Services\NetworkService;
 use App\Services\NoDogSplashService;
 use App\Services\TimeTrackingService;
@@ -329,12 +330,25 @@ class MonitorDeviceConnections implements ShouldQueue
                         // would receive repetitive "connected" notifications every cycle.
                         // This event feeds the parent dashboard realtime notification panel.
                         if (!$wasConnected && !empty($ipAddress) && $device->user_id) {
+                            $device->refresh();
+                            $activeSession = $device->activeSession();
+                            $remainingForUi = $this->dashboardRemainingMinutesForParentUi($device, $activeSession);
+                            $includeActiveUsage = $activeSession && ($device->isWhitelisted() || $remainingForUi > 0);
+
                             event(new DeviceConnected(
                                 userId: $device->user_id,
                                 deviceId: $device->id,
                                 deviceName: $device->name,
                                 macAddress: $device->mac_address,
-                                ipAddress: $ipAddress
+                                ipAddress: $ipAddress,
+                                activeSessionStartedAt: $includeActiveUsage
+                                    ? $activeSession?->started_at?->toIso8601String()
+                                    : null,
+                                activeSessionBillingAnchorAt: ($includeActiveUsage && $activeSession)
+                                    ? $activeSession->billingAnchor()->toIso8601String()
+                                    : null,
+                                remainingMinutes: $remainingForUi,
+                                dbRemainingMinutes: (int) ($device->remaining_time_minutes ?? 0),
                             ));
                         }
 
@@ -424,11 +438,16 @@ class MonitorDeviceConnections implements ShouldQueue
                         // Why: prevents false disconnect alerts for already-offline devices,
                         // and keeps notifications meaningful for parents.
                         if ($wasConnected && $device->user_id) {
+                            $device->refresh();
+                            $remainingForUi = $this->dashboardRemainingMinutesForParentUi($device, null);
+
                             event(new DeviceDisconnected(
                                 userId: $device->user_id,
                                 deviceId: $device->id,
                                 deviceName: $device->name,
-                                macAddress: $device->mac_address
+                                macAddress: $device->mac_address,
+                                remainingMinutes: $remainingForUi,
+                                dbRemainingMinutes: (int) ($device->remaining_time_minutes ?? 0),
                             ));
                         }
 
@@ -471,5 +490,28 @@ class MonitorDeviceConnections implements ShouldQueue
             // Laravel will automatically retry the job based on queue configuration
             throw $e;
         }
+    }
+
+    /**
+     * Match {@see \App\Http\Controllers\DashboardController::calculateRemainingMinutes}
+     * so websocket payloads stay consistent with the TIME USAGE card.
+     */
+    private function dashboardRemainingMinutesForParentUi(Device $device, ?DeviceSession $activeSession): int
+    {
+        if ($device->isWhitelisted()) {
+            return 999999;
+        }
+
+        $baseRemaining = (int) ($device->remaining_time_minutes ?? 0);
+        if (! $activeSession) {
+            return max(0, $baseRemaining);
+        }
+
+        $poolSeconds = $baseRemaining * 60;
+        $anchor = $activeSession->billingAnchor();
+        $elapsedSeconds = $anchor->diffInSeconds(now());
+        $remainingSeconds = max(0, $poolSeconds - $elapsedSeconds);
+
+        return max(0, (int) floor($remainingSeconds / 60));
     }
 }
