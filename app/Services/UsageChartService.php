@@ -60,7 +60,7 @@ class UsageChartService
 
         $devices = $devicesQuery->get(['id', 'name', 'status']);
 
-        $labels = array_map(static fn(array $b) => $b['label'], $buckets);
+        $labels = array_map(static fn (array $b) => $b['label'], $buckets);
         $deviceIndexById = $devices->keyBy('id');
 
         // No devices => still return labels so the frontend can render an empty chart.
@@ -110,15 +110,33 @@ class UsageChartService
                     : Carbon::parse((string) $session->started_at, $timezone);
 
                 $isActive = empty($session->ended_at);
-                $sessionEnd = $isActive
-                    ? $now
-                    : ($session->ended_at instanceof CarbonInterface
+                if ($isActive) {
+                    if ($includeActiveSession) {
+                        // Still entitled: count up to "now" so the current bucket grows live.
+                        $sessionEnd = $now;
+                    } else {
+                        /*
+                         * Time has expired but the session row may still be open (e.g. device was
+                         * blocked before CheckTimeExpiration closed it). Skipping the whole session
+                         * zeroed every bucket — including usage that already happened. Cap the
+                         * session at the last incremental billing anchor (or a small fallback
+                         * from total_time_allocated) so historical buckets still reflect real use.
+                         */
+                        $anchor = $session->billingAnchor();
+                        if ($anchor->gt($sessionStart)) {
+                            $sessionEnd = $anchor->copy();
+                        } else {
+                            $allocated = max(1, (int) ($device->total_time_allocated ?? 60));
+                            $sessionEnd = $sessionStart->copy()->addMinutes($allocated);
+                            if ($sessionEnd->gt($now)) {
+                                $sessionEnd = $now->copy();
+                            }
+                        }
+                    }
+                } else {
+                    $sessionEnd = $session->ended_at instanceof CarbonInterface
                         ? $session->ended_at->copy()
-                        : Carbon::parse((string) $session->ended_at, $timezone));
-
-                if ($isActive && ! $includeActiveSession) {
-                    // Time expired or not granted: do not count active-session time further.
-                    continue;
+                        : Carbon::parse((string) $session->ended_at, $timezone);
                 }
 
                 // For each bucket, count overlap seconds between [sessionStart, sessionEnd]
@@ -176,18 +194,18 @@ class UsageChartService
     /**
      * Convert per-bucket seconds into either minutes or hours.
      *
-     * @param float[] $valuesSeconds
+     * @param  float[]  $valuesSeconds
      * @return float[]
      */
     private function convertSecondsArrayForUnit(array $valuesSeconds, string $unit): array
     {
         if ($unit === 'hours') {
             // 2 decimals keeps hour values readable (e.g. 1.25h).
-            return array_map(static fn(float $sec) => round($sec / 3600, 2), $valuesSeconds);
+            return array_map(static fn (float $sec) => round($sec / 3600, 2), $valuesSeconds);
         }
 
         // Daily minutes can be 1 decimal for nicer-looking lines.
-        return array_map(static fn(float $sec) => round($sec / 60, 1), $valuesSeconds);
+        return array_map(static fn (float $sec) => round($sec / 60, 1), $valuesSeconds);
     }
 
     /**
@@ -287,7 +305,7 @@ class UsageChartService
             $buckets[] = [
                 'start' => $bucketStart->copy(),
                 'end' => $bucketEndExclusive,
-                'label' => 'Week ' . $week,
+                'label' => 'Week '.$week,
             ];
 
             $bucketStart = $bucketEndExclusive;
