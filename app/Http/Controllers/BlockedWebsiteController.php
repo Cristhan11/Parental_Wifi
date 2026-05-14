@@ -52,8 +52,7 @@ class BlockedWebsiteController extends Controller
     protected function redirectToIndexAfterBlocklistChange(string $successMessage): RedirectResponse
     {
         return redirect()->route('blocked-websites.index')
-            ->with('success', $successMessage)
-            ->with('info', 'Applying rules on the gateway. Watch the status line below; this usually takes a few seconds.');
+            ->with('success', $successMessage);
     }
 
     protected function queueBlocklistApplyForUserId(int $userId): void

@@ -1,6 +1,5 @@
-{{-- Local status for gateway dnsmasq apply (Echo when available; no external CDN). --}}
+{{-- Live status when blocking rules finish saving (Echo when enabled). --}}
 <div id="policyApplyStatusBar" class="mb-4 hidden rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-900" role="status">
-    <span class="font-medium text-gray-700">Gateway:</span>
     <span id="policyApplyStatusText">—</span>
 </div>
 

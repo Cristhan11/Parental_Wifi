@@ -34,7 +34,7 @@ class PolicySyncService
                 event(new PolicyApplyStatus(
                     userId: $user->id,
                     state: 'retry',
-                    message: 'Another update is still applying. Try again in a moment.',
+                    message: 'Another change is still saving. Please wait a moment and try again.',
                 ));
             }
 
@@ -60,7 +60,7 @@ class PolicySyncService
                 event(new PolicyApplyStatus(
                     userId: $user->id,
                     state: 'applying',
-                    message: 'Applying changes…',
+                    message: 'Saving your changes…',
                 ));
             }
 
@@ -82,8 +82,8 @@ class PolicySyncService
                     userId: $user->id,
                     state: $ok ? 'applied' : 'failed',
                     message: $ok
-                        ? 'Network rules updated.'
-                        : 'Some network updates failed. The scheduler will retry, or use the dnsmasq sync command from the docs.',
+                        ? 'Your changes are saved.'
+                        : 'That did not finish updating. Please try again in a minute.',
                 ));
             }
 
@@ -102,7 +102,7 @@ class PolicySyncService
                 event(new PolicyApplyStatus(
                     userId: $user->id,
                     state: 'failed',
-                    message: 'Could not apply network updates. Retry or check gateway logs.',
+                    message: 'We could not save that change. Please try again.',
                 ));
             }
 

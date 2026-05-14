@@ -293,7 +293,6 @@ class DeviceController extends Controller
 
         $session = [
             'success' => 'Device request approved.',
-            'info' => 'Network rules update on the gateway in a few seconds. Check the status line below if live updates are enabled.',
         ];
         if ($this->clientIpMatchesDevicePresence($request, $device->fresh())) {
             $session['device_restore_portal_mac'] = $device->mac_address;
