@@ -8,6 +8,7 @@ use App\Mail\ImmediateBlockedWebsiteAlertMail;
 use App\Models\AccessAttempt;
 use App\Models\BrowsingLog;
 use App\Models\Device;
+use App\Models\DeviceSession;
 use App\Models\ReportingPreference;
 use App\Models\ReportingRecipient;
 use App\Models\User;
@@ -32,6 +33,11 @@ class ReportingEmailConfigTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        date_default_timezone_set('UTC');
+
+        // Digest windows and DeviceSession casts assume a single consistent zone; match phpunit.xml / CI.
+        config(['app.timezone' => 'UTC']);
 
         // Web PUT/POST tests do not submit a browser _token; disable CSRF for this feature suite only.
         $this->withoutMiddleware(ValidateCsrfToken::class);
@@ -497,5 +503,56 @@ class ReportingEmailConfigTest extends TestCase
         $this->assertCount(1, $payload['devices']);
         $this->assertSame('Only Child', $payload['devices'][0]['name']);
         $this->assertSame(1, $payload['registered_devices_count']);
+    }
+
+    public function test_digest_time_usage_counts_overlap_when_session_started_before_period(): void
+    {
+        $parent = User::factory()->create(['role' => 'parent']);
+        $childA = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Child A',
+            'mac_address' => 'AA:BB:CC:DD:EE:A1',
+            'status' => 'active',
+            'role' => 'child',
+            'remaining_time_minutes' => 120,
+            'total_time_allocated' => 120,
+        ]);
+        $childB = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Child B',
+            'mac_address' => 'AA:BB:CC:DD:EE:B2',
+            'status' => 'active',
+            'role' => 'child',
+            'remaining_time_minutes' => 120,
+            'total_time_allocated' => 120,
+        ]);
+
+        $periodStart = CarbonImmutable::now('UTC')->subDay()->startOfDay();
+        $periodEnd = $periodStart->copy()->endOfDay();
+
+        $sessionStart = $periodStart->subHours(2);
+        $sessionEnd = $periodStart->copy()->addHours(1);
+
+        DeviceSession::create([
+            'device_id' => $childB->id,
+            'started_at' => $sessionStart,
+            'ended_at' => $sessionEnd,
+            'duration_seconds' => $sessionStart->diffInSeconds($sessionEnd),
+        ]);
+
+        $this->assertSame(1, DeviceSession::count());
+
+        $payload = app(ReportingDigestService::class)->buildDigestPayload(
+            $parent,
+            $periodStart,
+            $periodEnd,
+            'UTC'
+        );
+
+        $this->assertSame(60, $payload['time_usage_and_grants']['total_usage_minutes']);
+
+        $byName = collect($payload['devices'])->keyBy('name');
+        $this->assertSame(0, $byName->get('Child A')['time_usage_and_grants']['total_usage_minutes']);
+        $this->assertSame(60, $byName->get('Child B')['time_usage_and_grants']['total_usage_minutes']);
     }
 }

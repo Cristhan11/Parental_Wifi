@@ -56,6 +56,21 @@ class Device extends Model
     }
 
     /**
+     * Child devices included in reporting emails (digests): same supervised set as the dashboard
+     * chart, but never explicit parent/guest rows (even if mis-tagged elsewhere).
+     */
+    public function scopeForReportingEmails(Builder $query): Builder
+    {
+        return $query
+            ->where('status', '<>', 'whitelisted')
+            ->where(function (Builder $q): void {
+                $q->whereNull('role')
+                    ->orWhere('role', '')
+                    ->orWhereNotIn('role', ['parent', 'guest']);
+            });
+    }
+
+    /**
      * Child devices shown on the parent dashboard TIME USAGE card and chart (not parent/guest roles, not whitelisted).
      */
     public function scopeForDashboardTimeUsage(Builder $query): Builder
