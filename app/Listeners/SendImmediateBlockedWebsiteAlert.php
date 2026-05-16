@@ -4,6 +4,7 @@ namespace App\Listeners;
 
 use App\Events\BlockedWebsiteAccessed;
 use App\Mail\ImmediateBlockedWebsiteAlertMail;
+use App\Models\Device;
 use App\Models\ReportDispatchLog;
 use App\Services\AccessAttemptAlertGrouping;
 use App\Models\ReportingPreference;
@@ -28,6 +29,11 @@ class SendImmediateBlockedWebsiteAlert
         // Load parent account; `$event->userId` is the owning parent, not the child device user.
         $user = User::with(['reportingPreference', 'reportingRecipients'])->find($event->userId);
         if (! $user) {
+            return;
+        }
+
+        $device = Device::query()->find($event->deviceId);
+        if (! $device || $device->user_id !== $user->id || ($device->role ?? 'child') !== 'child') {
             return;
         }
 

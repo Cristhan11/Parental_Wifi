@@ -204,7 +204,7 @@
                             <li><strong>Digest</strong> = one email that bundles recent activity into a single read. Daily, weekly, and monthly here mean how often that bundled email is sent.</li>
                             <li><strong>Email Report options</strong>is a simple chart of what your report emails can cover: the left side is <strong>same-day notices</strong> (blocked site try, flagged site visit). The right side is <strong>how often</strong> one roundup email may be sent (daily, weekly, or monthly).</li>
                             <li><strong>Preferences</strong>is where you choose what to use: turn those same-day notices and scheduled roundups on or off, optionally skip quiet days when there is nothing new, and set your timezone.</li>
-                            <li>Tap <strong>Save preferences</strong> when done. <strong>Send Test Daily Digest</strong> sends one sample daily bundle. (check spam or junk if it is missing)</li>
+                            <li>Tap <strong>Save preferences</strong> when done. <strong>Send Test Daily Digest</strong> uses the same <strong>yesterday</strong> window as automated daily sends, respects <strong>Skip empty digest periods</strong>, and only includes <strong>monitored child</strong> devices (parent/guest rows are omitted). Check spam if it never arrives.</li>
                         </ul>
                     </x-collapsible-instructions>
 

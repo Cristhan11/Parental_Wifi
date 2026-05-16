@@ -4,6 +4,7 @@ namespace App\Listeners;
 
 use App\Events\FlaggedWebsiteVisited;
 use App\Mail\ImmediateFlaggedWebsiteAlertMail;
+use App\Models\Device;
 use App\Models\ReportDispatchLog;
 use App\Services\AccessAttemptAlertGrouping;
 use App\Models\ReportingPreference;
@@ -24,6 +25,11 @@ class SendImmediateFlaggedWebsiteAlert
     {
         $user = User::with(['reportingPreference', 'reportingRecipients'])->find($event->userId);
         if (! $user) {
+            return;
+        }
+
+        $device = Device::query()->find($event->deviceId);
+        if (! $device || $device->user_id !== $user->id || ($device->role ?? 'child') !== 'child') {
             return;
         }
 

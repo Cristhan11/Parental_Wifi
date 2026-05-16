@@ -99,6 +99,7 @@
                 <ul class="list-inside list-disc space-y-1">
                     <li>This page shows all connected devices in your home network.</li>
                     <li>Use <strong>Edit</strong> to update the device name, role, and settings.</li>
+                    <li>To fully block a child device’s internet, open <strong>Edit</strong>, set <strong>Remaining Time</strong> to <strong>0</strong>, set <strong>Device Status</strong> to <strong>Blocked</strong>, then tap <strong>Update Device</strong> (otherwise scheduled checks may restore access if time is still left on the clock).</li>
                     <li>Use <strong>Blocklist</strong> for devices you want to stop from being connected to the internet.</li>
                     <li>Use <strong>Whitelist</strong> for trusted devices that should stay allowed to connect to the internet.</li>
                     <li>Use <strong>Registration</strong> to review child device registration requests.</li>

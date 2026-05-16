@@ -272,7 +272,7 @@ class ReportingEmailConfigTest extends TestCase
             'is_enabled' => true,
         ]);
 
-        $digestDay = CarbonImmutable::now('UTC')->startOfDay()->addHours(12);
+        $digestDay = CarbonImmutable::now('UTC')->subDay()->startOfDay()->addHours(12);
         BrowsingLog::create([
             'device_id' => $device->id,
             'url' => 'https://example.org',
@@ -363,5 +363,139 @@ class ReportingEmailConfigTest extends TestCase
         $this->assertSame('live_traffic_fallback', $payload['bandwidth']['source']);
         $this->assertSame(2097152, $payload['bandwidth']['family_total_bytes']);
         $this->assertSame('0.002097 GB (2 MB)', $payload['bandwidth']['family_total_formatted']);
+    }
+
+    public function test_daily_digest_skips_when_only_parent_role_device_has_activity(): void
+    {
+        Mail::fake();
+
+        $parent = User::factory()->create(['role' => 'parent']);
+        $parentDevice = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Parent Laptop',
+            'mac_address' => 'AA:BB:CC:DD:EE:66',
+            'status' => 'active',
+            'role' => 'parent',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        ReportingPreference::create([
+            'user_id' => $parent->id,
+            'immediate_alerts_enabled' => true,
+            'daily_digest_enabled' => true,
+            'weekly_digest_enabled' => true,
+            'monthly_digest_enabled' => true,
+            'timezone' => 'UTC',
+            'skip_empty_digests' => true,
+        ]);
+        ReportingRecipient::create([
+            'user_id' => $parent->id,
+            'email' => 'digest@example.test',
+            'is_enabled' => true,
+        ]);
+
+        $digestDay = CarbonImmutable::now('UTC')->subDay()->startOfDay()->addHours(12);
+        BrowsingLog::create([
+            'device_id' => $parentDevice->id,
+            'url' => 'https://parent-only.example',
+            'domain' => 'parent-only.example',
+            'visited_at' => $digestDay,
+        ]);
+
+        DispatchDigestReportJob::dispatchSync($parent->id, 'daily');
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseHas('report_dispatch_logs', [
+            'user_id' => $parent->id,
+            'report_type' => 'digest',
+            'frequency' => 'daily',
+            'status' => 'skipped',
+            'error_message' => 'No activity in digest period.',
+        ]);
+    }
+
+    public function test_blocked_website_attempt_on_parent_role_device_does_not_send_immediate_email(): void
+    {
+        Mail::fake();
+
+        $parent = User::factory()->create(['role' => 'parent']);
+        $device = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Parent Phone',
+            'mac_address' => 'AA:BB:CC:DD:EE:77',
+            'status' => 'active',
+            'role' => 'parent',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        ReportingPreference::create([
+            'user_id' => $parent->id,
+            'immediate_alerts_enabled' => true,
+            'daily_digest_enabled' => true,
+            'weekly_digest_enabled' => true,
+            'monthly_digest_enabled' => true,
+            'timezone' => 'UTC',
+            'skip_empty_digests' => true,
+        ]);
+
+        ReportingRecipient::create([
+            'user_id' => $parent->id,
+            'label' => 'Primary',
+            'email' => 'alerts@example.test',
+            'is_enabled' => true,
+        ]);
+
+        AccessAttempt::create([
+            'device_id' => $device->id,
+            'type' => 'blocked_website',
+            'url' => 'https://blocked.example',
+            'domain' => 'blocked.example',
+            'attempted_at' => now(),
+        ]);
+
+        Mail::assertNothingSent();
+        $this->assertDatabaseMissing('report_dispatch_logs', [
+            'user_id' => $parent->id,
+            'report_type' => 'immediate_blocked_website',
+        ]);
+    }
+
+    public function test_digest_payload_lists_only_child_dashboard_devices(): void
+    {
+        $parent = User::factory()->create(['role' => 'parent']);
+        Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Parent iPad',
+            'mac_address' => 'AA:BB:CC:DD:EE:88',
+            'status' => 'active',
+            'role' => 'parent',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+        Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Only Child',
+            'mac_address' => 'AA:BB:CC:DD:EE:99',
+            'status' => 'active',
+            'role' => 'child',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        $start = CarbonImmutable::now('UTC')->subDay()->startOfDay();
+        $end = $start->addDay();
+
+        $payload = app(ReportingDigestService::class)->buildDigestPayload(
+            $parent,
+            $start,
+            $end,
+            'UTC'
+        );
+
+        $this->assertCount(1, $payload['devices']);
+        $this->assertSame('Only Child', $payload['devices'][0]['name']);
+        $this->assertSame(1, $payload['registered_devices_count']);
     }
 }

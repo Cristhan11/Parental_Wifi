@@ -41,8 +41,8 @@ class ReportingDigestService
         $periodStartUtc = $periodStartLocal->clone()->setTimezone('UTC');
         $periodEndUtc = $periodEndLocal->clone()->setTimezone('UTC');
 
-        // All child devices owned by this parent — digests never mix households.
-        $deviceIds = $parent->devices()->pluck('id');
+        // Monitored child devices only (exclude parent/guest roles and whitelisted — same rule as TIME USAGE charts).
+        $deviceIds = $parent->devices()->forDashboardTimeUsage()->pluck('id');
 
         // AccessAttempt rows are created when the filtering layer records blocked/flagged attempts.
         $blockedCount = AccessAttempt::query()
@@ -144,7 +144,7 @@ class ReportingDigestService
             ],
             'bandwidth' => $bandwidth,
             'active_devices_count' => $activeDeviceIds->count(),
-            'registered_devices_count' => $parent->devices()->count(),
+            'registered_devices_count' => $parent->devices()->forDashboardTimeUsage()->count(),
             'devices' => $devices,
             'has_activity' => ($blockedCount + $flaggedCount + $grantsCount + $usageMinutes + count($topDomains)) > 0,
         ];
@@ -155,7 +155,7 @@ class ReportingDigestService
      */
     private function buildPerDevicePayload(User $parent, CarbonInterface $periodStartUtc, CarbonInterface $periodEndUtc): array
     {
-        $devices = $parent->devices()->orderBy('name')->get(['id', 'name']);
+        $devices = $parent->devices()->forDashboardTimeUsage()->orderBy('name')->get(['id', 'name']);
         $rows = [];
 
         foreach ($devices as $device) {

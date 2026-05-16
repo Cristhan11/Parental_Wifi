@@ -33,8 +33,8 @@ use Throwable;
  * Flow summary:
  * 1. Load parent User + preferences + recipients.
  * 2. Bail early with a "skipped" log if disabled, no recipients, or empty digest when skip_empty is on.
- * 3. Decide the date range in the parent’s timezone: scheduled runs use the previous completed day/week/month;
- *    manual test daily digests use the current calendar day (for demos with same-day activity).
+ * 3. Decide the date range in the parent’s timezone: all daily runs (scheduled and UI test) use the previous
+ *    completed calendar day so dispatch logs match what was emailed and skip-empty behaves consistently.
  * 4. Call ReportingDigestService to build a big `$payload` array for Blade.
  * 5. For each recipient email: send mailable, then insert ReportDispatchLog (sent or failed).
  */
@@ -185,17 +185,18 @@ class DispatchDigestReportJob implements ShouldQueue
 
     /**
      * Compute [start, end] of the reporting window in the parent’s timezone.
+     *
      * Scheduled runs use the previous day/week/month so an early-morning cron summarizes completed periods.
-     * Manual daily tests (UI / `reporting:send-test`) use today so parents can preview same-day activity.
+     * Manual daily tests (UI / `reporting:send-test`) reuse the same “yesterday” window as the scheduler so
+     * “skipped / empty digest” logs align with preference checks and queued test sends cannot bypass them
+     * by switching to a different day.
      */
     private function resolvePeriodWindow(string $timezone): array
     {
         $now = CarbonImmutable::now($timezone);
 
         return match ($this->frequency) {
-            'daily' => $this->isManualTest
-                ? [$now->startOfDay(), $now->endOfDay()]
-                : [$now->subDay()->startOfDay(), $now->subDay()->endOfDay()],
+            'daily' => [$now->subDay()->startOfDay(), $now->subDay()->endOfDay()],
             'weekly' => [$now->subWeek()->startOfWeek(), $now->subWeek()->endOfWeek()],
             'monthly' => [$now->subMonth()->startOfMonth(), $now->subMonth()->endOfMonth()],
             default => throw new InvalidArgumentException('Unsupported digest frequency.'),
