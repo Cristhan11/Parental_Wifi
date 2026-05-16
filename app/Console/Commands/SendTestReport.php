@@ -18,9 +18,11 @@ use Illuminate\Console\Command;
  */
 class SendTestReport extends Command
 {
-    protected $signature = 'reporting:send-test {user_id : Parent user ID}';
+    protected $signature = 'reporting:send-test
+                            {user_id : Parent user ID}
+                            {--sync : Run the job immediately (no queue) — use to debug SMTP without queue:work}';
 
-    protected $description = 'Dispatch a daily digest test report for a specific parent.';
+    protected $description = 'Send or queue a daily digest test report for a specific parent.';
 
     public function handle(): int
     {
@@ -38,10 +40,15 @@ class SendTestReport extends Command
             return self::FAILURE;
         }
 
-        // Second argument must match what DispatchDigestReportJob expects: 'daily' | 'weekly' | 'monthly'.
-        // Third: unique subject so manual CLI tests do not collapse into one Gmail thread.
+        if ($this->option('sync')) {
+            DispatchDigestReportJob::dispatchSync($userId, 'daily', isManualTest: true);
+            $this->info('Ran test daily digest synchronously. Check Reports dispatch history and inbox.');
+
+            return self::SUCCESS;
+        }
+
         DispatchDigestReportJob::dispatch($userId, 'daily', isManualTest: true);
-        $this->info('Queued test daily digest job.');
+        $this->info('Queued test daily digest job. Ensure laravel-queue (or queue:work) is running.');
 
         return self::SUCCESS;
     }

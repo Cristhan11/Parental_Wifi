@@ -109,8 +109,8 @@ class DispatchDigestReportJob implements ShouldQueue
         $payload['title'] = ucfirst($this->frequency).' Report';
         $payload['preheader'] = $this->resolvePreheader($payload);
 
-        // If parent chose to skip empty digests and the service found no meaningful activity, stop here.
-        if ($preference->skip_empty_digests && ! $payload['has_activity']) {
+        // Scheduled digests may skip when empty; manual UI/CLI tests always send so parents can verify SMTP.
+        if ($preference->skip_empty_digests && ! $this->isManualTest && ! $payload['has_activity']) {
             $this->logSkipped($user->id, 'No activity in digest period.', $periodStart, $periodEnd);
 
             return;
