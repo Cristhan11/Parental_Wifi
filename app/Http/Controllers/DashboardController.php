@@ -8,6 +8,7 @@ use App\Models\Quiz;
 use App\Models\QuizAttempt;
 use App\Models\Video;
 use App\Services\BandwidthUsageService;
+use App\Services\DashboardTimeUsageService;
 use App\Services\UsageChartService;
 use Carbon\Carbon;
 use Illuminate\Http\JsonResponse;
@@ -20,10 +21,16 @@ class DashboardController extends Controller
 
     protected $bandwidthUsageService;
 
-    public function __construct(UsageChartService $usageChartService, BandwidthUsageService $bandwidthUsageService)
-    {
+    protected $dashboardTimeUsageService;
+
+    public function __construct(
+        UsageChartService $usageChartService,
+        BandwidthUsageService $bandwidthUsageService,
+        DashboardTimeUsageService $dashboardTimeUsageService,
+    ) {
         $this->usageChartService = $usageChartService;
         $this->bandwidthUsageService = $bandwidthUsageService;
+        $this->dashboardTimeUsageService = $dashboardTimeUsageService;
     }
 
     /**
@@ -40,21 +47,12 @@ class DashboardController extends Controller
             ->forDashboardTimeUsage()
             ->get();
 
-        $startOfDay = now()->startOfDay();
         $now = now();
-        $deviceIds = $devices->pluck('id')->values();
+        $usageSecondsByDevice = $this->dashboardTimeUsageService->sumTodayUsageSecondsByDevice($user);
 
-        $endedSessionsByDevice = collect();
+        $deviceIds = $devices->pluck('id')->values();
         $activeSessionByDevice = [];
         if ($deviceIds->isNotEmpty()) {
-            $endedSessionsByDevice = DeviceSession::query()
-                ->whereIn('device_id', $deviceIds)
-                ->whereNotNull('ended_at')
-                ->where('started_at', '<', $now)
-                ->where('ended_at', '>', $startOfDay)
-                ->get(['device_id', 'started_at', 'ended_at'])
-                ->groupBy('device_id');
-
             $activeSessionByDevice = DeviceSession::query()
                 ->whereIn('device_id', $deviceIds)
                 ->whereNull('ended_at')
@@ -68,26 +66,11 @@ class DashboardController extends Controller
         // Per-device usage: today's connected time only (app timezone; resets at midnight).
         $timeUsageData = [];
         foreach ($devices as $device) {
-            $totalSeconds = 0;
-            foreach ($endedSessionsByDevice->get($device->id, collect()) as $session) {
-                $segStart = $session->started_at->copy()->max($startOfDay);
-                $segEnd = $session->ended_at->copy()->min($now);
-                if ($segStart->lt($segEnd)) {
-                    $totalSeconds += $segStart->diffInSeconds($segEnd);
-                }
-            }
-
+            $totalSeconds = (int) ($usageSecondsByDevice[(int) $device->id] ?? 0);
             $activeSession = $activeSessionByDevice[$device->id] ?? null;
             $remainingMinutes = $this->calculateRemainingMinutes($device, $activeSession);
             $includeActiveUsage = $activeSession
                 && ($device->isWhitelisted() || $remainingMinutes > 0);
-
-            if ($includeActiveUsage) {
-                $segStart = $activeSession->started_at->copy()->max($startOfDay);
-                if ($segStart->lt($now)) {
-                    $totalSeconds += $segStart->diffInSeconds($now);
-                }
-            }
 
             // Convert to hours and minutes
             $hours = floor($totalSeconds / 3600);

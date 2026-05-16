@@ -5,12 +5,11 @@ namespace App\Services;
 use App\Models\AccessAttempt;
 use App\Models\BrowsingLog;
 use App\Models\Device;
-use App\Models\DeviceSession;
 use App\Models\DeviceTimeGrant;
 use App\Models\User;
+use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
-use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
@@ -25,7 +24,7 @@ class ReportingDigestService
 {
     public function __construct(
         private readonly BandwidthUsageService $bandwidthUsageService,
-        private readonly TimeTrackingService $timeTrackingService,
+        private readonly DashboardTimeUsageService $dashboardTimeUsageService,
     ) {}
 
     /**
@@ -57,18 +56,21 @@ class ReportingDigestService
         $blockedCount = AccessAttempt::query()
             ->whereIn('device_id', $deviceIds)
             ->where('type', 'blocked_website')
-            ->whereBetween('attempted_at', [$periodStartUtc, $periodEndUtc])
+            ->where('attempted_at', '>=', $periodStartUtc)
+            ->where('attempted_at', '<=', $periodEndUtc)
             ->count();
 
         $flaggedCount = AccessAttempt::query()
             ->whereIn('device_id', $deviceIds)
             ->where('type', 'flagged_website')
-            ->whereBetween('attempted_at', [$periodStartUtc, $periodEndUtc])
+            ->where('attempted_at', '>=', $periodStartUtc)
+            ->where('attempted_at', '<=', $periodEndUtc)
             ->count();
 
         $topDomains = BrowsingLog::query()
             ->whereIn('device_id', $deviceIds)
-            ->whereBetween('visited_at', [$periodStartUtc, $periodEndUtc])
+            ->where('visited_at', '>=', $periodStartUtc)
+            ->where('visited_at', '<=', $periodEndUtc)
             ->whereNotNull('domain')
             ->select('domain', DB::raw('SUM(COALESCE(visit_count, 1)) as visits'))
             ->groupBy('domain')
@@ -84,7 +86,8 @@ class ReportingDigestService
 
         $grantsAggregate = DeviceTimeGrant::query()
             ->whereIn('device_id', $deviceIds)
-            ->whereBetween('granted_at', [$periodStartUtc, $periodEndUtc])
+            ->where('granted_at', '>=', $periodStartUtc)
+            ->where('granted_at', '<=', $periodEndUtc)
             ->selectRaw('COUNT(*) as grants_count, COALESCE(SUM(minutes_granted), 0) as total_granted_minutes')
             ->first();
 
@@ -93,27 +96,36 @@ class ReportingDigestService
             ->forReportingEmails()
             ->orderBy('name')
             ->get();
-        $usageByDeviceId = $this->sumDigestSessionSecondsByDevice(
-            $digestDevices,
-            $this->toImmutableUtc($periodStartUtc),
-            $this->toImmutableUtc($periodEndUtc)
+
+        // Same session overlap rules as the dashboard TIME USAGE card (local wall-clock window).
+        $dashboardUsageSeconds = $this->dashboardTimeUsageService->sumUsageSecondsByDevice(
+            $parent,
+            Carbon::instance($periodStartLocal),
+            Carbon::instance($periodEndLocal),
         );
+        $usageByDeviceId = [];
+        foreach ($digestDevices as $device) {
+            $usageByDeviceId[(int) $device->id] = (float) ($dashboardUsageSeconds[(int) $device->id] ?? 0);
+        }
         $usageSeconds = (int) round(array_sum($usageByDeviceId));
 
         $activeDeviceIds = collect([
             AccessAttempt::query()
                 ->whereIn('device_id', $deviceIds)
-                ->whereBetween('attempted_at', [$periodStartUtc, $periodEndUtc])
+                ->where('attempted_at', '>=', $periodStartUtc)
+                ->where('attempted_at', '<=', $periodEndUtc)
                 ->pluck('device_id')
                 ->all(),
             BrowsingLog::query()
                 ->whereIn('device_id', $deviceIds)
-                ->whereBetween('visited_at', [$periodStartUtc, $periodEndUtc])
+                ->where('visited_at', '>=', $periodStartUtc)
+                ->where('visited_at', '<=', $periodEndUtc)
                 ->pluck('device_id')
                 ->all(),
             DeviceTimeGrant::query()
                 ->whereIn('device_id', $deviceIds)
-                ->whereBetween('granted_at', [$periodStartUtc, $periodEndUtc])
+                ->where('granted_at', '>=', $periodStartUtc)
+                ->where('granted_at', '<=', $periodEndUtc)
                 ->pluck('device_id')
                 ->all(),
             collect($usageByDeviceId)->filter(fn ($sec) => (float) $sec > 0)->keys()->all(),
@@ -198,18 +210,21 @@ class ReportingDigestService
             $blocked = AccessAttempt::query()
                 ->where('device_id', $did)
                 ->where('type', 'blocked_website')
-                ->whereBetween('attempted_at', [$periodStartUtc, $periodEndUtc])
+                ->where('attempted_at', '>=', $periodStartUtc)
+                ->where('attempted_at', '<=', $periodEndUtc)
                 ->count();
 
             $flagged = AccessAttempt::query()
                 ->where('device_id', $did)
                 ->where('type', 'flagged_website')
-                ->whereBetween('attempted_at', [$periodStartUtc, $periodEndUtc])
+                ->where('attempted_at', '>=', $periodStartUtc)
+                ->where('attempted_at', '<=', $periodEndUtc)
                 ->count();
 
             $deviceTopDomains = BrowsingLog::query()
                 ->where('device_id', $did)
-                ->whereBetween('visited_at', [$periodStartUtc, $periodEndUtc])
+                ->where('visited_at', '>=', $periodStartUtc)
+                ->where('visited_at', '<=', $periodEndUtc)
                 ->whereNotNull('domain')
                 ->select('domain', DB::raw('SUM(COALESCE(visit_count, 1)) as visits'))
                 ->groupBy('domain')
@@ -225,7 +240,8 @@ class ReportingDigestService
 
             $grantRow = DeviceTimeGrant::query()
                 ->where('device_id', $did)
-                ->whereBetween('granted_at', [$periodStartUtc, $periodEndUtc])
+                ->where('granted_at', '>=', $periodStartUtc)
+                ->where('granted_at', '<=', $periodEndUtc)
                 ->selectRaw('COUNT(*) as grants_count, COALESCE(SUM(minutes_granted), 0) as total_granted_minutes')
                 ->first();
 
@@ -264,59 +280,6 @@ class ReportingDigestService
         return $rows;
     }
 
-    /**
-     * Sum internet-session seconds overlapping the digest window per device.
-     *
-     * Mirrors the dashboard {@see UsageChartService} overlap rules (including open sessions and
-     * time-expired caps) so digest "Time usage" matches what parents see on the chart, instead of
-     * only counting rows where started_at falls inside the window and duration_seconds is set.
-     *
-     * @param  \Illuminate\Support\Collection<int, Device>  $digestDevices
-     * @return array<int, float> device_id => seconds (fractional before final rounding upstream)
-     */
-    private function sumDigestSessionSecondsByDevice(Collection $digestDevices, CarbonImmutable $periodStartUtc, CarbonImmutable $periodEndUtc): array
-    {
-        if ($digestDevices->isEmpty()) {
-            return [];
-        }
-
-        $deviceById = $digestDevices->keyBy('id');
-        $ids = $digestDevices->pluck('id');
-
-        $sessions = DeviceSession::query()
-            ->whereIn('device_id', $ids)
-            ->where('started_at', '<=', $periodEndUtc)
-            ->where(function ($query) use ($periodStartUtc): void {
-                $query->whereNull('ended_at')
-                    ->orWhere('ended_at', '>=', $periodStartUtc);
-            })
-            ->get(['id', 'device_id', 'started_at', 'ended_at', 'last_incremental_bill_at']);
-
-        $totals = [];
-        foreach ($deviceById as $device) {
-            $totals[(int) $device->id] = 0.0;
-        }
-
-        foreach ($sessions as $session) {
-            $device = $deviceById->get((int) $session->device_id);
-            if (! $device instanceof Device) {
-                continue;
-            }
-
-            $sessionStart = $this->toImmutableUtc($session->started_at);
-            $sessionEnd = $this->resolveDigestSessionEndUtcForOverlap($device, $session, $periodEndUtc);
-
-            $totals[(int) $device->id] += $this->overlapSecondsInclusivePeriod(
-                $sessionStart,
-                $sessionEnd,
-                $periodStartUtc,
-                $periodEndUtc
-            );
-        }
-
-        return $totals;
-    }
-
     private function toImmutableUtc(CarbonInterface|string|null $value): CarbonImmutable
     {
         if ($value === null) {
@@ -328,61 +291,5 @@ class ReportingDigestService
         }
 
         return CarbonImmutable::parse((string) $value, 'UTC');
-    }
-
-    /**
-     * Effective session end instant for overlap with a digest window (UTC), aligned with UsageChartService.
-     */
-    private function resolveDigestSessionEndUtcForOverlap(Device $device, DeviceSession $session, CarbonImmutable $periodEndUtc): CarbonImmutable
-    {
-        $nowCap = CarbonImmutable::now('UTC')->min($periodEndUtc);
-
-        $sessionStart = $this->toImmutableUtc($session->started_at);
-
-        if ($session->ended_at !== null) {
-            return $this->toImmutableUtc($session->ended_at);
-        }
-
-        $includeActiveSession = $device->isWhitelisted()
-            || ! $this->timeTrackingService->hasTimeExpired($device);
-
-        if ($includeActiveSession) {
-            return $nowCap;
-        }
-
-        $anchor = $session->billingAnchor();
-        $anchorImm = $this->toImmutableUtc($anchor);
-
-        if ($anchorImm->gt($sessionStart)) {
-            return $anchorImm->min($nowCap);
-        }
-
-        $allocated = max(1, (int) ($device->total_time_allocated ?? 60));
-        $fallbackEnd = $sessionStart->addMinutes($allocated);
-        if ($fallbackEnd->gt($nowCap)) {
-            return $nowCap;
-        }
-
-        return $fallbackEnd;
-    }
-
-    private function overlapSecondsInclusivePeriod(
-        CarbonImmutable $sessionStart,
-        CarbonImmutable $sessionEnd,
-        CarbonImmutable $periodStart,
-        CarbonImmutable $periodEnd
-    ): float {
-        if ($sessionEnd->lte($periodStart) || $sessionStart->gte($periodEnd)) {
-            return 0.0;
-        }
-
-        $segStart = $sessionStart->max($periodStart);
-        $segEnd = $sessionEnd->min($periodEnd);
-
-        if ($segStart->gte($segEnd)) {
-            return 0.0;
-        }
-
-        return (float) $segStart->diffInSeconds($segEnd);
     }
 }
