@@ -445,13 +445,14 @@ class ParseNetworkLogs implements ShouldQueue
             $url = 'https://'.$domain;
 
             // Extract timestamp from DNS log format: "Dec 22 04:30:15"
-            $visitedAt = now();
+            $logTimezone = (string) (config('app.timezone') ?: 'UTC');
+            $visitedAt = now($logTimezone);
             if (preg_match('/([A-Za-z]{3}\s+\d{1,2}\s+\d{2}:\d{2}:\d{2})/', $line, $timeMatches)) {
                 try {
                     // Parse format: "Dec 22 04:30:15"
                     $timeStr = $timeMatches[1];
-                    $currentYear = now()->year;
-                    $visitedAt = \Carbon\Carbon::createFromFormat('M j H:i:s', $timeStr);
+                    $currentYear = now($logTimezone)->year;
+                    $visitedAt = \Carbon\Carbon::createFromFormat('M j H:i:s', $timeStr, $logTimezone);
                     $visitedAt->setYear($currentYear);
                 } catch (\Exception $e) {
                     // Parsing failed, use default (now())

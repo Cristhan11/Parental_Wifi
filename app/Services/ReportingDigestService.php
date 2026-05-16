@@ -8,7 +8,6 @@ use App\Models\Device;
 use App\Models\DeviceTimeGrant;
 use App\Models\User;
 use Carbon\Carbon;
-use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
@@ -17,7 +16,7 @@ use Illuminate\Support\Facades\DB;
  *
  * Why: Keeps SQL and grouping rules in one place so {@see \App\Jobs\DispatchDigestReportJob} stays thin (send + log only).
  *
- * Inputs: parent {@see \App\Models\User}, digest window in parent’s timezone (converted to UTC for queries).
+ * Inputs: parent {@see \App\Models\User}, digest window in the parent’s reporting timezone (wall-clock bounds, same as dashboard usage).
  * Outputs: payload keys like `violations_summary`, `devices[]`, `top_visited_domains` — see {@see resources/views/emails/reports/_digest-body.blade.php}.
  */
 class ReportingDigestService
@@ -40,9 +39,8 @@ class ReportingDigestService
         CarbonInterface $periodEndLocal,
         string $timezone
     ): array {
-        // DB timestamps are stored in UTC — convert the digest window once, then reuse for all queries.
-        $periodStartUtc = $periodStartLocal->clone()->setTimezone('UTC');
-        $periodEndUtc = $periodEndLocal->clone()->setTimezone('UTC');
+        // Wall-clock window (same as dashboard TIME USAGE). Eloquent converts to UTC for MySQL.
+        [$periodStart, $periodEnd] = $this->reportingPeriodBounds($periodStartLocal, $periodEndLocal, $timezone);
 
         // Monitored child devices only — stricter than raw dashboard query so parent/guest rows never appear in email.
         // Query Device directly — `forReportingEmails` is a model scope; `$parent->devices()` is a
@@ -53,24 +51,13 @@ class ReportingDigestService
             ->pluck('id');
 
         // AccessAttempt rows are created when the filtering layer records blocked/flagged attempts.
-        $blockedCount = AccessAttempt::query()
-            ->whereIn('device_id', $deviceIds)
-            ->where('type', 'blocked_website')
-            ->where('attempted_at', '>=', $periodStartUtc)
-            ->where('attempted_at', '<=', $periodEndUtc)
-            ->count();
-
-        $flaggedCount = AccessAttempt::query()
-            ->whereIn('device_id', $deviceIds)
-            ->where('type', 'flagged_website')
-            ->where('attempted_at', '>=', $periodStartUtc)
-            ->where('attempted_at', '<=', $periodEndUtc)
-            ->count();
+        $blockedCount = $this->countViolationsInPeriod($deviceIds, 'blocked_website', $periodStart, $periodEnd);
+        $flaggedCount = $this->countViolationsInPeriod($deviceIds, 'flagged_website', $periodStart, $periodEnd);
 
         $topDomains = BrowsingLog::query()
             ->whereIn('device_id', $deviceIds)
-            ->where('visited_at', '>=', $periodStartUtc)
-            ->where('visited_at', '<=', $periodEndUtc)
+            ->where('visited_at', '>=', $periodStart)
+            ->where('visited_at', '<=', $periodEnd)
             ->whereNotNull('domain')
             ->select('domain', DB::raw('SUM(COALESCE(visit_count, 1)) as visits'))
             ->groupBy('domain')
@@ -86,8 +73,8 @@ class ReportingDigestService
 
         $grantsAggregate = DeviceTimeGrant::query()
             ->whereIn('device_id', $deviceIds)
-            ->where('granted_at', '>=', $periodStartUtc)
-            ->where('granted_at', '<=', $periodEndUtc)
+            ->where('granted_at', '>=', $periodStart)
+            ->where('granted_at', '<=', $periodEnd)
             ->selectRaw('COUNT(*) as grants_count, COALESCE(SUM(minutes_granted), 0) as total_granted_minutes')
             ->first();
 
@@ -110,22 +97,19 @@ class ReportingDigestService
         $usageSeconds = (int) round(array_sum($usageByDeviceId));
 
         $activeDeviceIds = collect([
-            AccessAttempt::query()
-                ->whereIn('device_id', $deviceIds)
-                ->where('attempted_at', '>=', $periodStartUtc)
-                ->where('attempted_at', '<=', $periodEndUtc)
+            $this->violationsInPeriodQuery($deviceIds, null, $periodStart, $periodEnd)
                 ->pluck('device_id')
                 ->all(),
             BrowsingLog::query()
                 ->whereIn('device_id', $deviceIds)
-                ->where('visited_at', '>=', $periodStartUtc)
-                ->where('visited_at', '<=', $periodEndUtc)
+                ->where('visited_at', '>=', $periodStart)
+                ->where('visited_at', '<=', $periodEnd)
                 ->pluck('device_id')
                 ->all(),
             DeviceTimeGrant::query()
                 ->whereIn('device_id', $deviceIds)
-                ->where('granted_at', '>=', $periodStartUtc)
-                ->where('granted_at', '<=', $periodEndUtc)
+                ->where('granted_at', '>=', $periodStart)
+                ->where('granted_at', '<=', $periodEnd)
                 ->pluck('device_id')
                 ->all(),
             collect($usageByDeviceId)->filter(fn ($sec) => (float) $sec > 0)->keys()->all(),
@@ -137,14 +121,14 @@ class ReportingDigestService
 
         $devices = $this->buildPerDevicePayload(
             $parent,
-            $this->toImmutableUtc($periodStartUtc),
-            $this->toImmutableUtc($periodEndUtc),
+            $periodStart,
+            $periodEnd,
             $usageByDeviceId
         );
         $bandwidth = $this->bandwidthUsageService->buildDigestBandwidthSummary(
             $parent,
-            $periodStartUtc,
-            $periodEndUtc
+            $periodStart,
+            $periodEnd
         );
 
         $devices = collect($devices)
@@ -193,8 +177,8 @@ class ReportingDigestService
      */
     private function buildPerDevicePayload(
         User $parent,
-        CarbonImmutable $periodStartUtc,
-        CarbonImmutable $periodEndUtc,
+        Carbon $periodStart,
+        Carbon $periodEnd,
         array $usageSecondsByDeviceId
     ): array {
         $devices = Device::query()
@@ -207,24 +191,13 @@ class ReportingDigestService
         foreach ($devices as $device) {
             $did = (int) $device->id;
 
-            $blocked = AccessAttempt::query()
-                ->where('device_id', $did)
-                ->where('type', 'blocked_website')
-                ->where('attempted_at', '>=', $periodStartUtc)
-                ->where('attempted_at', '<=', $periodEndUtc)
-                ->count();
-
-            $flagged = AccessAttempt::query()
-                ->where('device_id', $did)
-                ->where('type', 'flagged_website')
-                ->where('attempted_at', '>=', $periodStartUtc)
-                ->where('attempted_at', '<=', $periodEndUtc)
-                ->count();
+            $blocked = $this->countViolationsInPeriod([$did], 'blocked_website', $periodStart, $periodEnd);
+            $flagged = $this->countViolationsInPeriod([$did], 'flagged_website', $periodStart, $periodEnd);
 
             $deviceTopDomains = BrowsingLog::query()
                 ->where('device_id', $did)
-                ->where('visited_at', '>=', $periodStartUtc)
-                ->where('visited_at', '<=', $periodEndUtc)
+                ->where('visited_at', '>=', $periodStart)
+                ->where('visited_at', '<=', $periodEnd)
                 ->whereNotNull('domain')
                 ->select('domain', DB::raw('SUM(COALESCE(visit_count, 1)) as visits'))
                 ->groupBy('domain')
@@ -240,8 +213,8 @@ class ReportingDigestService
 
             $grantRow = DeviceTimeGrant::query()
                 ->where('device_id', $did)
-                ->where('granted_at', '>=', $periodStartUtc)
-                ->where('granted_at', '<=', $periodEndUtc)
+                ->where('granted_at', '>=', $periodStart)
+                ->where('granted_at', '<=', $periodEnd)
                 ->selectRaw('COUNT(*) as grants_count, COALESCE(SUM(minutes_granted), 0) as total_granted_minutes')
                 ->first();
 
@@ -280,16 +253,64 @@ class ReportingDigestService
         return $rows;
     }
 
-    private function toImmutableUtc(CarbonInterface|string|null $value): CarbonImmutable
-    {
-        if ($value === null) {
-            throw new \InvalidArgumentException('Expected a non-null datetime.');
+    /**
+     * @return array{0: Carbon, 1: Carbon}
+     */
+    private function reportingPeriodBounds(
+        CarbonInterface $periodStartLocal,
+        CarbonInterface $periodEndLocal,
+        string $timezone
+    ): array {
+        $tz = $timezone !== '' ? $timezone : (string) (config('app.timezone') ?: 'UTC');
+
+        return [
+            Carbon::instance($periodStartLocal)->timezone($tz),
+            Carbon::instance($periodEndLocal)->timezone($tz),
+        ];
+    }
+
+    /**
+     * Count blocked/flagged rows in the digest window.
+     *
+     * Uses attempted_at (visit time from logs) and created_at (when the row was recorded / alert sent)
+     * so violations still appear when ParseNetworkLogs replays older log lines but emails fire today.
+     *
+     * @param  iterable<int>  $deviceIds
+     */
+    private function countViolationsInPeriod(
+        iterable $deviceIds,
+        string $type,
+        Carbon $periodStart,
+        Carbon $periodEnd
+    ): int {
+        return $this->violationsInPeriodQuery($deviceIds, $type, $periodStart, $periodEnd)->count();
+    }
+
+    /**
+     * @param  iterable<int>  $deviceIds
+     */
+    private function violationsInPeriodQuery(
+        iterable $deviceIds,
+        ?string $type,
+        Carbon $periodStart,
+        Carbon $periodEnd
+    ) {
+        $query = AccessAttempt::query()
+            ->whereIn('device_id', $deviceIds)
+            ->where(function ($outer) use ($periodStart, $periodEnd): void {
+                $outer->where(function ($q) use ($periodStart, $periodEnd): void {
+                    $q->where('attempted_at', '>=', $periodStart)
+                        ->where('attempted_at', '<=', $periodEnd);
+                })->orWhere(function ($q) use ($periodStart, $periodEnd): void {
+                    $q->where('created_at', '>=', $periodStart)
+                        ->where('created_at', '<=', $periodEnd);
+                });
+            });
+
+        if ($type !== null) {
+            $query->where('type', $type);
         }
 
-        if ($value instanceof CarbonInterface) {
-            return CarbonImmutable::createFromInterface($value)->utc();
-        }
-
-        return CarbonImmutable::parse((string) $value, 'UTC');
+        return $query;
     }
 }

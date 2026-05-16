@@ -554,6 +554,40 @@ class ReportingEmailConfigTest extends TestCase
         $this->assertSame(1, $payload['registered_devices_count']);
     }
 
+    public function test_digest_counts_violation_when_recorded_today_but_attempted_at_is_older(): void
+    {
+        $parent = User::factory()->create(['role' => 'parent']);
+        $device = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Child Tablet',
+            'mac_address' => 'AA:BB:CC:DD:EE:79',
+            'status' => 'active',
+            'role' => 'child',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        $periodStart = CarbonImmutable::now('UTC')->startOfDay();
+        $periodEnd = CarbonImmutable::now('UTC');
+
+        AccessAttempt::create([
+            'device_id' => $device->id,
+            'type' => 'blocked_website',
+            'url' => 'https://replayed-log.example',
+            'domain' => 'replayed-log.example',
+            'attempted_at' => $periodStart->subHours(6),
+        ]);
+
+        $payload = app(ReportingDigestService::class)->buildDigestPayload(
+            $parent,
+            $periodStart,
+            $periodEnd,
+            'UTC'
+        );
+
+        $this->assertSame(1, $payload['violations_summary']['blocked_count']);
+    }
+
     public function test_digest_time_usage_counts_overlap_when_session_started_before_period(): void
     {
         $parent = User::factory()->create(['role' => 'parent']);
