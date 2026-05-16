@@ -198,7 +198,11 @@ class BandwidthUsageService
         CarbonInterface $periodStartUtc,
         CarbonInterface $periodEndUtc
     ): array {
-        $devices = $parent->devices()->forReportingEmails()->orderBy('name')->get(['id', 'name', 'mac_address']);
+        $devices = Device::query()
+            ->where('user_id', $parent->id)
+            ->forReportingEmails()
+            ->orderBy('name')
+            ->get(['id', 'name', 'mac_address']);
         $deviceIds = $devices->pluck('id')->values();
 
         $perDeviceBytes = [];

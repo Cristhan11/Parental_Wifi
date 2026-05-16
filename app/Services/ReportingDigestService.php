@@ -46,7 +46,12 @@ class ReportingDigestService
         $periodEndUtc = $periodEndLocal->clone()->setTimezone('UTC');
 
         // Monitored child devices only — stricter than raw dashboard query so parent/guest rows never appear in email.
-        $deviceIds = $parent->devices()->forReportingEmails()->pluck('id');
+        // Query Device directly — `forReportingEmails` is a model scope; `$parent->devices()` is a
+        // HasMany relation and does not forward custom scopes on all Laravel versions (see BadMethodCallException).
+        $deviceIds = Device::query()
+            ->where('user_id', $parent->id)
+            ->forReportingEmails()
+            ->pluck('id');
 
         // AccessAttempt rows are created when the filtering layer records blocked/flagged attempts.
         $blockedCount = AccessAttempt::query()
@@ -83,7 +88,11 @@ class ReportingDigestService
             ->selectRaw('COUNT(*) as grants_count, COALESCE(SUM(minutes_granted), 0) as total_granted_minutes')
             ->first();
 
-        $digestDevices = $parent->devices()->forReportingEmails()->orderBy('name')->get();
+        $digestDevices = Device::query()
+            ->where('user_id', $parent->id)
+            ->forReportingEmails()
+            ->orderBy('name')
+            ->get();
         $usageByDeviceId = $this->sumDigestSessionSecondsByDevice(
             $digestDevices,
             $this->toImmutableUtc($periodStartUtc),
@@ -157,7 +166,10 @@ class ReportingDigestService
             ],
             'bandwidth' => $bandwidth,
             'active_devices_count' => $activeDeviceIds->count(),
-            'registered_devices_count' => $parent->devices()->forReportingEmails()->count(),
+            'registered_devices_count' => Device::query()
+                ->where('user_id', $parent->id)
+                ->forReportingEmails()
+                ->count(),
             'devices' => $devices,
             'has_activity' => ($blockedCount + $flaggedCount + $grantsCount + $usageMinutes + count($topDomains)) > 0,
         ];
@@ -173,7 +185,11 @@ class ReportingDigestService
         CarbonImmutable $periodEndUtc,
         array $usageSecondsByDeviceId
     ): array {
-        $devices = $parent->devices()->forReportingEmails()->orderBy('name')->get();
+        $devices = Device::query()
+            ->where('user_id', $parent->id)
+            ->forReportingEmails()
+            ->orderBy('name')
+            ->get();
         $rows = [];
 
         foreach ($devices as $device) {
