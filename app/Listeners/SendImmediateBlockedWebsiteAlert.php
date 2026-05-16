@@ -32,8 +32,20 @@ class SendImmediateBlockedWebsiteAlert
             return;
         }
 
-        $device = Device::query()->find($event->deviceId);
-        if (! $device || $device->user_id !== $user->id || ($device->role ?? 'child') !== 'child') {
+        // Same supervised set as digest emails (null/legacy empty role counts as child; not parent/guest/whitelisted).
+        $device = Device::query()
+            ->whereKey($event->deviceId)
+            ->where('user_id', $user->id)
+            ->forReportingEmails()
+            ->first();
+
+        if (! $device) {
+            $this->logSkipped(
+                $user->id,
+                'immediate_blocked_website',
+                'Device not eligible for immediate alerts (missing, parent/guest, or whitelisted).'
+            );
+
             return;
         }
 

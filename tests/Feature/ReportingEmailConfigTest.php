@@ -278,12 +278,13 @@ class ReportingEmailConfigTest extends TestCase
             'is_enabled' => true,
         ]);
 
-        $digestDay = CarbonImmutable::now('UTC')->subDay()->startOfDay()->addHours(12);
+        // Manual daily digest uses “today so far” in app timezone (UTC in this test) — activity must be today.
+        $todayNoonUtc = CarbonImmutable::now('UTC')->startOfDay()->addHours(12);
         BrowsingLog::create([
             'device_id' => $device->id,
             'url' => 'https://example.org',
             'domain' => 'example.org',
-            'visited_at' => $digestDay,
+            'visited_at' => $todayNoonUtc,
         ]);
 
         DispatchDigestReportJob::dispatchSync($parent->id, 'daily', isManualTest: true);
@@ -462,9 +463,57 @@ class ReportingEmailConfigTest extends TestCase
         ]);
 
         Mail::assertNothingSent();
-        $this->assertDatabaseMissing('report_dispatch_logs', [
+        $this->assertDatabaseHas('report_dispatch_logs', [
             'user_id' => $parent->id,
             'report_type' => 'immediate_blocked_website',
+            'status' => 'skipped',
+        ]);
+    }
+
+    public function test_blocked_website_attempt_on_legacy_empty_role_device_sends_immediate_email(): void
+    {
+        Mail::fake();
+
+        $parent = User::factory()->create(['role' => 'parent']);
+        $device = Device::create([
+            'user_id' => $parent->id,
+            'name' => 'Legacy Child Tablet',
+            'mac_address' => 'AA:BB:CC:DD:EE:78',
+            'status' => 'active',
+            'role' => '',
+            'remaining_time_minutes' => 60,
+            'total_time_allocated' => 60,
+        ]);
+
+        ReportingPreference::create([
+            'user_id' => $parent->id,
+            'immediate_alerts_enabled' => true,
+            'daily_digest_enabled' => true,
+            'weekly_digest_enabled' => true,
+            'monthly_digest_enabled' => true,
+            'timezone' => 'UTC',
+            'skip_empty_digests' => true,
+        ]);
+
+        ReportingRecipient::create([
+            'user_id' => $parent->id,
+            'email' => 'alerts@example.test',
+            'is_enabled' => true,
+        ]);
+
+        AccessAttempt::create([
+            'device_id' => $device->id,
+            'type' => 'blocked_website',
+            'url' => 'https://blocked.example',
+            'domain' => 'blocked.example',
+            'attempted_at' => now(),
+        ]);
+
+        Mail::assertSent(ImmediateBlockedWebsiteAlertMail::class);
+        $this->assertDatabaseHas('report_dispatch_logs', [
+            'user_id' => $parent->id,
+            'report_type' => 'immediate_blocked_website',
+            'status' => 'sent',
         ]);
     }
 

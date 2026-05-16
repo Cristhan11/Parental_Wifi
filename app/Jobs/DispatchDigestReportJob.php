@@ -33,8 +33,9 @@ use Throwable;
  * Flow summary:
  * 1. Load parent User + preferences + recipients.
  * 2. Bail early with a "skipped" log if disabled, no recipients, or empty digest when skip_empty is on.
- * 3. Decide the date range in the parent’s timezone: all daily runs (scheduled and UI test) use the previous
- *    completed calendar day so dispatch logs match what was emailed and skip-empty behaves consistently.
+ * 3. Decide the reporting window: scheduled daily digests use the previous completed calendar day in the
+ *    parent’s reporting timezone. Manual daily tests use today from midnight through “now” in the app
+ *    timezone so usage minutes match the dashboard TIME USAGE card (same definition as the UI).
  * 4. Call ReportingDigestService to build a big `$payload` array for Blade.
  * 5. For each recipient email: send mailable, then insert ReportDispatchLog (sent or failed).
  */
@@ -89,13 +90,19 @@ class DispatchDigestReportJob implements ShouldQueue
         }
 
         // Fallback timezone if DB column is empty — see config/reporting.php.
-        $timezone = $preference->timezone ?: config('reporting.default_timezone');
+        $preferenceTimezone = $preference->timezone ?: config('reporting.default_timezone');
+
+        // Manual daily tests align with the dashboard: “today so far” in app timezone. Scheduled digests use
+        // the parent’s reporting timezone for the completed previous day/week/month.
+        $digestWindowTimezone = ($this->isManualTest && $this->frequency === 'daily')
+            ? (config('app.timezone') ?: 'UTC')
+            : $preferenceTimezone;
 
         // Tuple destructuring: `resolvePeriodWindow` returns [start, end] as CarbonImmutable instances.
-        [$periodStart, $periodEnd] = $this->resolvePeriodWindow($timezone);
+        [$periodStart, $periodEnd] = $this->resolvePeriodWindow($digestWindowTimezone);
 
         // All heavy SQL aggregation lives in the service — keeps this job readable.
-        $payload = $digestService->buildDigestPayload($user, $periodStart, $periodEnd, $timezone);
+        $payload = $digestService->buildDigestPayload($user, $periodStart, $periodEnd, $digestWindowTimezone);
 
         // Extra keys the Blade layout expects (service focuses on metrics; job adds presentation metadata).
         $payload['dashboard_url'] = config('reporting.email_dashboard_url');
@@ -109,7 +116,7 @@ class DispatchDigestReportJob implements ShouldQueue
             return;
         }
 
-        $subject = $this->buildSubject($periodStart, $periodEnd, $timezone);
+        $subject = $this->buildSubject($periodStart, $periodEnd, $digestWindowTimezone);
 
         foreach ($recipients as $email) {
             try {
@@ -184,19 +191,19 @@ class DispatchDigestReportJob implements ShouldQueue
     }
 
     /**
-     * Compute [start, end] of the reporting window in the parent’s timezone.
+     * Compute [start, end] of the reporting window in `$timezone`.
      *
      * Scheduled runs use the previous day/week/month so an early-morning cron summarizes completed periods.
-     * Manual daily tests (UI / `reporting:send-test`) reuse the same “yesterday” window as the scheduler so
-     * “skipped / empty digest” logs align with preference checks and queued test sends cannot bypass them
-     * by switching to a different day.
+     * Manual daily tests use midnight → now (partial day) so totals match the dashboard for the same moment.
      */
     private function resolvePeriodWindow(string $timezone): array
     {
         $now = CarbonImmutable::now($timezone);
 
         return match ($this->frequency) {
-            'daily' => [$now->subDay()->startOfDay(), $now->subDay()->endOfDay()],
+            'daily' => $this->isManualTest
+                ? [$now->startOfDay(), $now]
+                : [$now->subDay()->startOfDay(), $now->subDay()->endOfDay()],
             'weekly' => [$now->subWeek()->startOfWeek(), $now->subWeek()->endOfWeek()],
             'monthly' => [$now->subMonth()->startOfMonth(), $now->subMonth()->endOfMonth()],
             default => throw new InvalidArgumentException('Unsupported digest frequency.'),

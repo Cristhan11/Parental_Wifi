@@ -28,8 +28,19 @@ class SendImmediateFlaggedWebsiteAlert
             return;
         }
 
-        $device = Device::query()->find($event->deviceId);
-        if (! $device || $device->user_id !== $user->id || ($device->role ?? 'child') !== 'child') {
+        $device = Device::query()
+            ->whereKey($event->deviceId)
+            ->where('user_id', $user->id)
+            ->forReportingEmails()
+            ->first();
+
+        if (! $device) {
+            $this->logSkipped(
+                $user->id,
+                'immediate_flagged_website',
+                'Device not eligible for immediate alerts (missing, parent/guest, or whitelisted).'
+            );
+
             return;
         }
 
