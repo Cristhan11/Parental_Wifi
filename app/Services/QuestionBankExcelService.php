@@ -532,13 +532,24 @@ class QuestionBankExcelService
     }
 
     /**
-     * Prefer quiz JSON questions when present (quizzes created/edited in the app); otherwise export the question bank.
+     * Rows for Excel export: full question bank when available; otherwise in-app JSON questions.
      *
      * @return Collection<int, QuestionBankItem|array<string, mixed>>
      */
     protected function collectRowsForQuizExport(Quiz $quiz): Collection
     {
+        $bankItems = ($quiz->level && $quiz->subject)
+            ? QuestionBankItem::queryForFixedQuiz($quiz)->orderBy('id')->get()
+            : collect();
+
         $portalQuestions = $quiz->questions['questions'] ?? [];
+        $jsonCount = is_array($portalQuestions) ? count($portalQuestions) : 0;
+
+        // Do not export a partial JSON snapshot (e.g. old 15-question edit preview) when the bank is larger.
+        if ($bankItems->isNotEmpty() && ($jsonCount === 0 || $jsonCount < $bankItems->count())) {
+            return $bankItems;
+        }
+
         if (is_array($portalQuestions) && $portalQuestions !== []) {
             $rows = collect($portalQuestions)
                 ->filter(fn (mixed $q): bool => is_array($q) && trim((string) ($q['question'] ?? '')) !== '')
@@ -549,9 +560,7 @@ class QuestionBankExcelService
             }
         }
 
-        return QuestionBankItem::queryForFixedQuiz($quiz)
-            ->orderBy('id')
-            ->get();
+        return $bankItems;
     }
 
     /**

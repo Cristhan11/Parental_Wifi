@@ -155,6 +155,67 @@ class QuestionBankImportExportTest extends TestCase
         $this->assertSame('', trim((string) $sheet->getCell('H6')->getValue()));
     }
 
+    public function test_export_uses_full_bank_when_json_has_fewer_questions_than_bank(): void
+    {
+        $user = User::factory()->create();
+        $quiz = Quiz::create([
+            'user_id' => $user->id,
+            'title' => 'Kindergarten General Questions for Mathematics',
+            'description' => null,
+            'level' => 'Kindergarten',
+            'subject' => 'Math',
+            'question_count' => 15,
+            'scoring_mode' => 'pass_score',
+            'minutes_per_correct' => 1,
+            'passing_score' => 70,
+            'time_reward_minutes' => 15,
+            'max_passes_per_day' => null,
+            'retry_cooldown_minutes' => null,
+            'questions' => ['questions' => array_map(
+                fn (int $i): array => [
+                    'id' => $i,
+                    'question' => "Partial JSON question {$i}",
+                    'type' => 'multiple_choice',
+                    'options' => ['1', '2', '3', '4'],
+                    'correct_answer' => '1',
+                ],
+                range(1, 15)
+            )],
+            'is_active' => true,
+        ]);
+
+        foreach (range(1, 50) as $i) {
+            QuestionBankItem::create([
+                'user_id' => $user->id,
+                'quiz_id' => $quiz->id,
+                'level' => 'Kindergarten',
+                'subject' => 'Math',
+                'question_text' => "Bank question {$i}",
+                'option_a' => '1',
+                'option_b' => '2',
+                'option_c' => '3',
+                'option_d' => '4',
+                'correct_option' => 'A',
+                'status' => 'Active',
+            ]);
+        }
+
+        $response = $this->actingAs($user)->get(route('quizzes.question-bank.export', [
+            'export_level' => 'Kindergarten',
+            'quiz_ids' => [$quiz->id],
+        ]));
+
+        $response->assertOk();
+        $path = tempnam(sys_get_temp_dir(), 'qb-full').'.xlsx';
+        file_put_contents($path, $response->streamedContent());
+        $sheet = IOFactory::load($path)->getActiveSheet();
+        @unlink($path);
+
+        $this->assertSame('Bank question 1', trim((string) $sheet->getCell('A7')->getValue()));
+        $this->assertSame('Bank question 50', trim((string) $sheet->getCell('A56')->getValue()));
+        $this->assertSame('', trim((string) $sheet->getCell('A57')->getValue()));
+    }
+
     public function test_export_succeeds_when_quiz_title_contains_excel_invalid_characters(): void
     {
         $user = User::factory()->create();
