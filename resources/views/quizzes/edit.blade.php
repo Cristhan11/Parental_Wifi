@@ -176,8 +176,6 @@
                                 </button>
                             </div>
 
-                            @include('quizzes.partials.edit-save-toolbar', ['variant' => 'compact'])
-
                             <div id="questionsContainer">
                                 <!-- Questions will be loaded here -->
                             </div>
@@ -187,7 +185,7 @@
                             @enderror
                         </div>
 
-                        @include('quizzes.partials.edit-save-toolbar', ['variant' => 'inline'])
+                        @include('quizzes.partials.edit-save-toolbar', ['variant' => 'dock'])
                     </form>
                 </div>
             </div>
@@ -385,6 +383,10 @@
                 }
                 
                 window.quizQuestionIndex++;
+
+                if (typeof window.syncQuizEditFloatingSave === 'function') {
+                    window.requestAnimationFrame(window.syncQuizEditFloatingSave);
+                }
             } catch (error) {
                 console.error('Error adding question:', error);
                 alert('Error adding question: ' + error.message);
@@ -573,6 +575,46 @@
                 });
             });
 
+            const saveDock = document.getElementById('quizEditSaveDock');
+            const floatingActions = document.getElementById('quizEditFloatingActions');
+            const scrollRoot = document.getElementById('appPageScroll');
+
+            if (saveDock && floatingActions) {
+                const setFloatingVisible = function (visible) {
+                    if (visible) {
+                        floatingActions.classList.remove('is-docked');
+                        floatingActions.style.opacity = '1';
+                        floatingActions.style.pointerEvents = 'auto';
+                        floatingActions.style.transform = 'translateY(0)';
+                    } else {
+                        floatingActions.classList.add('is-docked');
+                        floatingActions.style.opacity = '0';
+                        floatingActions.style.pointerEvents = 'none';
+                        floatingActions.style.transform = 'translateY(0.5rem)';
+                    }
+                };
+
+                const isDockInView = function () {
+                    const rect = saveDock.getBoundingClientRect();
+                    const edge = 16;
+                    return rect.top < (window.innerHeight - edge) && rect.bottom > edge;
+                };
+
+                const syncFloatingSave = function () {
+                    setFloatingVisible(!isDockInView());
+                };
+
+                ['scroll', 'resize'].forEach(function (eventName) {
+                    window.addEventListener(eventName, syncFloatingSave, { passive: true });
+                    if (scrollRoot) {
+                        scrollRoot.addEventListener(eventName, syncFloatingSave, { passive: true });
+                    }
+                });
+
+                window.syncQuizEditFloatingSave = syncFloatingSave;
+                syncFloatingSave();
+            }
+
             // Load existing questions on page load
             if (document.readyState === 'loading') {
                 document.addEventListener('DOMContentLoaded', function() {
@@ -593,6 +635,10 @@
                     } else {
                         console.log('questionsContainer found, ready to add questions');
                     }
+
+                    if (typeof window.syncQuizEditFloatingSave === 'function') {
+                        window.syncQuizEditFloatingSave();
+                    }
                 });
             } else {
                 // DOM already loaded
@@ -604,6 +650,10 @@
                         console.log('Loading question', index + 1, question);
                         window.addQuestion(question, { scrollAndFocus: false });
                     });
+                }
+
+                if (typeof window.syncQuizEditFloatingSave === 'function') {
+                    window.syncQuizEditFloatingSave();
                 }
             }
         })();

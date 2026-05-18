@@ -84,7 +84,7 @@
                 @endisset
 
                 <!-- Page Content -->
-                <div class="flex-1 min-h-0 overflow-y-auto">
+                <div id="appPageScroll" class="flex-1 min-h-0 overflow-y-auto">
                     {{ $slot }}
                 </div>
             </div>
