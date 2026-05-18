@@ -128,4 +128,27 @@ class QuestionBankItem extends Model
             'correct_answer' => (string) $this->correct_option,
         ];
     }
+
+    /**
+     * Portal payload adjusted for the parent quiz editor (correct answer = option text).
+     *
+     * @return array{id:int,question:string,type:string,options:array<int,string>,correct_answer:string}
+     */
+    public function toEditorQuestionPayload(int $index): array
+    {
+        $payload = $this->toPortalQuestionPayload($index);
+
+        if ($payload['type'] !== 'multiple_choice') {
+            return $payload;
+        }
+
+        $correctMap = ['A' => 0, 'B' => 1, 'C' => 2, 'D' => 3];
+        $letter = strtoupper((string) $this->correct_option);
+        if (in_array($letter, ['A', 'B', 'C', 'D'], true)) {
+            $opts = $payload['options'];
+            $payload['correct_answer'] = $opts[$correctMap[$letter]] ?? $opts[0];
+        }
+
+        return $payload;
+    }
 }

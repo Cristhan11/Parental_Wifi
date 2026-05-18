@@ -285,34 +285,8 @@ class QuizController extends Controller
             abort(403, 'Unauthorized action.');  // 403 = Forbidden
         }
 
-        // Backward compatibility for early seeded/built-in quizzes that were created
-        // with empty question JSON. Hydrate visible questions from question bank for edit UI.
-        $existingQuestions = $quiz->questions['questions'] ?? [];
-        if (empty($existingQuestions) && $quiz->level && $quiz->subject) {
-            $questionCount = max(1, (int) ($quiz->question_count ?? 10));
-            $generatedQuestions = QuestionBankItem::queryForFixedQuiz($quiz)
-                ->inRandomOrder()
-                ->limit($questionCount)
-                ->get()
-                ->values()
-                ->map(function (QuestionBankItem $item, int $index): array {
-                    $payload = $item->toPortalQuestionPayload($index);
-                    if ($payload['type'] === 'multiple_choice') {
-                        $correctMap = ['A' => 0, 'B' => 1, 'C' => 2, 'D' => 3];
-                        $letter = strtoupper((string) $item->correct_option);
-                        if (in_array($letter, ['A', 'B', 'C', 'D'], true)) {
-                            $idx = $correctMap[$letter];
-                            $opts = $payload['options'];
-                            $payload['correct_answer'] = $opts[$idx] ?? $opts[0];
-                        }
-                    }
-
-                    return $payload;
-                })
-                ->all();
-
-            $quiz->setAttribute('questions', ['questions' => $generatedQuestions]);
-        }
+        // Built-in / bank-backed quizzes: show the full question bank in the editor (not just question_count).
+        $this->hydrateEditorQuestionsFromBank($quiz);
 
         $devices = $this->quizAssignableDevices();
 
@@ -769,5 +743,32 @@ class QuizController extends Controller
         $requested = (int) ($validated['question_count'] ?? 15);
 
         return min(max(1, $requested), $pool);
+    }
+
+    /**
+     * Load every bank item into the edit form when JSON is missing or shorter than the bank.
+     */
+    private function hydrateEditorQuestionsFromBank(Quiz $quiz): void
+    {
+        if (! $quiz->level || ! $quiz->subject) {
+            return;
+        }
+
+        $bankItems = QuestionBankItem::queryForFixedQuiz($quiz)->orderBy('id')->get();
+        if ($bankItems->isEmpty()) {
+            return;
+        }
+
+        $existingQuestions = $quiz->questions['questions'] ?? [];
+        if (! empty($existingQuestions) && count($existingQuestions) >= $bankItems->count()) {
+            return;
+        }
+
+        $editorQuestions = $bankItems
+            ->values()
+            ->map(fn (QuestionBankItem $item, int $index): array => $item->toEditorQuestionPayload($index))
+            ->all();
+
+        $quiz->setAttribute('questions', ['questions' => $editorQuestions]);
     }
 }
