@@ -14,7 +14,7 @@
         </div>
     </x-slot>
 
-    <div class="py-12">
+    <div class="py-12 pb-28">
         <div class="max-w-4xl mx-auto sm:px-6 lg:px-8">
             <div class="bg-white overflow-hidden shadow-sm sm:rounded-lg border border-gray-200">
                 <div class="p-6">
@@ -185,18 +185,21 @@
                             @enderror
                         </div>
 
-                        <!-- Submit Buttons -->
-                        <div class="flex justify-end space-x-3">
-                            <a href="{{ route('quizzes.index') }}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50">
-                                Cancel
-                            </a>
-                            <button type="submit" class="px-4 py-2 rounded text-white font-medium hover:opacity-90" style="background-color: #FFDE15; color: #000000;">
-                                Update Quiz
-                            </button>
-                        </div>
                     </form>
                 </div>
             </div>
+        </div>
+    </div>
+
+    {{-- Sticky save bar: always visible while editing settings or questions --}}
+    <div class="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-4px_12px_rgba(0,0,0,0.08)] xl:left-64">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-end gap-3">
+            <a href="{{ route('quizzes.index') }}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 bg-white">
+                Cancel
+            </a>
+            <button type="submit" form="quizForm" class="px-4 py-2 rounded font-medium hover:opacity-90 shadow-sm" style="background-color: #FFDE15; color: #000000;">
+                Update Quiz
+            </button>
         </div>
     </div>
 

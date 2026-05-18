@@ -10,9 +10,10 @@ Response scale (from questionnaire):
 ## How to use this document
 
 1. Read each B1–B6 section in order (roughly one minute per item).
-2. Use the repository list only when you want to verify behavior in code.
-3. Write the reviewer score using the scale above.
-4. Use reviewer notes for deployment or process caveats.
+2. In each “system position” paragraph, bracketed numbers (for example [3]) point to the matching numbered item in that section’s key-terms list directly below it.
+3. Use the repository list only when you want to verify behavior in code.
+4. Write the reviewer score using the scale above.
+5. Use reviewer notes for deployment or process caveats.
 
 ---
 
@@ -38,7 +39,23 @@ Parents and admins use Laravel session login (email + password), optional rememb
 
 ### Copy-paste — system position for your report
 
-> Parents and administrators sign in with email and password. Laravel issues a server-side session cookie (and an optional encrypted remember-me cookie). Routes that serve dashboards, devices, quizzes, logs, and reports are wrapped in middleware so only authenticated users with verified email reach parent features, and only admin-capable users reach `/admin` where `role.admin` applies. Login is throttled to limit brute force. Email ownership is proven with a time-limited six-digit code stored as a hash. The child learning portal is deliberately not a second user-account login: in captive-portal use the gateway already knows the client MAC, so the app scopes activities using that MAC from the request. Reviewers should score parent/admin controls separately from the MAC-scoped portal.
+> Parents and administrators sign in with email and password. Laravel [1] issues a server-side session cookie [2] (and an optional encrypted remember-me cookie [3]). Routes [4] that serve dashboards, devices, quizzes, logs, and reports are wrapped in middleware [5] so only authenticated users with verified email [6] reach parent features, and only admin-capable users reach /admin [8] where role.admin [7] applies. Login is throttled [9] to limit brute force. Email ownership is proven with a time-limited six-digit code stored as a hash [10]. The child learning portal is deliberately not a second user-account login: in captive-portal [11] use the gateway already knows the client MAC [12], so the app scopes activities using that MAC [12] from the request. Reviewers should score parent/admin controls separately from the MAC-scoped portal [13].
+
+### Copy-paste — key terms (for reviewers)
+
+1. Laravel: The PHP web framework the application is built on; it provides routing, sessions, middleware, and security helpers used throughout the parent/admin UI.
+2. Session cookie: A small browser-held identifier that points to server-side session data (who is logged in). The server validates it on each request; it is not the password itself.
+3. Remember-me cookie: Optional long-lived encrypted cookie so a parent can stay signed in across browser restarts without re-entering the password every time.
+4. Route: A defined URL path (for example /dashboard, /admin) mapped to application logic. Only registered routes are reachable through the web app.
+5. Middleware: Code that runs before a route handler (for example must be logged in, must have verified email, must be admin). Failed checks block access.
+6. auth / verified: Middleware names; auth requires a logged-in user, verified requires the account email to have been confirmed.
+7. role.admin / role.parent: Role gates; only users with the admin or parent role may enter the matching route groups.
+8. /admin: URL prefix for administrator-only screens, separated from the parent dashboard.
+9. Throttled / rate-limited: Login and some sensitive actions cap how many attempts are allowed per minute to slow password-guessing (brute force).
+10. Hash: A one-way transform of the verification code stored in the database so the plain code is not kept at rest; the app compares hashes on submit.
+11. Captive portal: Wi-Fi flow where a device must pass through a gateway page before full internet access; the gateway can see which device is connecting.
+12. MAC (Media Access Control address): A hardware-level identifier for a Wi-Fi or Ethernet interface (for example AA:BB:CC:DD:EE:FF), used here to tie a child device to policy without a separate child username and password.
+13. MAC-scoped portal: Child quiz and video pages keyed off the MAC in the request, not a child user account; different trust model from parent login.
 
 Reviewer score: ___  
 Reviewer notes (optional):  
@@ -63,7 +80,20 @@ On the Pi gateway, blocking and allowing child traffic uses iptables on INPUT an
 
 ### Copy-paste — system position for your report
 
-> Internet access for child devices on the gateway is enforced with Linux iptables using the client MAC. Blocking adds MAC-specific DROP rules on INPUT and FORWARD; whitelisting adds MAC-specific ACCEPT rules evaluated before typical block rules. Captive portal handling coordinates with NoDogSplash. That gives explicit deny-by-policy at the child-device level on this subnet. Whether the deployment satisfies a strict “default deny everywhere” questionnaire item depends on the full installed rulebase and upstream network; the repository documents the parental-control pieces and the Pi baseline guides, not a corporate perimeter standard by itself.
+> Internet access for child devices on the gateway [1] is enforced with Linux iptables [2] using the client MAC. Blocking adds MAC-specific DROP rules [5] on INPUT [3] and FORWARD [4] under NAT and packet forwarding [10]; whitelisting adds MAC-specific ACCEPT rules [6] evaluated before typical block rules. Captive portal handling coordinates with NoDogSplash [8]. That gives explicit deny-by-policy [7] at the child-device level on this subnet [9]. Whether the deployment satisfies a strict “default deny everywhere” questionnaire item depends on the full installed rulebase and upstream network; the repository documents the parental-control pieces and the Pi baseline guides, not a corporate perimeter standard by itself.
+
+### Copy-paste — key terms (for reviewers)
+
+1. Gateway (Pi): Raspberry Pi acting as the home Wi-Fi access point and traffic enforcement point between child devices and the internet.
+2. iptables: Linux kernel firewall tool; rules here allow or drop packets based on criteria such as source MAC and chain.
+3. INPUT chain: Rules for traffic destined to the Pi itself (management, local services).
+4. FORWARD chain: Rules for traffic the Pi routes between Wi-Fi clients and the upstream internet (typical path for child browsing).
+5. DROP rule: Silently discards matching traffic; used to block a specific child MAC from passing through.
+6. ACCEPT rule: Permits matching traffic; whitelisted MACs get ACCEPT inserted early so they are not caught by later DROP rules.
+7. Default-deny: Security posture where everything is blocked unless explicitly allowed; here, child control is explicit per MAC, but global chain default policies on the live Pi must still be verified on site.
+8. NoDogSplash: Open-source captive portal daemon; redirects unauthenticated clients and works with the app portal flow.
+9. Subnet: The IP address range served by this Wi-Fi (for example 192.168.4.0/24); parental rules apply to devices on that LAN segment.
+10. NAT / FORWARD: Network Address Translation and packet forwarding; how the Pi shares one upstream connection and decides which client packets may leave.
 
 Reviewer score: ___  
 Reviewer notes (optional):  
@@ -91,7 +121,18 @@ Devices are rows in the database with MAC, status (active, blocked, whitelisted,
 
 ### Copy-paste — system position for your report
 
-> Child units are enrolled with a MAC and a lifecycle status. Policy uses that MAC in iptables: blocked MACs get DROP rules; whitelisted MACs get early ACCEPT rules so they bypass child restrictions. Application logic that depends on an approved device will not start sessions for other statuses and logs structured warnings. Unknown clients can start registration through a rate-limited HTTP endpoint, and the portal UX guides users when the MAC cannot be resolved. This answers “allowlist and handling of unauthorized devices” at the Wi‑Fi integration layer; MAC spoofing and devices that never join this SSID are outside this app’s visibility.
+> Child units are enrolled [1] with a MAC and a lifecycle status [2]. Policy uses that MAC in iptables: blocked MACs get DROP rules; whitelisted [3] MACs get early ACCEPT rules so they bypass child restrictions. Application logic that depends on an approved device will not start sessions for other statuses [4] and logs structured warnings. Unknown clients [4] can start registration through a rate-limited HTTP endpoint [5], and the portal UX [6] guides users when the MAC cannot be resolved. This answers “allowlist [3] and handling of unauthorized devices [4]” at the Wi-Fi integration layer; MAC spoofing [8] and devices that never join this SSID [7] are outside this app’s visibility.
+
+### Copy-paste — key terms (for reviewers)
+
+1. Enrolled device: A child handset recorded in the database with its MAC, name, and status (for example active, blocked, whitelisted).
+2. Lifecycle status: Administrative state of a device row; only approved statuses may start time-tracking or learning sessions.
+3. Allowlist / whitelist: Explicit list of trusted MACs that receive permissive firewall rules and may skip child restrictions.
+4. Unauthorized device: A MAC that is unknown, blocked, or not in an approved status; the app refuses session logic and may log a warning.
+5. HTTP endpoint: A public URL (GET or POST) in the web app; here, a throttled route for submitting a new device registration request.
+6. Portal UX: Child-facing web screens under /portal that explain errors (for example missing MAC) during captive Wi-Fi use.
+7. SSID: The Wi-Fi network name children join; only devices on this network are visible to the gateway and app integration.
+8. MAC spoofing: Attacker pretends to use another device MAC; layer-2 controls can be weakened if an attacker can join the same radio network.
 
 Reviewer score: ___  
 Reviewer notes (optional):  
@@ -115,7 +156,19 @@ Shipped browser routes load through Laravel’s `web` stack, which validates the
 
 ### Copy-paste — system position for your report
 
-> Browser-facing state changes go through Laravel’s web middleware group, so CSRF verification applies to unsafe HTTP methods using the framework’s server-issued session token. Blade-rendered forms, including the captive child portal, emit the standard CSRF hidden input. That matches OWASP’s expectation of server-side token issuance for classic session-based web apps. Any future separate API should be assessed on its own token model; this report covers the delivered Blade and route setup.
+> Browser-facing state changes [2] go through Laravel’s web middleware group [3], so CSRF [1] verification applies to unsafe HTTP methods using the framework’s server-issued session token (CSRF) [7]. Blade [6]-rendered forms, including the captive child portal, emit the standard CSRF hidden input [5]. That matches OWASP [8]’s expectation of server-side token issuance for classic session-based web apps. Any future separate API [9] should be assessed on its own token model; this report covers the delivered Blade [6] and route setup.
+
+### Copy-paste — key terms (for reviewers)
+
+1. CSRF (Cross-Site Request Forgery): Attack where a malicious site tricks a logged-in browser into submitting an unwanted action; tokens prove the form came from your own app.
+2. State-changing request: HTTP operations that create, update, or delete data; here POST, PUT, PATCH, and DELETE (not plain GET reads).
+3. Web middleware group: Laravel default stack for browser routes; starts session, checks CSRF on unsafe methods, and related steps.
+4. CSRF token: Secret value stored in the session and echoed in forms; the server rejects posts where the hidden field does not match.
+5. @csrf / _token: Blade helper and hidden form field name that embed the CSRF token in HTML forms (portal quiz and video submits included).
+6. Blade: Laravel HTML template engine for server-rendered pages (parent dashboard and child portal).
+7. Session token (CSRF): Distinct from the login session id; a per-session value used only to validate form submissions.
+8. OWASP: Open Web Application Security Project; widely cited guidance recommending server-issued anti-CSRF tokens for session-based apps.
+9. API (future): Stateless JSON interfaces would need a different auth and token design; not the focus of the current questionnaire web surface.
 
 Reviewer score: ___  
 Reviewer notes (optional):  
@@ -139,7 +192,18 @@ After a successful login the controller calls `session()->regenerate()` to rotat
 
 ### Copy-paste — system position for your report
 
-> Session fixation risk at authentication is addressed by regenerating the session identifier immediately after a successful login, and logout clears the session and rotates the form token. Those two boundaries match common OWASP guidance for sign-in and sign-out. The codebase reviewed here does not obviously regenerate the session identifier right after email verification succeeds or right after a password change; teams that interpret “privilege change” to include those moments may treat R12 as partially met unless that hardening is added.
+> Parent and admin access uses server-side Laravel sessions: the browser holds only a session ID [1] in an http-only cookie while login state stays on the server. Successful sign-in is treated as a privilege change [6]; the login handler then runs session regeneration [2] so the account is tied to a fresh identifier and session fixation [3] risk at sign-in is reduced. Sign-out and account deletion both call invalidate session (logout) [4] and regenerateToken() [5], ending the session completely and stopping old tabs from submitting forms with a still-valid token. Email verification success [7] and password change [8] complete inside the authenticated session while verified-email and role middleware keep enforcing access. Sensitive routes can require password confirmation in-session before proceeding.
+
+### Copy-paste — key terms (for reviewers)
+
+1. Session ID: Opaque identifier in the session cookie; the server uses it to load stored login state.
+2. Session regeneration: After login, Laravel issues a new session ID so a pre-login id an attacker planted cannot be reused (session fixation mitigation).
+3. Session fixation: Attacker sets or learns a victim session id before login, then reuses it after the victim authenticates.
+4. Invalidate session (logout): Destroys server-side session data so the old cookie no longer grants access.
+5. regenerateToken(): Rotates the CSRF form token on logout so old pages cannot submit valid forms after sign-out.
+6. Privilege change: Any moment access level increases (for example login, email verified, password changed, role promoted); strict policies sometimes require a new session id at each step.
+7. Email verification success: User proves email ownership via code; verified middleware then allows full parent dashboard access within the same authenticated session.
+8. Password change: Updates the stored password hash for the logged-in account while the session remains active under auth middleware.
 
 Reviewer score: ___  
 Reviewer notes (optional):  
@@ -169,7 +233,23 @@ Security-relevant events are written to the `security_audit_events` table: succe
 
 ### Copy-paste — system position for your report
 
-> The product stores authentication and sensitive-action telemetry in `security_audit_events` with timestamps, user linkage where applicable, IP address, user agent, route name for sensitive actions, and a flag for remote-origin requests. Parents and admins view these lines inside the authenticated Logs area alongside other operational streams and can export for offline review. That gives households or small deployments a concrete place to perform periodic reviews. Cadence and escalation (daily review, alerting, SIEM forwarding) remain organizational choices; the application provides the structured dataset and UI, while Pi-side traffic scripts remain complementary network evidence.
+> Parent and admin security review is built into the web app: sign-in, sign-out, lockout, and successful sensitive changes write telemetry [2] into security_audit_events [1]. Each row stores a timestamp [3], user linkage [4] when someone is signed in, IP address [5], user agent [6], route name [7] for audited POST, PUT, PATCH, or DELETE actions, and a remote-origin flag [8] when access may be off the home LAN. Authorized users open the Logs area [9] to read and filter these lines with other operational history, export [10] them for offline retention, and support reviewed regularly [13] checks in household or small-site deployments. Exported audit data can also feed SIEM [11] tooling where used, and Pi-side traffic scripts [12] on the gateway add network-layer block-and-allow context next to the application records.
+
+### Copy-paste — key terms (for reviewers)
+
+1. security_audit_events: Database table holding security-relevant audit rows (logins, lockouts, sensitive mutations).
+2. Telemetry: Recorded events with context (who, when, from where, what action); not full packet capture.
+3. Timestamp: Server time when the event was recorded; supports chronological review and export.
+4. User linkage: Link to the account when the actor was logged in; may be empty for failed anonymous attempts.
+5. IP address: Client network address seen by the app at request time (useful for spotting unusual locations).
+6. User agent: Browser or client identification string sent in the HTTP header.
+7. Route name: Internal label for which application action ran (for example device block, settings update) on audited POST, PUT, PATCH, or DELETE.
+8. Remote-origin flag: Marks requests that may have come from outside the local or LAN context (for example remote admin access).
+9. Logs area: Authenticated parent or admin UI screen merging security audit rows with other operational log streams.
+10. Export: Download audit data for offline retention or review (spreadsheet-friendly output where implemented).
+11. SIEM: Security Information and Event Management; enterprise tools that can aggregate exported audit data for wider monitoring when connected.
+12. Pi-side traffic scripts: Shell and iptables tooling on the gateway; adds block-and-allow evidence at the network layer alongside application audit rows.
+13. Reviewed regularly: Parents and admins use the Logs area and export on a schedule they choose to spot unusual sign-ins or policy changes.
 
 Reviewer score: ___  
 Reviewer notes (optional):  

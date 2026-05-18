@@ -277,66 +277,55 @@
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Actions</th>
                                     </tr>
                                 </thead>
-                                <tbody class="bg-white divide-y divide-gray-200">
+                                <tbody class="divide-y divide-amber-100/60">
                                     @foreach($quizzes as $quiz)
-                                        <tr>
-                                            @php
-                                                $levelBadge = match ($quiz->level) {
-                                                    'Kindergarten' => ['bg' => '#FCE7F3', 'text' => '#9D174D'],
-                                                    'Elementary' => ['bg' => '#DBEAFE', 'text' => '#1D4ED8'],
-                                                    'High School' => ['bg' => '#EDE9FE', 'text' => '#6D28D9'],
-                                                    'Senior High School' => ['bg' => '#FEF3C7', 'text' => '#92400E'],
-                                                    default => ['bg' => '#E5E7EB', 'text' => '#374151'],
-                                                };
-                                                $rowHighlight = match (strtolower((string) $quiz->subject)) {
-                                                    'math' => '#35858E',
-                                                    'english' => '#7DA78C',
-                                                    'science' => '#C2D099',
-                                                    default => '#E6EEC9',
-                                                };
-                                                $rowTextColor = match (strtolower((string) $quiz->subject)) {
-                                                    'math', 'english' => '#F9FAFB',
-                                                    default => '#111827',
-                                                };
-                                                $rowSubTextColor = match (strtolower((string) $quiz->subject)) {
-                                                    'math', 'english' => '#E5E7EB',
-                                                    default => '#374151',
-                                                };
-                                            @endphp
-                                            <td class="px-6 py-4 whitespace-nowrap" style="background-color: {{ $rowHighlight }};">
-                                                <div class="text-sm font-medium" style="color: {{ $rowTextColor }};">{{ $quiz->title }}</div>
+                                        @php
+                                            $subjectStyle = \App\Support\QuizSubjectPalette::forSubject($quiz->subject);
+                                            $levelBadge = match ($quiz->level) {
+                                                'Kindergarten' => ['bg' => '#FEF3C7', 'text' => '#92400E'],
+                                                'Elementary' => ['bg' => '#FDE68A', 'text' => '#78350F'],
+                                                'High School' => ['bg' => '#FCD34D', 'text' => '#713F12'],
+                                                'Senior High School' => ['bg' => '#FFDE15', 'text' => '#1C1917'],
+                                                default => ['bg' => '#F5F5F4', 'text' => '#44403C'],
+                                            };
+                                        @endphp
+                                        <tr style="background-color: {{ $subjectStyle['bg'] }}; color: {{ $subjectStyle['text'] }};">
+                                            <td class="px-6 py-4 whitespace-nowrap">
+                                                <div class="text-sm font-semibold">{{ $quiz->title }}</div>
                                                 @if($quiz->description)
-                                                    <div class="text-sm" style="color: {{ $rowSubTextColor }};">{{ Str::limit($quiz->description, 50) }}</div>
+                                                    <div class="text-sm" style="color: {{ $subjectStyle['muted'] }};">{{ Str::limit($quiz->description, 50) }}</div>
                                                 @endif
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="background-color: {{ $rowHighlight }}; color: {{ $rowTextColor }};">
-                                                <span class="rounded-full px-2.5 py-1 text-xs font-semibold" style="background-color: {{ $levelBadge['bg'] }}; color: {{ $levelBadge['text'] }};">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
+                                                <span class="rounded-full px-2.5 py-1 text-xs font-semibold ring-1 ring-inset ring-black/5" style="background-color: {{ $levelBadge['bg'] }}; color: {{ $levelBadge['text'] }};">
                                                     {{ $quiz->level ?? 'Legacy' }}
                                                 </span>
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" style="background-color: {{ $rowHighlight }}; color: {{ $rowTextColor }};">
-                                                {{ $quiz->subject ?? '-' }}
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                <span class="inline-flex rounded-full border px-2.5 py-0.5 text-xs font-semibold" style="border-color: {{ $subjectStyle['border'] }}; background-color: rgba(255,255,255,0.45); color: {{ $subjectStyle['text'] }};">
+                                                    {{ $quiz->subject ?? '-' }}
+                                                </span>
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="background-color: {{ $rowHighlight }}; color: {{ $rowTextColor }};">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
                                                 {{ $quiz->question_count ?? count($quiz->questions['questions'] ?? []) }}
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="background-color: {{ $rowHighlight }}; color: {{ $rowTextColor }};">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
                                                 {{ $quiz->passing_score }}%
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="background-color: {{ $rowHighlight }}; color: {{ $rowTextColor }};">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
                                                 {{ $quiz->time_reward_minutes }} min
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap" style="background-color: {{ $rowHighlight }};">
+                                            <td class="px-6 py-4 whitespace-nowrap">
                                                 @if($quiz->is_active)
-                                                    <span class="px-2 py-1 text-xs font-semibold rounded-full" style="background-color: #10B981; color: white;">Active</span>
+                                                    <span class="rounded-full bg-emerald-600 px-2 py-1 text-xs font-semibold text-white">Active</span>
                                                 @else
-                                                    <span class="px-2 py-1 text-xs font-semibold rounded-full bg-gray-400 text-white">Inactive</span>
+                                                    <span class="rounded-full bg-stone-400 px-2 py-1 text-xs font-semibold text-white">Inactive</span>
                                                 @endif
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm" style="background-color: {{ $rowHighlight }}; color: {{ $rowTextColor }};">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm">
                                                 {{ $quiz->attempts_count }}
                                             </td>
-                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium" style="background-color: {{ $rowHighlight }};">
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                                                 <div class="flex space-x-2">
                                                     <a href="{{ route('quizzes.edit', $quiz) }}" class="px-3 py-1 rounded text-white hover:opacity-90" style="background-color: #3B82F6;">
                                                         Edit

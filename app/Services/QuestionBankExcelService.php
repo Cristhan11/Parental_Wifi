@@ -1189,6 +1189,106 @@ class QuestionBankExcelService
     }
 
     /**
+     * Read built-in quiz Excel workbooks from a directory (used by database seeders).
+     *
+     * @return list<array{
+     *     source_file: string,
+     *     quiz_title: string,
+     *     level: string,
+     *     subject: string,
+     *     items: list<array<string, mixed>>
+     * }>
+     */
+    public function readSeedBlocksFromDirectory(string $directory): array
+    {
+        $path = rtrim($directory, '/\\');
+        $files = glob($path.DIRECTORY_SEPARATOR.'*.xlsx') ?: [];
+        sort($files);
+
+        /** @var list<array{source_file: string, quiz_title: string, level: string, subject: string, items: list<array<string, mixed>>}> $blocks */
+        $blocks = [];
+
+        foreach ($files as $filePath) {
+            $spreadsheet = IOFactory::load($filePath);
+            foreach ($spreadsheet->getAllSheets() as $sheet) {
+                if ($sheet->getSheetState() === Worksheet::SHEETSTATE_HIDDEN) {
+                    continue;
+                }
+
+                $parsed = $this->parseModernSheet($sheet);
+                if ($parsed === null) {
+                    continue;
+                }
+
+                $level = $parsed['level'];
+                $subject = $parsed['subject'];
+                if (! in_array($level, QuizSchoolLevel::levels(), true)) {
+                    throw new \RuntimeException(
+                        'Invalid school level in '.basename($filePath).': '.$level
+                    );
+                }
+
+                $quizTitle = $this->resolveQuizTitleFromMeta(
+                    trim($parsed['quizTitle']),
+                    $subject,
+                    $level
+                );
+
+                $rows = $sheet->toArray();
+                $dataRows = array_slice($rows, $parsed['headerRowIndex'] + 1);
+                $columnMap = $parsed['columnMap'];
+                $sheetLabel = $sheet->getTitle();
+
+                /** @var list<array<string, mixed>> $items */
+                $items = [];
+
+                foreach ($dataRows as $offset => $row) {
+                    $rowNumber = $parsed['headerRowIndex'] + $offset + 2;
+                    $iq = $columnMap['question'];
+                    if (trim((string) ($row[$iq] ?? '')) === '') {
+                        break;
+                    }
+
+                    $payload = $this->validateModernRow(
+                        $row,
+                        $rowNumber,
+                        $level,
+                        $subject,
+                        $columnMap,
+                        "File \"".basename($filePath)."\" sheet \"{$sheetLabel}\""
+                    );
+
+                    if (is_string($payload)) {
+                        throw new \RuntimeException($payload);
+                    }
+
+                    $attributes = $payload['attributes'];
+                    $attributes['source_competency'] = $quizTitle;
+                    $items[] = $attributes;
+                }
+
+                if ($items === []) {
+                    continue;
+                }
+
+                $blocks[] = [
+                    'source_file' => basename($filePath),
+                    'quiz_title' => $quizTitle,
+                    'level' => $level,
+                    'subject' => $subject,
+                    'items' => $items,
+                ];
+            }
+        }
+
+        if ($blocks === []) {
+            throw new \RuntimeException('No quiz seed blocks found in: '.$path);
+        }
+
+        return $blocks;
+    }
+
+    /**
      * @param  list<string>  $items
      */
     protected function applyDropdown(Worksheet $sheet, string $range, array $items): void
