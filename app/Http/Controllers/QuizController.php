@@ -142,7 +142,10 @@ class QuizController extends Controller
             END")
             ->orderBy('subject')
             ->latest()
-            ->get();
+            ->get()
+            ->each(function (Quiz $quiz): void {
+                $quiz->setAttribute('total_questions_in_pool', $quiz->totalQuestionsInPool());
+            });
 
         return view('quizzes.index', compact(
             'quizzes',
@@ -216,6 +219,17 @@ class QuizController extends Controller
         // Questions come from form as: [0 => question1, 1 => question2, ...]
         // We convert to: [id => 1, id => 2, ...] for better readability
         $questions = [];
+        foreach (($validated['questions'] ?? []) as $index => $question) {
+            $questions[] = [
+                'id' => $index + 1,
+                'question' => $question['question'],
+                'type' => $question['type'],
+                'options' => $question['options'] ?? [],
+                'correct_answer' => $question['correct_answer'],
+            ];
+        }
+
+        $totalPool = max(1, count($questions));
 
         // Create quiz record in database
         // Quiz::create() automatically saves to database
@@ -225,7 +239,7 @@ class QuizController extends Controller
             'description' => $validated['description'] ?? null,  // Optional description
             'level' => $validated['level'],
             'subject' => $validated['subject'],
-            'question_count' => (int) ($validated['question_count'] ?? 10),
+            'question_count' => $this->resolveQuestionCountPerAttempt($validated, $totalPool),
             'scoring_mode' => $scoringMode,
             'minutes_per_correct' => $minutesPerCorrect,
             'passing_score' => $passingScore,
@@ -308,7 +322,9 @@ class QuizController extends Controller
             ->pluck('devices.id')
             ->toArray();
 
-        return view('quizzes.edit', compact('quiz', 'devices', 'assignedDeviceIds'));
+        $totalQuestionsInPool = $quiz->totalQuestionsInPool();
+
+        return view('quizzes.edit', compact('quiz', 'devices', 'assignedDeviceIds', 'totalQuestionsInPool'));
     }
 
     /**
@@ -359,6 +375,10 @@ class QuizController extends Controller
             ];
         }
 
+        $totalPool = ($quiz->level && $quiz->subject)
+            ? (int) QuestionBankItem::queryForFixedQuiz($quiz)->count()
+            : max(1, count($questions));
+
         // Update quiz record in database
         // $quiz->update() saves changes to existing record
         $quiz->update([
@@ -366,7 +386,7 @@ class QuizController extends Controller
             'description' => $validated['description'] ?? null,
             'level' => $validated['level'],
             'subject' => $validated['subject'],
-            'question_count' => (int) ($validated['question_count'] ?? ($quiz->question_count ?: 10)),
+            'question_count' => $this->resolveQuestionCountPerAttempt($validated, max(1, $totalPool)),
             'scoring_mode' => $scoringMode,
             'minutes_per_correct' => $minutesPerCorrect,
             'passing_score' => $passingScore,
@@ -738,5 +758,16 @@ class QuizController extends Controller
                 'is_active' => true,
             ]
         );
+    }
+
+    /**
+     * @param  array<string, mixed>  $validated
+     */
+    private function resolveQuestionCountPerAttempt(array $validated, int $totalPool): int
+    {
+        $pool = max(1, $totalPool);
+        $requested = (int) ($validated['question_count'] ?? 15);
+
+        return min(max(1, $requested), $pool);
     }
 }

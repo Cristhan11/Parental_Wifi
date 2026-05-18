@@ -89,6 +89,10 @@
                             </div>
                         </div>
 
+                        <div class="mb-6">
+                            @include('quizzes.partials.question-count-field', ['totalQuestionsInPool' => 0])
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
                                 <label for="max_passes_per_day" class="block text-sm font-medium text-gray-700 mb-2">Max passed completions per day</label>

@@ -60,6 +60,25 @@ class UpdateQuizRequest extends FormRequest
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $quiz = $this->route('quiz');
+            if (! $quiz instanceof \App\Models\Quiz) {
+                return;
+            }
+
+            $max = max(1, $quiz->totalQuestionsInPool());
+            $count = (int) $this->input('question_count', 15);
+            if ($count > $max) {
+                $validator->errors()->add(
+                    'question_count',
+                    "Cannot show more than {$max} questions (total in the bank)."
+                );
+            }
+        });
+    }
+
     public function rules(): array
     {
         return [
@@ -67,7 +86,7 @@ class UpdateQuizRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:1000'],
             'level' => ['required', 'string', Rule::in(QuizSchoolLevel::levels())],
             'subject' => ['required', 'string', 'max:100'],
-            'question_count' => ['nullable', 'integer', 'in:5,10,15'],
+            'question_count' => ['required', 'integer', 'min:1', 'max:500'],
             'minutes_per_correct' => ['nullable', 'integer', 'min:1', 'max:60'],
             'passing_score' => ['required', 'integer', 'min:0', 'max:100'],
             'time_reward_minutes' => ['required', 'integer', 'min:1'],

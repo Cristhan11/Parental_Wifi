@@ -76,6 +76,24 @@ class StoreQuizRequest extends FormRequest
      *
      * @return array<string, \Illuminate\Contracts\Validation\ValidationRule|array<mixed>|string>
      */
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator): void {
+            $questions = $this->input('questions', []);
+            $filled = is_array($questions)
+                ? count(array_filter($questions, fn ($q) => is_array($q) && trim((string) ($q['question'] ?? '')) !== ''))
+                : 0;
+            $max = max(1, $filled);
+            $count = (int) $this->input('question_count', 15);
+            if ($count > $max) {
+                $validator->errors()->add(
+                    'question_count',
+                    "Cannot show more than {$max} questions (total you added)."
+                );
+            }
+        });
+    }
+
     public function rules(): array
     {
         return [
@@ -86,7 +104,7 @@ class StoreQuizRequest extends FormRequest
             'description' => ['nullable', 'string', 'max:1000'],
             'level' => ['required', 'string', Rule::in(QuizSchoolLevel::levels())],
             'subject' => ['required', 'string', 'max:100'],
-            'question_count' => ['nullable', 'integer', 'in:5,10,15'],
+            'question_count' => ['required', 'integer', 'min:1', 'max:500'],
             'minutes_per_correct' => ['nullable', 'integer', 'min:1', 'max:60'],
 
             // Passing Score and fixed time reward only apply in pass_score mode.

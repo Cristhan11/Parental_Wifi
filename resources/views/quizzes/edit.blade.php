@@ -99,6 +99,10 @@
                             </div>
                         </div>
 
+                        <div class="mb-6">
+                            @include('quizzes.partials.question-count-field', ['quiz' => $quiz, 'totalQuestionsInPool' => $totalQuestionsInPool ?? 0])
+                        </div>
+
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
                             <div>
                                 <label for="max_passes_per_day" class="block text-sm font-medium text-gray-700 mb-2">Max passed completions per day</label>
@@ -252,6 +256,25 @@
 
             bindRequiredFieldFeedback();
 
+            window.updateQuestionPoolLimits = function () {
+                const input = document.getElementById('question_count');
+                const label = document.getElementById('questionPoolTotal');
+                if (!input) {
+                    return;
+                }
+                const bankTotal = parseInt(input.dataset.bankTotal || '0', 10);
+                const formCount = document.querySelectorAll('[id^="question-"]').length;
+                const total = bankTotal > 0 ? bankTotal : Math.max(1, formCount);
+                input.max = String(total);
+                if (label && bankTotal <= 0) {
+                    label.textContent = String(Math.max(1, formCount));
+                }
+                const value = parseInt(input.value || '15', 10);
+                if (value > total) {
+                    input.value = String(total);
+                }
+            };
+
             // Global question counter (starts at 0, increments for each new question)
             window.quizQuestionIndex = 0;
             
@@ -387,6 +410,9 @@
                 if (typeof window.syncQuizEditFloatingSave === 'function') {
                     window.requestAnimationFrame(window.syncQuizEditFloatingSave);
                 }
+                if (typeof window.updateQuestionPoolLimits === 'function') {
+                    window.updateQuestionPoolLimits();
+                }
             } catch (error) {
                 console.error('Error adding question:', error);
                 alert('Error adding question: ' + error.message);
@@ -439,6 +465,9 @@
                 if (questionDiv) {
                     questionDiv.remove();
                     window.updateQuestionNumbers();
+                    if (typeof window.updateQuestionPoolLimits === 'function') {
+                        window.updateQuestionPoolLimits();
+                    }
                 }
             };
 
@@ -639,6 +668,9 @@
                     if (typeof window.syncQuizEditFloatingSave === 'function') {
                         window.syncQuizEditFloatingSave();
                     }
+                    if (typeof window.updateQuestionPoolLimits === 'function') {
+                        window.updateQuestionPoolLimits();
+                    }
                 });
             } else {
                 // DOM already loaded
@@ -654,6 +686,9 @@
 
                 if (typeof window.syncQuizEditFloatingSave === 'function') {
                     window.syncQuizEditFloatingSave();
+                }
+                if (typeof window.updateQuestionPoolLimits === 'function') {
+                    window.updateQuestionPoolLimits();
                 }
             }
         })();

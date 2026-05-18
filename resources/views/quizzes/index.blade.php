@@ -269,7 +269,8 @@
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Quiz Title</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Level</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Subject</th>
-                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Questions</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Question bank</th>
+                                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Per attempt</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Passing Percentage</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Time Reward</th>
                                         <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
@@ -306,8 +307,11 @@
                                                     {{ $quiz->subject ?? '-' }}
                                                 </span>
                                             </td>
+                                            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
+                                                {{ $quiz->total_questions_in_pool ?? $quiz->totalQuestionsInPool() }}
+                                            </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm">
-                                                {{ $quiz->question_count ?? count($quiz->questions['questions'] ?? []) }}
+                                                {{ $quiz->questionsPerChildAttempt() }}
                                             </td>
                                             <td class="px-6 py-4 whitespace-nowrap text-sm">
                                                 {{ $quiz->passing_score }}%

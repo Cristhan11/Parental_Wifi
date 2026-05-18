@@ -144,6 +144,31 @@ class Quiz extends Model
         return $this->title === self::RANDOM_MODE_SETTINGS_TITLE;
     }
 
+    /** Total questions in the bank or in quiz JSON (not the per-attempt limit). */
+    public function totalQuestionsInPool(): int
+    {
+        if ($this->isRandomModeSettingsQuiz()) {
+            return 0;
+        }
+
+        if ($this->level && $this->subject) {
+            return (int) QuestionBankItem::queryForFixedQuiz($this)->count();
+        }
+
+        $questions = $this->questions['questions'] ?? [];
+
+        return is_array($questions) ? count($questions) : 0;
+    }
+
+    /** How many random questions a child sees per attempt (default 15). */
+    public function questionsPerChildAttempt(): int
+    {
+        $pool = max(1, $this->totalQuestionsInPool());
+        $requested = (int) ($this->question_count ?: 15);
+
+        return min(max(1, $requested), $pool);
+    }
+
     /**
      * School levels for random bank draws for this device (pivot on device_quiz).
      * Only used when this quiz is the Random Quiz Mode settings row.
