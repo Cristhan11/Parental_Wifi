@@ -84,11 +84,12 @@
                 @endisset
 
                 <!-- Page Content -->
-                <div class="flex-1 overflow-hidden">
+                <div class="flex-1 min-h-0 overflow-y-auto">
                     {{ $slot }}
                 </div>
             </div>
         </div>
+        @stack('floating-actions')
         @stack('scripts')
     </body>
 </html>

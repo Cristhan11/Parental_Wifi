@@ -185,23 +185,39 @@
                             @enderror
                         </div>
 
+                        <div class="mt-6 flex justify-end gap-3 border-t border-gray-200 pt-6">
+                            <a href="{{ route('quizzes.index') }}" class="rounded-md border border-gray-300 px-4 py-2 text-gray-700 hover:bg-gray-50">
+                                Cancel
+                            </a>
+                            <button type="submit" class="rounded-md px-4 py-2 font-medium hover:opacity-90" style="background-color: #FFDE15; color: #000000;">
+                                Update Quiz
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>
         </div>
     </div>
 
-    {{-- Sticky save bar: always visible while editing settings or questions --}}
-    <div class="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-200 bg-white/95 backdrop-blur-sm shadow-[0_-4px_12px_rgba(0,0,0,0.08)] xl:left-64">
-        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex justify-end gap-3">
-            <a href="{{ route('quizzes.index') }}" class="px-4 py-2 border border-gray-300 rounded-md text-gray-700 hover:bg-gray-50 bg-white">
-                Cancel
-            </a>
-            <button type="submit" form="quizForm" class="px-4 py-2 rounded font-medium hover:opacity-90 shadow-sm" style="background-color: #FFDE15; color: #000000;">
-                Update Quiz
-            </button>
-        </div>
+    @push('floating-actions')
+    <div
+        id="quizEditFloatingActions"
+        class="fixed bottom-6 right-4 z-[100] flex gap-3 rounded-lg border border-gray-300 bg-white p-2 shadow-lg sm:right-8 lg:right-12"
+        style="max-width: calc(100vw - 2rem);"
+    >
+        <a href="{{ route('quizzes.index') }}" class="whitespace-nowrap rounded-md border border-gray-300 bg-white px-4 py-2 text-gray-700 hover:bg-gray-50">
+            Cancel
+        </a>
+        <button
+            type="button"
+            id="quizEditFloatingSubmit"
+            class="whitespace-nowrap rounded-md px-4 py-2 font-semibold hover:opacity-90"
+            style="background-color: #FFDE15; color: #000000;"
+        >
+            Update Quiz
+        </button>
     </div>
+    @endpush
 
     @push('scripts')
     <script>
@@ -562,6 +578,17 @@
                             });
                         }
                     });
+                });
+            }
+
+            const floatingSubmit = document.getElementById('quizEditFloatingSubmit');
+            if (floatingSubmit && quizForm) {
+                floatingSubmit.addEventListener('click', function () {
+                    if (typeof quizForm.requestSubmit === 'function') {
+                        quizForm.requestSubmit();
+                    } else {
+                        quizForm.submit();
+                    }
                 });
             }
 
