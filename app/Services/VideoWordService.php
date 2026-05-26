@@ -52,13 +52,29 @@ class VideoWordService
      */
     public function selectRandomWords(int $wordCount): Collection
     {
-        // Get all available dictionary words from database
+        // Clamp to at least 1 so we never silently return an empty collection
+        // when a caller accidentally passes 0 or a negative number.
+        $wordCount = max(1, $wordCount);
+
+        // Get a random sample from the dictionary pool.
         // ->inRandomOrder() randomizes the order (shuffles results)
         // ->take($wordCount) limits to the requested number of words
-        // ->get() executes query and returns collection
-        return DictionaryWord::inRandomOrder()
+        $picked = DictionaryWord::inRandomOrder()
             ->take($wordCount)
             ->get();
+
+        // Defensive top-up: if the dictionary pool is smaller than $wordCount
+        // (small seed, fresh install, or rows were removed), keep adding random
+        // re-picks until we have exactly $wordCount items. This prevents the
+        // "I entered 3 but only 2 words appear and are required" off-by-one.
+        if ($picked->count() < $wordCount && $picked->isNotEmpty()) {
+            $needed = $wordCount - $picked->count();
+            for ($i = 0; $i < $needed; $i++) {
+                $picked->push($picked->random());
+            }
+        }
+
+        return $picked;
     }
 
     /**
@@ -126,38 +142,67 @@ class VideoWordService
             return [];
         }
 
-        // Calculate time interval per word
-        // Divides video duration into equal intervals
-        // Example: 600 seconds / 5 words = 120 seconds per interval
-        $interval = $durationSeconds / $wordCount;
+        // Maximum legal integer timestamp for the JS handleTimeUpdate check
+        // (currentTime is floor()ed, so values must fit strictly below durationSeconds).
+        $maxTimestamp = max(0, $durationSeconds - 1);
 
-        // Generate random timestamp for each word
-        $timestamps = [];
-        for ($i = 0; $i < $wordCount; $i++) {
-            // Calculate start and end of interval for this word
-            // Word 0: 0 to interval (e.g., 0-120)
-            // Word 1: interval to 2*interval (e.g., 120-240)
-            // Word 2: 2*interval to 3*interval (e.g., 240-360)
-            // etc.
-            $intervalStart = $i * $interval;
-            $intervalEnd = ($i + 1) * $interval;
-
-            // Generate random timestamp within this interval
-            // rand() generates random integer between start and end
-            // (int) casts to integer (removes decimals)
-            $timestamp = (int) rand($intervalStart, $intervalEnd);
-
-            // Ensure timestamp doesn't exceed video duration (safety check)
-            if ($timestamp >= $durationSeconds) {
-                $timestamp = $durationSeconds - 1;
+        // If the video is shorter than the requested word count, we cannot give
+        // each word its own distinct second. Fall back to evenly spaced ints
+        // clamped to the legal range (some may end up equal on very short clips).
+        if ($durationSeconds <= $wordCount) {
+            $timestamps = [];
+            for ($i = 0; $i < $wordCount; $i++) {
+                $timestamps[] = min($i, $maxTimestamp);
             }
 
-            $timestamps[] = $timestamp;
+            return $timestamps;
         }
 
-        // Sort timestamps in ascending order
-        // Ensures words appear in chronological order during playback
+        // Divide the playable range into N equal float intervals and pick one
+        // integer second inside each. We then walk through the list and bump any
+        // collision (timestamp <= previous) to previous+1 so every word gets its
+        // own second. This guarantees handleTimeUpdate fires once per word.
+        $interval = $durationSeconds / $wordCount;
+        $timestamps = [];
+
+        for ($i = 0; $i < $wordCount; $i++) {
+            $intervalStart = (int) floor($i * $interval);
+            $intervalEnd = (int) ceil(($i + 1) * $interval) - 1;
+
+            if ($intervalEnd < $intervalStart) {
+                $intervalEnd = $intervalStart;
+            }
+            if ($intervalEnd > $maxTimestamp) {
+                $intervalEnd = $maxTimestamp;
+            }
+            if ($intervalStart > $maxTimestamp) {
+                $intervalStart = $maxTimestamp;
+            }
+
+            $timestamps[] = random_int($intervalStart, $intervalEnd);
+        }
+
         sort($timestamps);
+
+        // Enforce strictly-increasing, at-least-1s-apart timestamps so two words
+        // never collide on the same second (which would visually look like a
+        // single overlay and consume the same `timeupdate` tick on the client).
+        for ($i = 1; $i < $wordCount; $i++) {
+            if ($timestamps[$i] <= $timestamps[$i - 1]) {
+                $timestamps[$i] = $timestamps[$i - 1] + 1;
+            }
+        }
+
+        // If pushing the last timestamps forward overflowed the video length,
+        // pack them back from the end so every word stays inside [0, max].
+        if ($timestamps[$wordCount - 1] > $maxTimestamp) {
+            $timestamps[$wordCount - 1] = $maxTimestamp;
+            for ($i = $wordCount - 2; $i >= 0; $i--) {
+                if ($timestamps[$i] >= $timestamps[$i + 1]) {
+                    $timestamps[$i] = max(0, $timestamps[$i + 1] - 1);
+                }
+            }
+        }
 
         return $timestamps;
     }

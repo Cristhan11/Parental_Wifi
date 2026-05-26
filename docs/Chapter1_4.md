@@ -487,6 +487,18 @@ and intuitive for non-technical parents, so overly complex workflows
 are intentionally avoided to prevent overwhelming them. 
 
 
+Baseline User Competence, the system assumes that the child user
+already knows how to operate a basic device such as a phone, a tablet, 
+or a computer, and can open a web browser and visit pages without 
+step-by-step help. The captive portal is not a beginner's tutorial; it 
+presents the activity that lets the child earn more internet time. 
+The same baseline applies on the parent side. A parent who opens the 
+dashboard should already have general internet skills, including 
+filling out online forms, signing in to a web page, and following 
+short on-screen instructions. The dashboard is kept simple where it 
+can be, yet it still expects the user to follow a normal web flow. 
+
+
 Maintenance and Monitoring for parents may need to update blocklists,
 quizzes, and videos periodically, lightweight maintenance is expected. 
 
@@ -601,32 +613,46 @@ through quizzes and educational videos.
 
 
 *1.8.1 Ask: Identify the Need and Constraints  ______________________*
-The project started with an understanding of the clear pain points
-parents face in monitoring their children’s internet usage. What 
-parents want is to know what websites their kids visit, block 
-inappropriate content, set limits on how much time children can spend
-online, and receive notifications if something alarming happens. On
-the other hand, they seek something that will further encourage 
-learning, which is why the system requires kids to complete quizzes or
-watch educational videos in order to earn more Internet time.
+The project began with a close look at what parents face every 
+day when they try to keep an eye on their children's internet 
+use. Parents want to see which websites their kids open, block 
+content that is not appropriate, set a daily limit on time 
+spent online, and receive an alert as soon as something on the 
+network needs their attention. Parents also want to turn screen 
+time into a learning moment, which is why the system asks the 
+child to finish a short quiz or to watch an educational video 
+before more internet time is unlocked.
 
 
-In building this system, however, came a few constraints that shaped
-the design. The computing platform was selected for affordability. The 
-platform was selected for sufficient processing power. This processing 
-power can run a Wi-Fi access point. This processing power can run a 
-web server. The system is limited in processing power compared to 
-dedicated servers. The system operates on the local network by 
-default. This keeps things simple and secure. Remote access can be 
-added if needed later. Most websites now use HTTPS encryption. The 
-system can only see what domains children visit. The system cannot see 
-the pages children visit. The system cannot see the content children 
-view.
+A handful of constraints shaped the design from the start. The 
+computing platform is a Raspberry Pi 4B because it is 
+affordable, low power, and still strong enough to run the Wi-Fi 
+access point, the captive portal, and the Laravel web 
+application on one box. Its capacity is modest next to a 
+dedicated server, so background jobs are kept lightweight and 
+traffic analysis stops at the domain level. The system runs on 
+the local home network by default to keep the setup simple and 
+to keep household data at home; secured remote access is opt-in 
+and is added later if the parent decides to enable it. Most 
+websites use HTTPS, so the system can see the domain a child 
+visited, but it cannot see the page or the encrypted body. The 
+system also depends on a PLDT-compatible home router that 
+allows captive portal and DNS redirection, so home setups 
+outside that boundary fall out of scope.
 
-Parents must create educational quizzes. Parents must upload 
-educational quizzes. Parents must create educational videos. Parents 
-must upload educational videos. Thus, the system needs to be designed 
-in such a way as to make this process as smooth as possible.
+The user side carries its own practical limits. The child 
+portal screens were designed against the cognitive guidance for 
+the 7 to 9 age bracket in Meloncon et al., 2010, so the system 
+treats seven years old as the lowest practical age for a child 
+using the captive portal on their own; younger children may 
+still benefit, but only with adult-assisted use. The parent 
+side likewise assumes general internet skills such as filling 
+in a web form and signing in to a web page. Quizzes and 
+educational videos are created or curated by the parent, 
+supported by a seeded question bank, an Excel import or export 
+path, and a video upload form, so the day-to-day setup work is 
+kept small while still relying on the parent to choose and 
+approve the content the child will see.
 
 
 *1.8.2 Research the Problem ____________________________*

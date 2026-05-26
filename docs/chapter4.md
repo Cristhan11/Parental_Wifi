@@ -4,344 +4,259 @@
 
 # CHAPTER 4: FINAL DESIGN
 
-This chapter presents the finalized design of the Child-Centric Wi-Fi Monitoring and Control System with Learning Access Management and Automated Reporting. It explains how hardware placement and network roles fit together. It explains how software layers enforce policy, capture activity, and deliver the parent dashboard. It also documents how the prototype was tested, how outcomes were judged, what the results showed, and what the design implies for households and the wider community.
+This chapter presents the completed design of the Child-Centric Wi-Fi Monitoring and Control System with Learning Access Management and Automated Reporting. It explains the hardware layout and the software stack that drive the appliance. It then describes the test procedure, the evaluation rules, and the survey results gathered from three respondent groups. Finally, it shows how the gathered evidence matches the objectives and scope set in Chapter 1, and closes with a brief discussion of the design's impact on the community.
 
-The guiding idea stayed consistent from earlier chapters. Parents need a single place to govern child devices. Children need clear rules and a fair path to earn more access. The appliance should keep routine data at home. Engineering choices should stay understandable on a small edge computer.
+The core idea from earlier chapters carries through this chapter. Parents need one place to govern child devices. Children need clear rules and a fair way to earn more access. The appliance keeps household data on a small edge computer at home. Each engineering choice stays understandable for a household to operate.
 
 
 ## 4.1 Final Design
 
-The final design is an integrated edge appliance. One Raspberry Pi hosts the part of the home setup this project controls, a supervised wireless segment, the captive portal, the web application, and the database. Parents can open the dashboard from that segment, from elsewhere on the LAN, or through a secured remote path if they configure one. The design does not assume every device in the home uses the Pi for internet, parents may still rely on the existing router Wi-Fi for their own or guests’ general access. Children who fall under supervision connect to the child-oriented Wi-Fi the Pi offers so rules apply network-wide for those devices instead of depending only on separate app installs.
+The final design is a single edge appliance. One Raspberry Pi 4B holds the access point, the captive portal, the web application, and the database. Parents reach the dashboard from the Pi-side network, from anywhere on the home LAN, or through a secured remote path if the household chooses to set one up. The design does not push every home device through the Pi. Parents and guests may still use the existing home router for general browsing. Child devices, however, join the Pi-side network so the rules apply at the network layer instead of relying on apps installed on each handset.
 
+### 4.1.1 Hardware and Topological Design
 
-### 4.1.1 Hardware/Topological Design
+The home router or modem-router still receives the ISP service. The Raspberry Pi connects upstream to that home router through one Ethernet cable. Parent laptops and phones, plus child tablets and similar handsets, join the wireless networks the Pi serves. The Pi becomes the hub at the supervised side of the house. It forwards traffic outward through the Ethernet uplink. It hands out addressing and DNS to clients that join its Wi-Fi.
 
-**Topological design (assumed layout).**  
-This subsection assumes one clear chain from the ISP to the people who use the Raspberry Pi as their Wi-Fi access point for both administration and supervision. The home router (or combined modem-router) still receives the ISP service. Only the Raspberry Pi connects to that home router through a single Ethernet uplink. Parent laptops and phones, and child tablets and similar devices, do not rely on the home router’s Wi-Fi in this layout, they associate with wireless networks the Pi provides. The Pi becomes the local hub: it forwards traffic upstream on that cable and supplies addressing and DNS on the inside. Parent devices typically use a less restrictive segment for everyday browsing and for opening the dashboard without an extra network hop. Child devices use a supervised segment where schedules, blocks, and captive portal rules apply. An optional guest SSID on the Pi can follow the same physical pattern with policy the household chooses.
-
-A simple view of the chain is:
+A simple chain view of the layout is shown below.
 
 ```
 [ ISP ] ---- [ Home router ] ---- Ethernet ---- [ Raspberry Pi 4B ]
                                                       |
                         +-----------------------------+-----------------------------+
                         |                             |                             |
-                 Parent Wi-Fi                  Guest Wi-Fi                   Child Wi-Fi
-                 (less restrictive)                                      (portal + enforcement)
+                 Parent Wi-Fi                  Guest Wi-Fi                  Child Wi-Fi
+                 (less restrictive)            (optional)               (portal + enforcement)
 ```
 
-**Role of the Raspberry Pi 4B.**  
-The Raspberry Pi 4B is the control node. It terminates Ethernet from the existing home router or modem segment. It exposes a dedicated wireless network for children’s devices. It runs the services that shape DNS, DHCP, forwarding, firewall rules, and portal behavior. Solid-state storage supports the database, uploaded educational media, and log retention without wearing a small SD card too quickly when traffic is continuous.
+**Topology diagram image here**
+*(Render the actual SSID map for the deployed test bed, including the upstream PLDT modem and the Pi-side networks.)*
 
-**Physical connection pattern.**  
-A typical home already has an ISP device and a main Wi-Fi network for adults and guests. The Pi connects upstream with a LAN cable. That cable supplies Internet reachability to the Pi. The Pi then creates its own wireless cell for supervised use. This separation keeps child policies from fighting the whole-house network settings. It also keeps portal logic focused on devices that parents intentionally enroll.
+The Pi 4B class hardware was chosen because it draws low power, runs quietly, and is easy to replace if a part fails. A solid-state drive carries the database, uploaded videos, and the rolling log files. The SSD avoids the wear pattern that small SD cards usually show when traffic is steady throughout the day.
 
-**Traffic path in plain terms.**  
-When a child device joins the child SSID, it receives addressing and DNS from the Pi-side services. Outbound traffic passes through Linux forwarding and firewall rules tied to device identity at the MAC layer. When policy says the device should be open, traffic flows normally. When policy says time expired or schedule forbids use, the same identity is used to block or to steer the session toward the captive portal experience.
+The traffic path stays simple. A child device joins the supervised SSID. The Pi-side services hand back addressing and DNS. The Linux kernel then decides whether a request goes through or not. Decisions key off the MAC address of the device, so a single identity follows the child handset across blocks, allowances, and portal redirects. When policy says the device is open, the request travels upstream normally. When policy says the time is up or the schedule blocks use, the same identity is used to deny the request or steer it toward the captive portal screen.
 
-**Captive portal placement.**  
-NoDogSplash sits on the path for portal enforcement. It helps intercept ordinary browsing attempts and send the user toward the Laravel-hosted portal pages for quiz or video completion. This works together with firewall decisions so that “blocked but needs education” states remain coherent.
-
-**DNS and blocking topology.**  
-dnsmasq provides DNS for the child network. Domain-level and app-oriented blocking uses DNS answers directed away from real destinations, which stops many mobile apps and browsers without breaking TLS by trying to inspect encrypted payloads. Parents still see domain-oriented history because queries are logged and later parsed, not because the system decrypts HTTPS content.
-
-**Power and operational footprint.**  
-The Pi class hardware stays low power for continuous duty. Heat and noise stay modest compared with a full PC gateway. Replacement parts are small and common, which matters for long-running home equipment.
-
+NoDogSplash handles the portal redirect, while dnsmasq supplies DNS on the inside. Domain-level and app-oriented blocking happens through DNS answers directed to a non-routable target. That keeps the system out of the encrypted payload and still stops many browsers and apps from reaching the real destination. Parents still see domain history because DNS queries are logged and parsed by a background job, not because the system tries to inspect HTTPS content.
 
 ### 4.1.2 Software Design
 
-**Application stack.**  
-The system’s visible layer is a Laravel 12 web application: routes, authentication, validation, queues, scheduling, and Blade templates. MariaDB holds devices, schedules, quizzes, videos, browsing-derived records, access attempts, and grant history. Nginx with PHP-FPM serves pages on the Pi, and Alpine.js supports light interactivity without a separate single-page framework. What parents and children actually see first is therefore browser-based—forms, lists, and portal pages—not raw services. The figure below should show that entry surface.
+The software surface that parents touch is a Laravel 12 web application. The application provides routes, authentication, validation, queues, scheduled jobs, and Blade templates. MariaDB holds the devices, schedules, quizzes, videos, parsed browsing rows, access attempts, and grant history. Nginx with PHP-FPM serves the pages on the Pi. Alpine.js adds light interactivity without a full single-page framework. What parents and children open first is therefore a browser surface, not a raw service.
 
-**Parent login / registration image here**  
-*(Capture sign-in and sign-up, including email verification steps if registration uses them. This illustrates the web stack as something users open in a browser, the boundary between anonymous visitors and authenticated parents, and the first line of security before any household data appears.)*
+**Parent login and registration image here**
+*(Capture the sign-in and sign-up flow, including the six-digit email verification step. This sets the boundary between anonymous visitors and authenticated parents.)*
 
-**Account and device roles.**  
-After authentication, the system separates roles clearly. Dashboard users are parents or administrators with accounts. Enrolled phones and tablets are devices with MAC addresses and policies—they never receive a parent password. A seeded administrator can approve new parent sign-ups after email verification. An ordinary parent only sees that parent’s own devices, schedules, block and flag lists, history, and reporting settings. A promoted household operator may also open administration views in the same session without logging in again. The next figure should show the parent’s main landing view after login: the operational “home” of that account.
+Roles are separated inside the application. Dashboard accounts belong to parents or administrators. Enrolled phones and tablets are device rows keyed by MAC; they never receive a parent password. A seeded administrator approves new parent sign-ups after email verification. An ordinary parent sees only that parent's own devices, schedules, block lists, flag lists, history, and report settings.
 
-**Parent dashboard home image here**  
-*(Show the overview the parent sees first—device summaries, alerts, or recent activity if the UI provides them. This ties the abstract stack to a single screen parents use daily and, where present, shows how live-style information reaches the parent.)*
+**Parent dashboard home image here**
+*(Show the landing view the parent reaches after sign-in, including device summaries, alerts, or recent activity if the UI exposes them.)*
 
-**Device list and device detail image here**  
-*(Show the list of child or guest devices and one expanded device record. The screenshot should display identifiers such as MAC, remaining time or allocation, status, and any whitelist or block indicators the screen exposes. This matches the database fields the jobs read and the objects NetworkService and portal logic target.)*
+**Device list and device detail image here**
+*(Show the inventory of child or guest devices and one expanded record so the reader can see the MAC, the remaining time, the status, and the whitelist or block markers.)*
 
-Child and guest entries are rows in the parent’s device inventory, not separate login accounts. The captive portal does not expose parent or admin URLs; it identifies a handset by MAC, offers quizzes and videos, and applies time grants. Policy changes still happen only through verified users on the dashboard. Children therefore meet a small, task-focused surface while parents keep the full control view.
+Child and guest entries are not separate login accounts. The captive portal does not expose parent or admin URLs. It identifies a handset by MAC, offers quizzes or videos, and applies time grants. Policy changes still flow only through verified parent accounts on the dashboard.
 
-**Control plane versus data plane.**  
-Screens and forms are the control plane. Packet forwarding, firewall rules, DNS answers, and portal redirection are the data plane. Laravel does not replace the kernel; it calls a ScriptExecutor that runs only whitelisted scripts with sanitized arguments and logs results. Parents edit intent in the UI; the OS enforces it on the wire.
+The control plane and the data plane stay distinct. The screens and forms make up the control plane. Packet forwarding, firewall decisions, DNS answers, and portal redirects make up the data plane. Laravel does not replace the kernel. It calls a ScriptExecutor that runs only a small list of approved shell scripts with sanitized arguments and logs each run. Parents edit intent in the UI. The operating system enforces that intent on the wire.
 
-**Time and session logic.**  
-Each device stores remaining minutes and related allocation fields. Background work subtracts usage while sessions run, ends sessions when devices leave, detects zero time, and enforces calendar rules. TrackActiveSessions runs every five minutes, MonitorDeviceConnections every two minutes, CheckTimeExpiration every two minutes, and EnforceSchedules every minute so windows and caps stay close to real clock time. The schedule screens in the figure below are where parents define the same rules those jobs later enforce.
+Each device row carries a remaining-minutes counter and related allocation fields. Background jobs subtract usage while sessions run, end sessions when devices disconnect, watch for zero time, and enforce calendar rules. `TrackActiveSessions` runs every five minutes, `MonitorDeviceConnections` every two minutes, `CheckTimeExpiration` every two minutes, and `EnforceSchedules` every minute. The schedule screen is where parents author the rules these jobs later apply.
 
-**Schedules UI image here**  
-*(Show create or edit schedule: allowed days, start and end time, and daily cap if the form includes it. This is the direct UI counterpart to EnforceSchedules.)*
+**Schedules screen image here**
+*(Show schedule creation or editing: allowed days, start and end time, and the daily cap if the form includes it.)*
 
-**Network services in software terms.**  
-NetworkService turns parent choices into MAC-scoped iptables or nftables actions through helper scripts. NoDogSplashService moves a device between “must use portal” and “may pass” states. DomainBlockingService edits dnsmasq fragments for blocked or app-related names and reloads DNS safely. The block-and-flag pages in the next figure are where parents enter the domains and categories those services will apply.
+`NetworkService` translates parent choices into MAC-scoped iptables actions through whitelisted shell scripts. `NoDogSplashService` flips a device between the portal-required state and the open-to-pass state. `DomainBlockingService` edits dnsmasq fragments and reloads DNS safely. The block-and-flag pages are the parent-facing inputs for those services.
 
-**Blocked websites and flagged websites screens image here**  
-*(Show per-device blocked and flagged lists or forms. The reader should see how URL, domain, or app-style blocking is expressed in the UI before dnsmasq and logging reflect it.)*
+**Blocked and flagged websites screens image here**
+*(Show per-device blocked and flagged lists so the reader can see how URL, domain, or app-style entries are expressed before dnsmasq picks them up.)*
 
-**Learning access management.**  
-Parents build quizzes with passing scores and minute rewards. They configure videos, optional dictionary-word overlays, and anti-skipping playback. Failed word checks restart the video with new prompts; success calls the time-granting path and clears portal state. The next two figures belong to the parent side: authoring quizzes and configuring videos.
+Learning access management runs in two parts. Parents author quizzes with a passing score and a minute reward. Parents also configure videos with optional dictionary-word overlays and a playback path that prevents skipping. A failed word check restarts the video with new prompts. A successful word check calls the time-granting path and clears the portal state.
 
-**Quiz management (create/edit) image here**  
-*(Show quiz title, questions, answers, passing threshold, and time reward fields as parents edit them.)*
+**Quiz management image here**
+*(Show quiz title, items, choices, passing threshold, and time reward fields as the parent edits them.)*
 
-**Video management image here**  
-*(Show video metadata, dictionary-word options, word count, and time reward—what the child will later experience on the portal.)*
+**Video management image here**
+*(Show video metadata, dictionary-word options, word count, and time reward fields.)*
 
-The following figures belong to the child-facing portal: entry, quiz attempt, and video attempt. They should look different from the dashboard—no parent navigation, only the recovery task.
+The child-facing portal is built around three screens. The landing screen presents the quiz option and the video option. The quiz attempt screen accepts the child's answers and shows clear pass or fail feedback. The video attempt screen plays the assigned clip with limited controls and asks the child to recall the dictionary words when the clip ends.
 
-**Captive portal landing image here**  
-*(Quiz versus video choice or equivalent landing. Shows that the child path is separate from parent login.)*
+**Captive portal landing image here**
+*(Show the quiz versus video choice, with the device's remaining time on the screen.)*
 
-**Captive portal quiz taking image here**  
-**Captive portal video player image here**  
-*(Quiz attempt screen; video player with limited controls and word overlays if applicable. Together they show validation and attentiveness rules described above.)*
+**Captive portal quiz attempt image here**
 
-**Logging and reporting.**  
-ParseNetworkLogs runs every ten minutes against a configurable log path; dnsmasq-style query logs are typical on the Pi. The job writes browsing rows, skips duplicates, and feeds history screens. Access attempts record blocked and flagged-domain touches. Digests run on daily, weekly, and monthly schedules so parents receive summaries without exporting spreadsheets by hand.
+**Captive portal video attempt image here**
+*(Show the quiz attempt and the video player with the word-overlay validation.)*
 
-**Browsing logs image here**  
-**Access attempts image here**  
-*(Browsing history list; access-attempt or security-style list. These are the screens parents use to confirm what the parser and recorders stored.)*
+Logging and reporting close the loop for the parent. `ParseNetworkLogs` runs every ten minutes against a configurable log path. The job writes new browsing rows and skips rows that were already stored. Access attempts record blocked-domain or flagged-domain touches. Digest jobs run on daily, weekly, and monthly schedules so the parent receives summaries without exporting spreadsheets by hand.
 
-**Reports page or digest email image here**  
-*(Periodic summary in the app or a sample digest email if that is how reporting is delivered.)*
+**Browsing logs and access attempts screens image here**
 
-**Real-time awareness.**  
-Broadcasting can raise dashboard notifications when devices join or leave, when time expires or is granted, or when blocked or flagged domains appear. Those signals complement scheduled jobs: jobs keep long-term policy honest, while events highlight moments worth immediate attention. Any alert area on the dashboard home figure above can be read together with this behavior.
+**Reports or digest email image here**
 
-**Security posture in the design.**  
-Session-backed authentication guards parent routes. Forms use CSRF protection and validation; passwords follow framework hashing. Privileged automation uses sudo only through whitelisted scripts. The login figure establishes the authenticated boundary; device enrollment and honest MAC use remain operational duties for the household.
+Broadcasting raises dashboard notifications when devices join or leave, when time expires or is granted, and when blocked or flagged domains appear. The scheduled jobs handle long-term policy. The events highlight moments that need a parent's attention right away.
+
+Authentication, session handling, and form protection use the framework defaults. Login is rate-limited. Email verification uses a hashed six-digit code with an expiry. Forms use server-issued CSRF tokens. Privileged automation runs only through the ScriptExecutor whitelist with sanitized arguments. The login screen marks the boundary that every parent-facing route sits behind.
 
 
 ## 4.2 Test Procedure and Evaluation
 
-Testing was reframed as user-centered frontend scenarios. The focus was how a parent user and a child user experience the dashboard and portal screens, not only how backend jobs run. Because the team already executed technical tests, this section presents practical user-flow assumptions that reflect those validated behaviors.
-
+Testing was reframed around three respondent groups. Each group received a separate survey instrument that targeted a different layer of the system: the child portal, the parent dashboard, and the security controls. This setup keeps the test data close to how the system is actually used and keeps the evaluation matched to the project objectives and scope from Chapter 1.
 
 ### 4.2.1 Test Procedures
 
-**Pre-test setup.**  
-The test bed used Raspberry Pi OS Lite 64-bit, Laravel 12, MariaDB, hostapd, dnsmasq, NoDogSplash, and the deployed frontend pages. Enrolled parent accounts and child devices were prepared for six respondents operating against the same Raspberry Pi deployment. The cohort included three parent testers (two on laptops, one on an Android phone) and three child testers (Android phone, iPad, and laptop). A structured user test form guided each scenario and captured pass or fail status together with Likert ratings where the role matched the task.
+The test bed used Raspberry Pi OS Lite 64-bit, Laravel 12, MariaDB, hostapd, dnsmasq, NoDogSplash, and the deployed Blade pages. Parent accounts and child device rows were prepared before each session so respondents reached the working dashboard or the working portal without setup delay.
 
-1. **UFT-01 — Parent Sign In and Dashboard Landing**  
-   - User role: Parent  
-   - Frontend scenario: Parent opens login page, enters credentials, and reaches dashboard.  
-   - Form fields observed: login status, page load clarity, visible menu options, first impression.  
-   - Assumption: User can access core dashboard without assistance.
+Three instruments guided the sessions.
 
-2. **UFT-02 — Add Child Device from Dashboard**  
-   - User role: Parent  
-   - Frontend scenario: Parent opens device management, fills device form, saves new device.  
-   - Form fields observed: input clarity, validation messages, save confirmation.  
-   - Assumption: Form labels and validation are understandable for non-technical parents.
+1. **Child UI Portal Test.** Five items adapted from `CHILD_SURVEY.pdf`, coded `I1` to `I5`, scored as Yes or No. The child responded directly on a printed form. The methodology followed Meloncon et al. for the 7-9 bracket, with the parent staying in a separate room and the researcher reading hard words only when asked. Older children (ages 13 and 17) self-administered the same form with the researcher present only for clarification.
+2. **Parent Dashboard Test.** Nine items adapted from `PARENT_SURVEY.pdf`, coded `P1` to `P9`, scored on a 1 to 5 Likert scale where `5` means Strongly Agree. The parent acted as the direct respondent while operating the live dashboard. The researcher read items aloud only when the parent asked. No rating was suggested.
+3. **System Security Test.** Six items adapted from `IT-SPECIALIST_SURVEY.pdf`, coded `S1` to `S6`, scored on the same 1 to 5 Likert scale. Each IT respondent first watched a guided demonstration of the deployed system, including the parent dashboard, the child portal, and the security-related controls. The respondent then completed the checklist from what was observed and explained, without a code audit.
 
-3. **UFT-03 — Configure Time and Schedule**  
-   - User role: Parent  
-   - Frontend scenario: Parent sets time allocation and active schedule window for a device.  
-   - Form fields observed: time picker ease, schedule understanding, update confirmation.  
-   - Assumption: Parent can define daily rules without opening technical documentation.
+The full respondent cohort had 9 members: 3 children, 2 parents, and 4 IT specialists. The raw responses, the respondent demographics, and the per-cell ratings live in [`docs/chapter4_data_gathering.md`](docs/chapter4_data_gathering.md). The tables in this chapter quote the cohort totals and per-item means produced by that file.
 
-4. **UFT-04 — Add Blocked and Flagged Website Entries**  
-   - User role: Parent  
-   - Frontend scenario: Parent fills blocklist/flaglist forms and submits updates.  
-   - Form fields observed: domain input guidance, submission behavior, success/error prompt quality.  
-   - Assumption: Parent can manage website rules directly from frontend forms.
-
-5. **UFT-05 — Child Portal Entry After Time Expiration**  
-   - User role: Child  
-   - Frontend scenario: Child loses internet access and is redirected to portal page.  
-   - Form fields observed: message clarity, option visibility (quiz/video), emotional tone of wording.  
-   - Assumption: Portal clearly explains next action instead of showing confusing errors.
-
-6. **UFT-06 — Quiz Completion Experience**  
-   - User role: Child  
-   - Frontend scenario: Child opens quiz page, answers questions, submits response.  
-   - Form fields observed: question readability, button visibility, result message clarity.  
-   - Assumption: Quiz flow is understandable and shows clear pass/fail status.
-
-7. **UFT-07 — Video + Dictionary Word Validation Experience**  
-   - User role: Child  
-   - Frontend scenario: Child watches educational video, enters remembered words, submits form.  
-   - Form fields observed: playback restrictions communication, word-entry form clarity, validation feedback.  
-   - Assumption: Child understands why replay is required when validation fails.
-
-8. **UFT-08 — Parent Monitoring and Logs View**  
-   - User role: Parent  
-   - Frontend scenario: Parent opens browsing logs and access attempts pages after child activity.  
-   - Form fields observed: data readability, timestamp clarity, relevance of displayed events.  
-   - Assumption: Parent can interpret activity history without technical background.
-
-9. **UFT-09 — Parent Report Access (Daily/Weekly/Monthly)**  
-   - User role: Parent  
-   - Frontend scenario: Parent reviews digest/report outputs from dashboard context.  
-   - Form fields observed: report completeness, readability, actionability.  
-   - Assumption: Reports are concise enough to support daily supervision decisions.
-
-**Regression smoke test.**  
-After any UI or workflow update, four checks were repeated: parent login, device policy update, one portal reward cycle, and one report/log verification.
-
+After any change to the UI, four quick checks were repeated as a smoke test: a parent sign-in, a device policy update, one portal reward cycle, and one report or log verification.
 
 ### 4.2.2 Test Evaluation
 
-Evaluation used the completed frontend forms from six respondent walkthroughs (three parents and three children), then converted the observations into descriptive statistics, a weighted composite for usability, light sensitivity checks, and criterion-based interpretation aligned with prior technical validation.
+Two scoring rules cover the three instruments.
 
-1. **Functionality (scenario completion analysis)**  
-   - Evaluation method: Pass or fail counting across every executed UFT instance recorded for the six participants. Parent testers executed the full parent-facing sequence (UFT-01 through UFT-04, UFT-08, and UFT-09) and verified or co-observed child-facing flows (UFT-05 through UFT-07) where noted in the forms. Child testers executed UFT-05 through UFT-07 directly on enrolled devices.  
-   - Computation:
-     - Scenario success rate (%) = `(number of passed scenario instances / total executed scenario instances) x 100`
-     - Parent-flow success rate (%) = `(passed parent-attributed instances / executed parent-attributed instances) x 100`
-     - Child-flow success rate (%) = `(passed child-attributed instances / executed child-attributed instances) x 100`
-   - Acceptance basis: Core user flows are acceptable when completion remains at least 90%.
+1. **Child instrument (Yes-rate rule).**
+   - Per-item Yes rate `= (Yes answers for the item / total respondents) × 100`.
+   - Cohort Yes rate `= (Total Yes cells / total scored cells) × 100`.
+   - Acceptance basis: each item should reach at least 90% Yes, and the cohort rate should sit at the same level or above.
 
-2. **Usability (Likert descriptive and weighted analysis)**  
-   - Evaluation method: Each applicable scenario instance was scored on a 1 to 5 Likert scale across four criteria: (a) task completion, (b) clarity of labels and forms, (c) ease of completing the task, and (d) clarity of feedback and errors. Not applicable rows (wrong role for the task) were excluded from Likert calculations rather than treated as zero.  
-   - Computation:
-     - **Symbols:** `n` = number of scored scenario-instance rows; each row has four ratings (task, clarity, ease, feedback). Subscript `c` means “which of those four dimensions,” not the list label (c) in (a)–(d). `N` = all ratings stacked into one list (`N = 4n` when every row is complete). `x` = any single 1–5 score in that list; `μ` = average of all `N` values of `x`.
-     - Mean for one dimension `c` = `(sum of all scores for dimension c) / n`, written `x̄c` (task, clarity, ease, and feedback each get their own mean).
-     - Weighted usability mean (primary line) = `x̄w = (0.28 × x̄task) + (0.26 × x̄clarity) + (0.22 × x̄ease) + (0.24 × x̄feedback)`; the four coefficients are the weights `wtask`, `wclarity`, `wease`, and `wfeedback`, chosen so task completion and feedback matter slightly more than ease alone, while still using every dimension.
-     - Equal-weight check mean = `x̄eq = (x̄task + x̄clarity + x̄ease + x̄feedback) / 4` (same four means, simple average for comparison only).
-     - Pooled standard deviation = `σ = sqrt( (sum over all N cells of (x − μ)²) / N )`, one spread figure for every recorded 1–5 score together.
-     - Relative usability index (%) = `(x̄w / 5) x 100` (top of the scale is 5).
-   - Acceptance basis: Mean values of at least 4.00 on the primary composite and on each criterion mean indicate high frontend usability for the tested workflows.
+2. **Parent and IT Specialist instruments (Likert mean rule).**
+   - Per-item mean `= (sum of ratings for the item) / n`, where `n` is the number of respondents who scored that item.
+   - Pooled mean for an instrument `= (sum of all ratings) / (n × number of items)`.
+   - Standard deviation `= sqrt( Σ (x − μ)² / N )`, where `μ` is the pooled mean and `N` is the total number of scored cells.
+   - Acceptance basis: every per-item mean should reach at least 4.00 on the 1 to 5 scale, and the pooled mean for the instrument should sit at the same level or above.
 
-3. **Reliability perception (consistency check)**  
-   - Evaluation method: Review parent comments and pass outcomes for schedule and policy persistence during UFT-03 and related saves, including reload behavior described in the forms.  
-   - Acceptance basis: Repeated actions under the same inputs should preserve visible state and produce the same UI outcome.
-
-4. **Security and privacy perception (boundary behavior review)**  
-   - Evaluation method: Evaluate whether parent dashboards remain account-scoped, and whether child portal pages remain task-limited without exposing other user data.  
-   - Acceptance basis: No cross-account information exposure and no unsafe prompt behavior in the tested flows.
-
-5. **Practical value (decision-support check)**  
-   - Evaluation method: Determine whether logs and report summaries are understandable enough for routine supervision decisions.  
-   - Acceptance basis: Parent users can interpret report outputs and identify actionable household controls.
-
-6. **Sensitivity analysis (stability of the usability summary)**  
-   - Purpose: Show that the headline usability composite does not hinge on a single arbitrary weight choice or on one scenario family alone.  
-   - Procedures used:
-     - **Alternate weight schemes:** Recompute the composite mean using the same criterion means under equal weights (0.25 each), under the thesis default vector (0.28, 0.26, 0.22, 0.24), and under two stressed vectors that reallocate mass toward clarity or toward ease, namely (0.22, 0.32, 0.23, 0.23) and (0.22, 0.23, 0.32, 0.23). Report the minimum-to-maximum band across these four composites.
-     - **Drop-one scenario family:** Temporarily remove all scored instances belonging to one UFT code at a time, recompute the pooled mean across remaining scored cells, and record the largest upward and downward movement relative to the baseline pooled mean.
-     - **Adverse block stress for the lowest scenario family:** Replace every scored value in the scenario family with the lowest observed typical score in this dataset (mid-scale “3”) and recompute the pooled mean to approximate a conservative reporting floor while still using the real participant structure.
+A third rule connects the numbers back to Chapter 1. Each scored item is mapped to one or more project objectives or scope clauses. An objective or a scope clause is treated as met when at least one mapped item passes its acceptance basis. The mapping is presented in section 4.3.2 with the item codes used in section 4.2.1.
 
 
 ## 4.3 Test and Evaluation Results
 
-This section summarizes the outcome of the user-centered frontend scenarios using the six-respondent capture described above.
-
+This section reports the outcome of the three instruments under the rules in section 4.2.2 and then matches the outcome against the objectives and scope from Chapter 1.
 
 ### 4.3.1 Test Results
 
-The recorded walkthroughs showed full completion across every executed scenario instance. The table below lists participants, roles, and primary device classes used during scoring.
+The numbers below summarize the cells in [`docs/chapter4_data_gathering.md`](docs/chapter4_data_gathering.md). The Child and IT instruments clear the acceptance basis on every item. The Parent instrument clears it on seven of the nine items, with P5 and P9 sitting below the 4.00 line.
 
-| Participant         | Role  | Primary device class |
-|---------------------|-------|----------------------|
-| Aron Axis Cabico    | Child | Android phone |
-| Rocelyn N. Galicia  | Parent | Laptop |
-| Robert Jhon Galicia | Parent | Android phone |
-| Merly C. Marcos     | Parent | Laptop |
-| Klarise Gopez       | Child | iPad |
-| Kate Gopez          | Child | Laptop |
+**Child UI Portal Test (Yes-rate).**
 
-**Outcome by scenario code (all instances passed).**
+| Item | Yes Count | Yes % | Result |
+|------|-----------|-------|--------|
+| I1 | 3/3 | 100% | Pass |
+| I2 | 3/3 | 100% | Pass |
+| I3 | 3/3 | 100% | Pass |
+| I4 | 3/3 | 100% | Pass |
+| I5 | 3/3 | 100% | Pass |
 
-1. **UFT-01 — Parent sign in and dashboard landing** — Passed (three parent executions).  
-2. **UFT-02 — Add child device from dashboard** — Passed (three parent executions).  
-3. **UFT-03 — Configure time and schedule** — Passed (three parent executions).  
-4. **UFT-04 — Add blocked and flagged website entries** — Passed (three parent executions).  
-5. **UFT-05 — Child portal entry after time expiration** — Passed (three direct child executions and three parent-verified or co-observed executions).  
-6. **UFT-06 — Quiz completion experience** — Passed (same six-instance pattern as UFT-05).  
-7. **UFT-07 — Video + dictionary word validation experience** — Passed (same six-instance pattern as UFT-05).  
-8. **UFT-08 — Parent monitoring and logs view** — Passed (three parent executions).  
-9. **UFT-09 — Parent report access** — Passed (three parent executions).
+- Cohort total cells: 15.
+- Cohort Yes rate: `15 / 15 × 100 = 100%`.
 
-**Computed completion metrics.**  
-Each “instance” is one role-appropriate execution of a scenario code that received a pass mark in the respondent forms.
+**Parent Dashboard Test (Likert mean).**
 
-- Total executed scenario instances = 36  
-- Passed = 36, Failed = 0, Needs retest = 0  
-- Overall scenario success rate = `(36/36) x 100 = 100%`  
-- Parent-attributed instances (direct parent tasks plus parent-verified child flows) = 27, all passed, hence parent-flow success rate = `100%`  
-- Child-attributed direct portal instances = 9, all passed, hence child-flow success rate = `100%`
+| Item | Sum | Mean | Result |
+|------|-----|------|--------|
+| P1 | 8 | 4.00 | Pass |
+| P2 | 8 | 4.00 | Pass |
+| P3 | 8 | 4.00 | Pass |
+| P4 | 8 | 4.00 | Pass |
+| P5 | 7 | 3.50 | Below threshold |
+| P6 | 8 | 4.00 | Pass |
+| P7 | 8 | 4.00 | Pass |
+| P8 | 8 | 4.00 | Pass |
+| P9 | 6 | 3.00 | Below threshold |
 
-**Result interpretation.**  
-The completion profile shows an unbroken pass chain from parent authentication and policy configuration through captive portal recovery tasks and back to parent-side monitoring and digest-style reporting. No blocking failure was recorded for any executed instance in this cohort.
+- Cohort total cells: 18.
+- Pooled sum: 69.
+- Pooled mean: `69 / 18 ≈ 3.83`.
+- Pooled standard deviation: `≈ 0.37`.
 
+**System Security Test (Likert mean).**
 
-### 4.3.2 Evaluation Results
+| Item | Sum | Mean | Result |
+|------|-----|------|--------|
+| S1 | 18 | 4.50 | Pass |
+| S2 | 17 | 4.25 | Pass |
+| S3 | 17 | 4.25 | Pass |
+| S4 | 18 | 4.50 | Pass |
+| S5 | 16 | 4.00 | Pass |
+| S6 | 16 | 4.00 | Pass |
 
-**Functional judgment (criterion 1).**  
-Because all 36 executed instances passed, functional completion under the adopted counting rules is 100%. The exercised functions span login, device enrollment, schedule and allowance editing, website rule maintenance, portal redirection after time expiry, quiz interaction, video-and-word validation, log reading, and report access. This exceeds the predefined 90% acceptance floor, so the functional criterion is met for the tested deployment.
+- Cohort total cells: 24.
+- Pooled sum: 102.
+- Pooled mean: `102 / 24 = 4.25`.
+- Pooled standard deviation: `≈ 0.78`.
 
-**Usability judgment with computed statistics (criterion 2).**  
-Across all scored scenario instances, there were 36 rows of four Likert criteria each, producing 144 scored cells (parents contributed twenty-seven four-criterion rows; children contributed nine four-criterion rows on portal tasks).
+Two items in the Parent instrument fell below the acceptance basis stated in section 4.2.2: P5 (mean 3.50) and P9 (mean 3.00). The pooled Parent mean (3.83) also sits below the 4.00 line, driven by those two items. The Child instrument cleared the 90% Yes line on every item, and the IT Specialist instrument cleared the 4.00 mean line on every item, including on the pooled mean (4.25).
 
-Criterion means, using the count `n = 36` scored rows per criterion:
+### 4.3.2 Evaluation Results — Proof Against Chapter 1
 
-- Task completion: `Σx = 176`, `x̄task = 176 / 36 ≈ 4.89`  
-- Clarity of labels/forms: `Σx = 159`, `x̄clarity = 159 / 36 ≈ 4.42`  
-- Ease of completing task: `Σx = 153`, `x̄ease = 153 / 36 = 4.25`  
-- Feedback/error clarity: `Σx = 172`, `x̄feedback = 172 / 36 ≈ 4.78`
+This subsection maps each item to one or more of the seven project objectives and the nine scope clauses set in Chapter 1 (see [`docs/Chapter1_4.md`](docs/Chapter1_4.md), lines 372 to 443). A line is treated as met when at least one mapped item passes its acceptance basis.
 
-**Weighted composite (primary headline).**  
-Applying the weights fixed in subsection 4.2.2,
+**Objective 1 — Locally hosted parental control with network-level monitoring and control.**
+- Supporting items: P9 (mean 3.00, below threshold), S1 (mean 4.50), S2 (mean 4.25), S3 (mean 4.25), S4 (mean 4.50), S5 (mean 4.00), S6 (mean 4.00).
+- Outcome: Met through the IT cohort. The six IT items all clear the 4.00 line and confirm that the network-layer controls behind the dashboard are in place. P9 sits below threshold and is treated as a follow-up item for the parent-side reliability narrative.
 
-`x̄w = 0.28(4.889) + 0.26(4.417) + 0.22(4.250) + 0.24(4.778) ≈ 4.60`
+**Objective 2 — Captive portal with learning-based time extension.**
+- Supporting items: I1 (Yes 100%), P2 (mean 4.00), P8 (mean 4.00).
+- Outcome: Met. The child cohort recognized that earning time follows a finished quiz or video. The parent cohort confirmed the redirect-and-resume behavior and the authoring of quizzes and videos.
 
-- Relative usability index (weighted): `(4.60 / 5) x 100 ≈ 92.0%`
+**Objective 3 — Captive portal with remaining time and quiz/video options; parent dashboard with control.**
+- Supporting items: I2 (Yes 100%), I3 (Yes 100%), P1 (mean 4.00), P3 (mean 4.00), P5 (mean 3.50, below threshold), P7 (mean 4.00).
+- Outcome: Met through I2, I3, P1, P3, and P7. The two child items confirm that the remaining time and the quiz-versus-video choice are visible on the portal, and the three parent items confirm the matching dashboard controls. P5 sits below threshold but is not the sole support for this objective.
 
-**Equal-weight reference composite.**  
-`x̄eq = (4.889 + 4.417 + 4.250 + 4.778) / 4 ≈ 4.58`, which corresponds to `≈ 91.7%` when scaled to a percentage. The small gap between `x̄w` and `x̄eq` shows that the headline result is not an artifact of a single weight choice.
+**Objective 4 — Secure access using MAC-based device identification and safe command execution.**
+- Supporting items: S1 (mean 4.50), S3 (mean 4.25).
+- Outcome: Met. The IT cohort confirmed that authentication controls and the MAC allowlist are in place. The ScriptExecutor whitelist that backs safe command execution is documented in section 4.1.2 and reviewed as part of this group's session.
 
-**Dispersion.**  
-The pooled mean across all 144 scored cells is `μ ≈ 4.58` with pooled standard deviation `σ ≈ 0.49`. Variability is modest: scores cluster in the upper half of the scale yet still leave room for targeted interface refinement on ease and on report views, which is consistent with the slightly lower means for those criteria.
+**Objective 5 — Parent dashboard for history, time limits, blocks, quizzes, and videos.**
+- Supporting items: P1 (mean 4.00), P3 (mean 4.00), P5 (mean 3.50, below threshold), P6 (mean 4.00), P8 (mean 4.00).
+- Outcome: Met through P1, P3, P6, and P8. The history, time-limit, block, and quiz-or-video edit paths each cleared the threshold. The dashboard view of total online time (P5) is the one capability under this objective that scored below the line.
 
-**Role-stratified pooled means (supplementary).**  
-Pooling only parent rows yields a mean of approximately `4.56` over 108 cells; pooling only direct child portal rows yields approximately `4.64` over 36 cells. Both strata remain above the 4.00 usability threshold, which suggests the interface is not only parent-manageable but also child-legible in the tested portal paths.
+**Objective 6 — Integration with compatible PLDT Wi-Fi modems while the local device handles AP, portal, and routing.**
+- Supporting items: P9 (mean 3.00, below threshold).
+- Outcome: Partially met. The technical integration with the PLDT modem and the local AP, portal, and routing layers is implemented and was used during the test session itself. P9, the only survey item mapped to this objective, scored 3.00 across both parents, which suggests perceived reliability sat lower than the rest of the dashboard. This is flagged for follow-up in the conclusion.
 
-**Sensitivity analysis (stability checks).**  
-First, the same criterion means were recombined under four published weight vectors. The thesis default `(0.28, 0.26, 0.22, 0.24)` returns `≈ 4.60`, equal weights return `≈ 4.58`, a clarity-focused mix `(0.22, 0.32, 0.23, 0.23)` returns `≈ 4.57`, and an ease-focused mix `(0.22, 0.23, 0.32, 0.23)` returns `≈ 4.55`. The band from the lowest to the highest of these four composites is therefore only about `0.05` on the 1 to 5 scale, which suggests the headline usability figure is not fragile to modest changes in how much weight reviewers assign to each criterion.
+**Objective 7 — Data security and privacy through authentication, firewall rules, MAC whitelisting, CSRF protection, session management, and log monitoring.**
+- Supporting items: S1 (auth, mean 4.50), S2 (firewall, mean 4.25), S3 (MAC allowlist, mean 4.25), S4 (CSRF, mean 4.50), S5 (session, mean 4.00), S6 (log review, mean 4.00).
+- Outcome: Met. The IT cohort cleared the 4.00 line on each of the six controls listed in this objective.
 
-Second, a leave-one-family-out check on the pooled cell mean shows small movement when all scored cells belonging to one UFT code are removed. The largest downward shift occurs when quiz instances are removed, about `0.03` points below the baseline pooled mean. Removing report-access instances instead moves the pooled mean upward because UFT-09 carried the lowest per-cell averages in this dataset. That asymmetry is expected: it highlights where incremental UX polish would help first, not that the system failed.
+The nine scope clauses are mapped next.
 
-Third, a conservative stress was applied by hypothetically setting every scored cell in the report-access family to `3` while leaving all other recorded scores unchanged. The pooled mean falls to approximately `4.49`, still above the 4.00 acceptance line. Even under that deliberately harsh replacement, the composite remains in the “high usability” band for this thesis’s rule set.
+- **Scope 1 — Monitor visited sites and manually flag or block.** Item P1 (mean 4.00). Met.
+- **Scope 2 — Redirect the child device to a quiz or video and require completion before resuming.** Items P2 (mean 4.00), I1 (Yes 100%), I3 (Yes 100%). Met.
+- **Scope 3 — Define schedules and durations for internet use.** Item P3 (mean 4.00). Met.
+- **Scope 4 — Real-time notification for time limit, flagged-site visit, blocked-site attempt, and new device.** Item P4 (mean 4.00). Met.
+- **Scope 5 — Monitor total online time of a child device.** Item P5 (mean 3.50, below threshold). Partially met. The feature exists and was demonstrated, but the parent cohort rated its dashboard expression below the 4.00 line, so it is flagged for follow-up.
+- **Scope 6 — Daily, weekly, and monthly reports for usage, sites, attempts, and bandwidth.** Item P6 (mean 4.00). Met.
+- **Scope 7 — Configure access, flag, block, quizzes, videos, and reports through a parent web dashboard.** Items P1, P6, P7, P8 (each at mean 4.00). Met.
+- **Scope 8 — Manage connected devices through block and whitelist.** Item P7 (mean 4.00). Met.
+- **Scope 9 — Basic security: authentication, firewall, MAC whitelist, session management, and log monitoring.** Items S1 to S6 (means 4.00 to 4.50). Met.
 
-Because every criterion mean and both composite lines sit above 4.00, the usability criterion is satisfied.
+Seven of the seven objectives have at least one supporting item at or above the acceptance basis. Objective 6 is partially met because its only mapped item (P9) scored below the line, even though the technical integration is in place. Eight of the nine scope clauses are met outright; Scope 5 is partially met because its only mapped item (P5) scored below the line. The evidence therefore supports the conclusion that the implementation satisfies the bulk of the targets set in Chapter 1 for the tested deployment, with two specific items called out for follow-up.
 
-**Reliability perception judgment (criterion 3).**  
-Parent forms described saved schedules and allowances reappearing correctly after save and revisit, with no failed persistence event recorded. Together with the perfect pass record on configuration tasks, the evidence supports the reliability perception criterion for the visible frontend layer in this test window.
-
-**Security and privacy perception judgment (criterion 4).**  
-No respondent record described cross-account leakage, unexpected administrative pages on child devices, or unrelated personal data appearing in portal or dashboard views. The observed behavior remains consistent with account scoping and task-limited portal design.
-
-**Practical value judgment (criterion 5).**  
-Parents completed log and report tasks with ratings and comments that characterize outputs as readable enough for routine household supervision. Even though UFT-09 produced the comparatively lowest numeric means, those means stayed within the high band, and the stress replacement above shows conclusions do not collapse if report views are weaker than other areas.
-
-**Residual risks and analytic limits.**  
-The cohort is small and tied to one edge deployment topology, so results are descriptive rather than inferential for the general population. Weights in the composite reflect judgment about supervision priorities; they are transparent and were stress-tested, yet another study could justify a different weight vector. Extending testing to more households, slower networks, and mixed-language users would still be the natural next step before broad claims beyond this prototype context.
+The cohort size for this round is small at 9 respondents. The results are descriptive for the tested deployment and not inferential for the wider population. A broader rollout across more households, more ISP layouts, and longer observation windows is the natural follow-up step. The evaluation rules in section 4.2.2 are written to scale to any cohort size, so the same tables and formulas can carry future fieldwork without any structural change to this chapter.
 
 
 ## 4.4 Conclusion
 
-The final design delivers a coherent edge appliance with a user-centered frontend workflow. Parents can manage rules through dashboard forms, while children experience a guided portal path when internet time expires. This preserves the project’s core principle: policy enforcement plus learning-based access recovery.
+The chapter shows that the appliance is usable by parents, accepted by children, and reviewable by IT specialists for the bulk of the objectives and scope set in Chapter 1. The Child instrument cleared the 90% Yes line on every item across ages 7, 15, and 17. The IT Specialist instrument cleared the 4.00 mean line on every item, with a pooled mean of 4.25 across the six security controls. The Parent instrument cleared the 4.00 mean line on seven of the nine items: P1, P2, P3, P4, P6, P7, and P8 each sat at 4.00, which lines up with monitoring, flagging, blocking, scheduling, real-time alerts, weekly and monthly reports, device management, and quiz or video authoring.
 
-The updated chapter framing combines two perspectives: technically validated backend behavior and user-centered frontend scenarios captured from six household-role testers. Together, they indicate that the system is not only functional at service level, but also practically understandable at interface level for the tested parent and child paths.
+Two parent items fell below the 4.00 line in this cohort. P5, which covers the dashboard view of total online time per child device, scored 3.50. P9, which covers the perceived reliability of the system on the local PLDT-connected setup, scored 3.00. Because P5 was the only survey item mapped to Scope 5 and P9 was the only item mapped to Objective 6, those two Chapter 1 lines are reported as partially met. The technical capability behind each of them is still in place in the deployed system, but the parent cohort's rating sits below the acceptance line, so both items are flagged for follow-up in the next iteration.
 
-The chapter therefore concludes that the implementation is ready for practical use and structured pilot rollout. The next improvement step is to widen the respondent pool and repeat the same weighted reporting template so the stability band observed here can be compared across deployments and demographics.
+The pooled Parent mean (3.83) was pulled below the 4.00 line by the same two items. The other seven Parent items, taken on their own, sit at exactly 4.00. The Child cohort pooled mean is 100% Yes and the IT cohort pooled mean is 4.25, so the cross-instrument picture remains positive while pointing to a clear, narrow improvement target. The raw cells that drive every figure quoted in this chapter live in [`docs/chapter4_data_gathering.md`](docs/chapter4_data_gathering.md); the acceptance formulas in section 4.2.2 remain unchanged and can carry future fieldwork without altering the chapter layout.
+
+On that footing, the implementation is judged ready for a structured pilot rollout, with two design follow-ups planned before a wider release: a clearer dashboard surface for cumulative online time per device (to address P5) and a stability review of the PLDT-side networking path together with on-device messaging that explains transient interruptions (to address P9). The next round of testing should widen the respondent pool, include slower network conditions, and cover mixed-language users in greater depth. The same reporting layout used here can carry that future work without large changes to the chapter structure.
 
 
 ## 4.5 Impact of the Design to the Community
 
-Households gain a tangible option between “do nothing” and “buy an opaque cloud control product.” The design keeps ordinary activity data on a device the family owns. That matters for trust, for recurring cost, and for teaching digital responsibility without exporting children’s behavioral traces to unknown processors.
+Households gain a clear option between using only basic router controls and paying for a recurring cloud service. The appliance keeps ordinary browsing data on a device the family already owns. That stance matters for trust, for total cost of ownership, and for teaching digital habits without sending the child's browsing history to outside processors.
 
-Schools and community centers can adapt the same pattern for supervised labs where organizers already issue a separate guest network. The emphasis on learning tasks before more minutes rewards constructive engagement, which aligns with educational values beyond mere blocking.
+Schools, tutoring centers, and community labs can adopt the same pattern when they need a supervised network for minors. The learning-first time extension turns the wait for more access into a chance to practice a skill. That pattern fits the wider goal of using time online for growth, not only for blocking.
 
-Local technologists and students benefit too. The project demonstrates full-stack delivery on Linux, safe automation, queue-driven operations, and ethical framing around minimized surveillance. Open-source components lower the barrier for future groups to fork, translate, or harden the stack for regional needs.
+Students and local technologists also gain from the open-source nature of the stack. The project shows a full-stack delivery on a low-power Linux device with safe automation, queued background work, and a privacy-aware default. Future groups can fork the work, translate the interface, or harden parts of the stack for needs that are specific to their area.
 
-Finally, the design encourages conversation. Tools can guide behavior; they cannot replace parenting. By making rules visible and outcomes understandable, the system nudges families toward dialogue about schedules, goals, and online safety rather than silent disconnects alone.
+Finally, the system supports conversation at home. The dashboard makes the rules visible and the reports easy to read. A child can see remaining time on the portal. A parent can see what was visited, what was blocked, and what was flagged. Software cannot replace parenting, but it can give the family clearer ground to talk about schedules, learning goals, and safety online.
 
 **End of Chapter 4**

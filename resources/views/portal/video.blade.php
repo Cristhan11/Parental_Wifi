@@ -33,11 +33,6 @@
         #videoPlayer::-webkit-media-controls-playback-rate-button {
             display: none !important;
         }
-        @if($video->dictionary_words_enabled)
-        #videoPlayer::-webkit-media-controls-fullscreen-button {
-            display: none !important;
-        }
-        @endif
     </style>
 </head>
 <body class="portal">
@@ -85,10 +80,6 @@
                         playsinline
                         webkit-playsinline
                         x5-playsinline
-                        @if($video->dictionary_words_enabled)
-                        controlslist="nofullscreen noremoteplayback"
-                        disablepictureinpicture
-                        @endif
                         ontimeupdate="handleTimeUpdate()"
                         onended="handleVideoEnded()"
                         onerror="handleVideoError(event)"
@@ -97,11 +88,6 @@
                         Your browser does not support the video tag.
                     </video>
                     <div id="wordOverlayContainer" class="portal-video-overlay-host"></div>
-                    @if($video->dictionary_words_enabled)
-                        <button type="button" id="portalVideoFsBtn" class="portal-video-fs-btn" aria-pressed="false">
-                            Fullscreen
-                        </button>
-                    @endif
                 </div>
 
                 <div class="portal-video-fallback-controls">
@@ -117,9 +103,6 @@
                         <p style="margin:0;">
                             <strong>Watch carefully!</strong> {{ $video->word_count }} dictionary words will appear during the video.
                             When the video ends, tap the colorful words <strong>in the order they appeared</strong>.
-                        </p>
-                        <p class="portal-video-fs-hint">
-                            For fullscreen, use the yellow <strong>Fullscreen</strong> on the video (not the player’s own fullscreen button) so word pop-ups stay visible.
                         </p>
                     @endif
                 </div>
@@ -177,8 +160,6 @@
 
     <script>
         const videoPlayer = document.getElementById('videoPlayer');
-        const videoStage = document.getElementById('portalVideoStage');
-        const portalFsBtn = document.getElementById('portalVideoFsBtn');
         const wordOverlayContainer = document.getElementById('wordOverlayContainer');
         const wordGameModal = document.getElementById('portalWordGameModal');
         const wordsData = @json($wordsData);
@@ -189,7 +170,6 @@
         /** How long each dictionary word overlay stays visible (8s + 3s). */
         const dictionaryWordDisplayMs = 11000;
         const dictionaryWordsEnabled = @json((bool) $video->dictionary_words_enabled);
-        let portalFsRedirecting = false;
 
         function portalFullscreenElement() {
             return document.fullscreenElement
@@ -198,6 +178,11 @@
                 || document.msFullscreenElement;
         }
 
+        /**
+         * Exit any active fullscreen (document-level or iOS video-only) so the
+         * dictionary word overlay, which sits in the normal page flow as a
+         * sibling of <video>, becomes visible again.
+         */
         function portalExitAllFullscreen() {
             try {
                 if (videoPlayer && typeof videoPlayer.webkitExitFullscreen === 'function') {
@@ -349,110 +334,6 @@
             portalWordGameSyncUi();
         }
 
-        function portalToggleStageFullscreen() {
-            if (!videoStage) {
-                return;
-            }
-            if (!portalFullscreenElement()) {
-                const req = videoStage.requestFullscreen
-                    || videoStage.webkitRequestFullscreen
-                    || videoStage.mozRequestFullScreen
-                    || videoStage.msRequestFullscreen;
-                if (req) {
-                    req.call(videoStage).catch(function (err) {
-                        console.warn('Fullscreen failed:', err);
-                    });
-                }
-            } else {
-                const exit = document.exitFullscreen
-                    || document.webkitExitFullscreen
-                    || document.webkitCancelFullScreen
-                    || document.mozCancelFullScreen
-                    || document.msExitFullscreen;
-                if (exit) {
-                    exit.call(document);
-                }
-            }
-        }
-
-        function portalOnFullscreenChange() {
-            /* Native <video> fullscreen hides our overlay (sibling of <video>). Move fullscreen to the stage wrapper. */
-            if (dictionaryWordsEnabled && videoPlayer && videoStage && !portalFsRedirecting) {
-                const active = portalFullscreenElement();
-                if (active === videoPlayer) {
-                    portalFsRedirecting = true;
-                    try {
-                        if (document.exitFullscreen) {
-                            document.exitFullscreen();
-                        } else if (document.webkitExitFullscreen) {
-                            document.webkitExitFullscreen();
-                        } else if (document.webkitCancelFullScreen) {
-                            document.webkitCancelFullScreen();
-                        } else if (document.mozCancelFullScreen) {
-                            document.mozCancelFullScreen();
-                        } else if (document.msExitFullscreen) {
-                            document.msExitFullscreen();
-                        }
-                    } catch (e) {
-                        console.warn('Exit video fullscreen failed:', e);
-                    }
-                    try {
-                        const req = videoStage.requestFullscreen
-                            || videoStage.webkitRequestFullscreen
-                            || videoStage.webkitRequestFullScreen
-                            || videoStage.mozRequestFullScreen
-                            || videoStage.msRequestFullscreen;
-                        if (req) {
-                            req.call(videoStage);
-                        }
-                    } catch (e) {
-                        console.warn('Enter stage fullscreen failed:', e);
-                    }
-                    window.setTimeout(function () {
-                        portalFsRedirecting = false;
-                    }, 600);
-                }
-            }
-
-            if (!portalFsBtn || !videoStage) {
-                return;
-            }
-            const on = portalFullscreenElement() === videoStage;
-            portalFsBtn.textContent = on ? 'Exit fullscreen' : 'Fullscreen';
-            portalFsBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
-        }
-
-        if (portalFsBtn && videoStage) {
-            portalFsBtn.addEventListener('click', function (e) {
-                e.stopPropagation();
-                portalToggleStageFullscreen();
-            });
-            document.addEventListener('fullscreenchange', portalOnFullscreenChange);
-            document.addEventListener('webkitfullscreenchange', portalOnFullscreenChange);
-            document.addEventListener('mozfullscreenchange', portalOnFullscreenChange);
-            document.addEventListener('MSFullscreenChange', portalOnFullscreenChange);
-
-            /* iOS WebKit: video-only fullscreen does not include DOM overlays; exit so the child can use the yellow stage fullscreen control. */
-            if (dictionaryWordsEnabled && videoPlayer) {
-                videoPlayer.addEventListener('webkitbeginfullscreen', function () {
-                    if (portalFsRedirecting) {
-                        return;
-                    }
-                    portalFsRedirecting = true;
-                    try {
-                        if (typeof videoPlayer.webkitExitFullscreen === 'function') {
-                            videoPlayer.webkitExitFullscreen();
-                        }
-                    } catch (e) {
-                        console.warn('webkitExitFullscreen failed:', e);
-                    }
-                    window.setTimeout(function () {
-                        portalFsRedirecting = false;
-                    }, 400);
-                });
-            }
-        }
-
         const playPauseBtn = document.getElementById('portalVideoPlayPauseBtn');
 
         function syncPlayPauseLabel() {
@@ -510,17 +391,33 @@
         }
 
         function handleTimeUpdate() {
-            const currentTime = Math.floor(videoPlayer.currentTime);
+            /*
+             * timeupdate is not guaranteed to tick every 250ms; after the 11s
+             * pause-and-resume from showWord() the next event can land well past
+             * the word's second. We therefore fire as soon as currentTime crosses
+             * the timestamp and rely on the shownWords guard so each word fires
+             * exactly once.
+             */
+            const currentTime = videoPlayer.currentTime;
             wordsData.forEach((wordData, index) => {
                 const wordTimestamp = wordData.timestamp;
-                if (currentTime >= wordTimestamp && currentTime < wordTimestamp + 1 && !shownWords.includes(index)) {
-                    showWord(wordData);
+                if (currentTime >= wordTimestamp && !shownWords.includes(index)) {
                     shownWords.push(index);
+                    showWord(wordData);
                 }
             });
         }
 
         function showWord(wordData) {
+            /*
+             * The overlay is a sibling of <video> in the normal page flow, so
+             * iOS/Android native video fullscreen would hide it. Exit any
+             * active fullscreen first so the word card is visible immediately.
+             * The child can re-enter fullscreen via the native control once
+             * playback resumes.
+             */
+            portalExitAllFullscreen();
+
             if (!videoPlayer.paused) {
                 videoPlayer.pause();
                 console.log('Video paused to show word:', wordData.word);
