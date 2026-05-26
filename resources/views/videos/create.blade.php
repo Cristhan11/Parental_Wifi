@@ -214,7 +214,7 @@
             }
 
             setFileDisplay(file.name, file.name);
-            
+
             // Validate file type
             const validTypes = ['video/mp4', 'video/webm', 'video/ogg'];
             if (!validTypes.includes(file.type)) {
@@ -223,6 +223,21 @@
                 setFileDisplay('No file chosen yet', '');
                 hideFormSections();
                 return;
+            }
+
+            // Auto-fill Video Title from the filename so the parent does not have to
+            // retype it. Only when the title field is still empty so we never clobber
+            // a title the parent has already started typing.
+            const titleInput = document.getElementById('title');
+            if (titleInput && titleInput.value.trim() === '') {
+                const baseName = file.name.replace(/\.[^.]+$/, '');
+                const cleaned = baseName
+                    .replace(/[_-]+/g, ' ')
+                    .replace(/\s+/g, ' ')
+                    .trim();
+                if (cleaned !== '') {
+                    titleInput.value = cleaned.slice(0, 255);
+                }
             }
             
             // Show loading indicator

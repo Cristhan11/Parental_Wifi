@@ -94,6 +94,16 @@
                     <button type="button" id="portalVideoPlayPauseBtn" class="portal-video-play-btn">
                         Play
                     </button>
+                    {{--
+                        Fallback fullscreen control. Hidden by default — only shown by JS when
+                        the browser blocks the native fullscreen control (e.g. the iOS / Android
+                        "Sign in to Wi-Fi" captive portal browser greys it out). It uses CSS
+                        position:fixed instead of the Fullscreen API, so it works even where the
+                        API is disabled.
+                    --}}
+                    <button type="button" id="portalVideoFsFallbackBtn" class="portal-video-fs-fallback-btn" aria-pressed="false" hidden>
+                        Fullscreen
+                    </button>
                 </div>
 
                 <div class="portal-video-info">
@@ -160,8 +170,10 @@
 
     <script>
         const videoPlayer = document.getElementById('videoPlayer');
+        const videoStage = document.getElementById('portalVideoStage');
         const wordOverlayContainer = document.getElementById('wordOverlayContainer');
         const wordGameModal = document.getElementById('portalWordGameModal');
+        const portalFsFallbackBtn = document.getElementById('portalVideoFsFallbackBtn');
         const wordsData = @json($wordsData);
         const distractorWords = @json($distractorWords);
         const wordsInOrder = wordsData.map(function (w) { return w.word; });
@@ -179,9 +191,10 @@
         }
 
         /**
-         * Exit any active fullscreen (document-level or iOS video-only) so the
-         * dictionary word overlay, which sits in the normal page flow as a
-         * sibling of <video>, becomes visible again.
+         * Exit any active fullscreen (document-level, iOS video-only, or our
+         * CSS pseudo-fullscreen fallback) so the dictionary word overlay,
+         * which sits in the normal page flow as a sibling of <video>, becomes
+         * visible again.
          */
         function portalExitAllFullscreen() {
             try {
@@ -206,7 +219,73 @@
                     console.warn('document exitFullscreen:', e);
                 }
             }
+            portalSetPseudoFullscreen(false);
         }
+
+        /**
+         * CSS-only fullscreen fallback for browsers that block the Fullscreen
+         * API (notably Apple's Captive Network Assistant when the child taps
+         * the "Sign in to Wi-Fi" notification). Pinning the video frame with
+         * position:fixed via a class always works because no JS fullscreen API
+         * call is made.
+         */
+        function portalSetPseudoFullscreen(on) {
+            if (!videoStage) {
+                return;
+            }
+            if (on) {
+                videoStage.classList.add('is-pseudo-fullscreen');
+                document.body.classList.add('has-pseudo-fullscreen');
+            } else {
+                videoStage.classList.remove('is-pseudo-fullscreen');
+                document.body.classList.remove('has-pseudo-fullscreen');
+            }
+            if (portalFsFallbackBtn) {
+                portalFsFallbackBtn.textContent = on ? 'Exit fullscreen' : 'Fullscreen';
+                portalFsFallbackBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+            }
+        }
+
+        function portalNativeFullscreenAvailable() {
+            if (document.fullscreenEnabled === true || document.webkitFullscreenEnabled === true) {
+                return true;
+            }
+            if (videoPlayer && videoPlayer.webkitSupportsFullscreen === true) {
+                return true;
+            }
+            return false;
+        }
+
+        function portalRevealFallbackIfNeeded() {
+            if (!portalFsFallbackBtn) {
+                return;
+            }
+            if (portalNativeFullscreenAvailable()) {
+                portalFsFallbackBtn.hidden = true;
+                return;
+            }
+            portalFsFallbackBtn.hidden = false;
+        }
+
+        if (portalFsFallbackBtn && videoStage) {
+            portalFsFallbackBtn.addEventListener('click', function () {
+                const turningOn = !videoStage.classList.contains('is-pseudo-fullscreen');
+                portalSetPseudoFullscreen(turningOn);
+            });
+
+            // iOS only reports `webkitSupportsFullscreen` once metadata loads,
+            // so re-check whenever video readiness changes.
+            videoPlayer.addEventListener('loadedmetadata', portalRevealFallbackIfNeeded);
+            videoPlayer.addEventListener('canplay', portalRevealFallbackIfNeeded);
+            portalRevealFallbackIfNeeded();
+        }
+
+        // Allow the hardware/Escape key to leave the pseudo-fullscreen too.
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && videoStage && videoStage.classList.contains('is-pseudo-fullscreen')) {
+                portalSetPseudoFullscreen(false);
+            }
+        });
 
         function portalOpenWordGameModal() {
             if (!wordGameModal) {
